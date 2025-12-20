@@ -12,14 +12,14 @@ export default function Login() {
   const [, navigate] = useLocation();
   const { signIn } = useAuth();
   const { toast } = useToast();
-  
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       setLoading(true);
       await signIn(email, password);
@@ -40,58 +40,83 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-6">
-      <div className="w-full max-w-md">
-        <Button
-          variant="ghost"
-          className="mb-6"
-          onClick={() => navigate('/')}
-          data-testid="button-back-home"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Home
-        </Button>
+    <div className="min-h-screen w-full lg:grid lg:grid-cols-2">
+      {/* Left Panel: Branding/Hero */}
+      <div className="hidden lg:flex flex-col justify-between bg-primary p-10 text-primary-foreground">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+            <span className="font-bold text-lg">T</span>
+          </div>
+          <span className="text-xl font-display font-bold">TCSYGO</span>
+        </div>
 
-        <Card className="p-8">
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-              <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-2xl">T</span>
-              </div>
-            </div>
-            <h1 className="text-3xl font-display font-bold mb-2">Welcome Back</h1>
-            <p className="text-muted-foreground">Log in to your TCSYGO account</p>
+        <div>
+          <h2 className="text-4xl font-display font-bold mb-4">
+            Ride together,<br />save together.
+          </h2>
+          <p className="text-primary-foreground/80 text-lg max-w-md">
+            Join the community of commuters making travel smarter, greener, and more affordable.
+          </p>
+        </div>
+
+        <div className="text-sm text-primary-foreground/60">
+          &copy; {new Date().getFullYear()} TCSYGO. All rights reserved.
+        </div>
+      </div>
+
+      {/* Right Panel: Login Form */}
+      <div className="flex items-center justify-center p-6 bg-background">
+        <div className="w-full max-w-sm space-y-8">
+          <div className="text-center lg:text-left">
+            <Button
+              variant="ghost"
+              className="absolute top-4 right-4 lg:hidden"
+              onClick={() => navigate('/')}
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
+
+            <h1 className="text-3xl font-display font-bold tracking-tight">Welcome back</h1>
+            <p className="text-muted-foreground mt-2">
+              Enter your credentials to access your account
+            </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <div className="relative mt-1">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="pl-10"
+                  placeholder="name@example.com"
+                  className="pl-10 h-11"
                   required
                   data-testid="input-email"
                 />
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="password">Password</Label>
-              <div className="relative mt-1">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <a href="#" className="text-sm font-medium text-primary hover:underline">
+                  Forgot password?
+                </a>
+              </div>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   id="password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="pl-10"
+                  className="pl-10 h-11"
                   required
                   data-testid="input-password"
                 />
@@ -101,27 +126,25 @@ export default function Login() {
             <Button
               type="submit"
               size="lg"
-              className="w-full"
+              className="w-full h-11"
               disabled={loading}
               data-testid="button-submit-login"
             >
-              {loading ? 'Logging in...' : 'Log In'}
+              {loading ? 'Logging in...' : 'Sign In'}
             </Button>
           </form>
 
-          <div className="mt-6 text-center">
-            <p className="text-sm text-muted-foreground">
-              Don't have an account?{' '}
-              <button
-                onClick={() => navigate('/signup')}
-                className="text-primary hover:underline font-medium"
-                data-testid="link-signup"
-              >
-                Sign up
-              </button>
-            </p>
+          <div className="text-center text-sm">
+            Don't have an account?{' '}
+            <button
+              onClick={() => navigate('/signup')}
+              className="font-medium text-primary hover:underline"
+              data-testid="link-signup"
+            >
+              Sign up
+            </button>
           </div>
-        </Card>
+        </div>
       </div>
     </div>
   );

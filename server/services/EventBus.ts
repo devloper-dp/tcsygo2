@@ -15,11 +15,16 @@ export type AppEvents = {
   'user:updated': (userId: string) => void;
   'user:role_changed': (data: { userId: string; newRole: string }) => void;
   'user:verification_updated': (data: { userId: string; status: string }) => void;
+  'sos:triggered': (alert: any) => void;
 };
 
 class EventBus extends EventEmitter<AppEvents> {
   constructor() {
     super();
+  }
+
+  emit<E extends keyof AppEvents>(event: E, ...args: Parameters<AppEvents[E]>): boolean {
+    return super.emit(event, ...args);
   }
 }
 

@@ -17,7 +17,7 @@ export class AuthService {
         fullName,
         role: 'passenger',
       });
-      
+
       return {
         user: {
           id: user.id,
@@ -62,7 +62,7 @@ export class AuthService {
       if (!user) {
         throw new Error('User not found');
       }
-      
+
       return {
         user: {
           id: user.id,
@@ -124,11 +124,26 @@ export class AuthService {
 
   async getCurrentUser() {
     if (!this.useSupabase()) {
-      throw new Error('This endpoint requires authentication configuration');
+      // Mock current user from a "session" if possible, but since we are stateless in this service mostly or relying on token:
+      // This mocked method might be used by middleware. 
+      // For direct call, we return null or a specific dev user if hardcoded, 
+      // but ideally it relies on the request context which isn't available here directly 
+      // unless we change signature. 
+
+      // However, often getCurrentUser is called to check session validity.
+      // We can return a mock user struct.
+      return {
+        id: 'dev-user-id',
+        email: 'dev@example.com',
+        user_metadata: { full_name: 'Dev User' },
+        aud: 'authenticated',
+        created_at: new Date().toISOString(),
+        app_metadata: {},
+      };
     }
 
     const { data: { user }, error } = await supabase.auth.getUser();
-    
+
     if (error) throw new Error(error.message);
     return user;
   }
@@ -139,7 +154,7 @@ export class AuthService {
     }
 
     const { data, error } = await supabase.auth.refreshSession();
-    
+
     if (error) throw new Error(error.message);
     return data;
   }
@@ -148,7 +163,7 @@ export class AuthService {
     if (!this.useSupabase()) {
       if (token.startsWith('dev-token-')) {
         const userId = token.replace('dev-token-', '');
-        return { user: { id: userId }, error: null };
+        return { user: { id: userId, email: 'dev@example.com', aud: 'authenticated' } as any, error: null };
       }
       return { user: null, error: { message: 'Invalid token' } };
     }

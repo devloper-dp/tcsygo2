@@ -11,6 +11,7 @@ import { ratingService } from "./services/RatingService";
 import { userService } from "./services/UserService";
 import { adminService } from "./services/AdminService";
 import { authService } from "./services/AuthService";
+import { sosService } from "./services/SOSService";
 import { requireAuth, optionalAuth, requireRole } from "./middleware/auth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -74,7 +75,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Trip Routes
-  app.post("/api/trips", optionalAuth, async (req, res) => {
+  app.post("/api/trips", requireAuth, async (req, res) => {
     try {
       const trip = await tripService.createTrip(req.body);
       res.json(trip);
@@ -97,9 +98,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/trips/my-trips", async (req, res) => {
+  app.get("/api/trips/my-trips", requireAuth, async (req, res) => {
     try {
-      const userId = req.query.userId as string || 'mock-user-id';
+      const userId = req.user!.id;
       const trips = await tripService.getMyTrips(userId);
       res.json(trips);
     } catch (error: any) {
@@ -129,17 +130,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Booking Routes
-  app.post("/api/bookings", optionalAuth, async (req, res) => {
+  app.post("/api/bookings", requireAuth, async (req, res) => {
     try {
       const { tripId, seatsBooked } = req.body;
-      const passengerId = req.user?.id || req.body.passengerId || 'mock-passenger-id';
-      
+      const passengerId = req.user!.id;
+
       const booking = await bookingService.createBooking({
         tripId,
         passengerId,
         seatsBooked: parseInt(seatsBooked),
       } as any);
-      
+
       res.json(booking);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
@@ -158,9 +159,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/bookings/my-bookings", async (req, res) => {
+  app.get("/api/bookings/my-bookings", requireAuth, async (req, res) => {
     try {
-      const userId = req.query.userId as string || 'mock-user-id';
+      const userId = req.user!.id;
       const bookings = await bookingService.getMyBookings(userId);
       res.json(bookings);
     } catch (error: any) {
@@ -208,7 +209,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/drivers/my-profile", async (req, res) => {
     try {
-      const userId = req.query.userId as string || 'mock-user-id';
+      const userId = req.user!.id;
       const driver = await driverService.getDriverProfile(userId);
       res.json(driver);
     } catch (error: any) {
@@ -265,7 +266,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Notification Routes
   app.get("/api/notifications", async (req, res) => {
     try {
-      const userId = req.query.userId as string || 'mock-user-id';
+      const userId = req.user!.id;
       const notifications = await notificationService.getUserNotifications(userId);
       res.json(notifications);
     } catch (error: any) {
@@ -284,7 +285,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/notifications/read-all", async (req, res) => {
     try {
-      const userId = req.query.userId as string || 'mock-user-id';
+      const userId = req.user!.id;
       await notificationService.markAllAsRead(userId);
       res.json({ success: true });
     } catch (error: any) {
@@ -422,6 +423,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // SOS Alerts
+  app.post('/api/sos', async (req, res) => {
+    try {
+      const alert = await sosService.triggerSOS(req.body);
+      res.json(alert);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get('/api/sos/trip/:tripId', async (req, res) => {
+    try {
+      const alerts = await sosService.getTripAlerts(req.params.tripId);
+      res.json(alerts);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get('/api/admin/sos', async (req, res) => {
+    try {
+      const alerts = await sosService.getAllAlerts();
+      res.json(alerts);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   // WebSocket setup for real-time location tracking
@@ -437,7 +466,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     socket.on("driver:location:update", async (data) => {
       const { tripId, driverId, lat, lng, heading, speed } = data;
-      
+
       try {
         await locationService.updateLocation({
           tripId,

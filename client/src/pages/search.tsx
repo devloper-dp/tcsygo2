@@ -15,7 +15,7 @@ import { Coordinates } from '@/lib/mapbox';
 export default function Search() {
   const [, navigate] = useLocation();
   const searchParams = new URLSearchParams(window.location.search);
-  
+
   const [pickup, setPickup] = useState(searchParams.get('pickup') || '');
   const [drop, setDrop] = useState(searchParams.get('drop') || '');
   const [pickupCoords, setPickupCoords] = useState<Coordinates | undefined>(
@@ -29,7 +29,7 @@ export default function Search() {
       : undefined
   );
   const [date, setDate] = useState(searchParams.get('date') || '');
-  const [showMap, setShowMap] = useState(true);
+  const [isMobileMapOpen, setIsMobileMapOpen] = useState(false);
 
   const { data: trips, isLoading } = useQuery<TripWithDriver[]>({
     queryKey: ['/api/trips/search', pickup, drop, date],
@@ -69,9 +69,9 @@ export default function Search() {
       </header>
 
       <div className="flex h-[calc(100vh-4rem)]">
-        <div className={`${showMap ? 'w-full lg:w-1/2' : 'w-full'} overflow-y-auto`}>
+        <div className={`w-full lg:w-1/2 overflow-y-auto ${isMobileMapOpen ? 'hidden lg:block' : 'block'}`}>
           <div className="p-6 space-y-6">
-            <Card className="p-4">
+            <Card className="p-4 shadow-md border-primary/10">
               <div className="grid grid-cols-1 md:grid-cols-[1fr,1fr,auto,auto] gap-3">
                 <LocationAutocomplete
                   value={pickup}
@@ -82,7 +82,7 @@ export default function Search() {
                   placeholder="Pickup location"
                   testId="input-search-pickup"
                 />
-                
+
                 <LocationAutocomplete
                   value={drop}
                   onChange={(val, coords) => {
@@ -113,12 +113,12 @@ export default function Search() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setShowMap(!showMap)}
+                onClick={() => setIsMobileMapOpen(!isMobileMapOpen)}
                 className="lg:hidden"
                 data-testid="button-toggle-map"
               >
                 <MapPin className="w-4 h-4 mr-2" />
-                {showMap ? 'Hide Map' : 'Show Map'}
+                {isMobileMapOpen ? 'Show List' : 'Show Map'}
               </Button>
             </div>
 
@@ -170,11 +170,9 @@ export default function Search() {
           </div>
         </div>
 
-        {showMap && (
-          <div className="hidden lg:block lg:w-1/2 h-full border-l">
-            <MapView markers={markers} />
-          </div>
-        )}
+        <div className={`w-full lg:w-1/2 h-full border-l ${isMobileMapOpen ? 'block' : 'hidden lg:block'}`}>
+          <MapView markers={markers} />
+        </div>
       </div>
     </div>
   );

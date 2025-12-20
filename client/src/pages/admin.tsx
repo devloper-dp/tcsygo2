@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { apiRequest, queryClient } from '@/lib/queryClient';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -15,18 +16,21 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { 
-  ArrowLeft, 
-  Users, 
-  Car, 
-  MapPin, 
-  DollarSign, 
+import {
+  ArrowLeft,
+  Users,
+  Car,
+  MapPin,
+  DollarSign,
   TrendingUp,
   Check,
   X,
-  Search
+  Search,
+  Shield,
+  AlertTriangle
 } from 'lucide-react';
-import { Driver, User, TripWithDriver, BookingWithDetails, Payment } from '@shared/schema';
+import { NotificationDropdown } from '@/components/NotificationDropdown';
+import { Driver, User, TripWithDriver, BookingWithDetails, Payment, SOSAlert } from '@shared/schema';
 
 export default function AdminDashboard() {
   const [, navigate] = useLocation();
@@ -58,6 +62,20 @@ export default function AdminDashboard() {
     queryKey: ['/api/admin/payments'],
   });
 
+  const { data: allAlerts } = useQuery<(SOSAlert & { reporter: User })[]>({
+    queryKey: ['/api/admin/sos'],
+  });
+
+  const verifyDriverMutation = useMutation({
+    mutationFn: async ({ driverId, status }: { driverId: string; status: 'verified' | 'rejected' }) => {
+      return await apiRequest('PUT', `/api/drivers/${driverId}/verify`, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/drivers/pending'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] });
+    }
+  });
+
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur">
@@ -73,6 +91,9 @@ export default function AdminDashboard() {
             <Shield className="w-3 h-3" />
             Admin Access
           </Badge>
+          <div className="ml-4">
+            <NotificationDropdown />
+          </div>
         </div>
       </header>
 
@@ -137,6 +158,9 @@ export default function AdminDashboard() {
             <TabsTrigger value="trips" data-testid="tab-trips">Trips</TabsTrigger>
             <TabsTrigger value="bookings" data-testid="tab-bookings">Bookings</TabsTrigger>
             <TabsTrigger value="payments" data-testid="tab-payments">Payments</TabsTrigger>
+            <TabsTrigger value="alerts" data-testid="tab-alerts" className="text-destructive data-[state=active]:text-destructive">
+              SOS Alerts
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="verifications">
@@ -178,11 +202,25 @@ export default function AdminDashboard() {
                           <TableCell>{new Date(driver.createdAt).toLocaleDateString()}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
-                              <Button size="sm" variant="outline" className="gap-1" data-testid={`button-approve-${driver.id}`}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-1"
+                                data-testid={`button-approve-${driver.id}`}
+                                onClick={() => verifyDriverMutation.mutate({ driverId: driver.id, status: 'verified' })}
+                                disabled={verifyDriverMutation.isPending}
+                              >
                                 <Check className="w-3 h-3" />
                                 Approve
                               </Button>
-                              <Button size="sm" variant="outline" className="gap-1 text-destructive" data-testid={`button-reject-${driver.id}`}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-1 text-destructive"
+                                data-testid={`button-reject-${driver.id}`}
+                                onClick={() => verifyDriverMutation.mutate({ driverId: driver.id, status: 'rejected' })}
+                                disabled={verifyDriverMutation.isPending}
+                              >
                                 <X className="w-3 h-3" />
                                 Reject
                               </Button>
@@ -331,14 +369,14 @@ export default function AdminDashboard() {
                           <TableCell>₹{payment.platformFee}</TableCell>
                           <TableCell>₹{payment.driverEarnings}</TableCell>
                           <TableCell>
-                            <Badge 
-                              variant="outline" 
+                            <Badge
+                              variant="outline"
                               className={
-                                payment.status === 'success' 
-                                  ? 'bg-success/10 text-success' 
+                                payment.status === 'success'
+                                  ? 'bg-success/10 text-success'
                                   : payment.status === 'pending'
-                                  ? 'bg-warning/10 text-warning'
-                                  : 'bg-destructive/10 text-destructive'
+                                    ? 'bg-warning/10 text-warning'
+                                    : 'bg-destructive/10 text-destructive'
                               }
                             >
                               {payment.status}
@@ -358,6 +396,71 @@ export default function AdminDashboard() {
               </div>
             </Card>
           </TabsContent>
+
+          <TabsContent value="alerts">
+            <Card>
+              <div className="p-6 border-b">
+                <h2 className="text-lg font-semibold text-destructive flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5" />
+                  Emergency Alerts
+                </h2>
+              </div>
+              <div className="p-6">
+                {allAlerts && allAlerts.length > 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Time</TableHead>
+                        <TableHead>Reporter</TableHead>
+                        <TableHead>Location</TableHead>
+                        <TableHead>Trip ID</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {allAlerts.map((alert) => (
+                        <TableRow key={alert.id} className="bg-destructive/5">
+                          <TableCell>{new Date(alert.createdAt).toLocaleString()}</TableCell>
+                          <TableCell>
+                            <div className="font-medium">{alert.reporter.fullName}</div>
+                            <div className="text-xs text-muted-foreground">{alert.reporter.phone}</div>
+                          </TableCell>
+                          <TableCell>
+                            <a
+                              href={`https://www.google.com/maps?q=${alert.lat},${alert.lng}`}
+                              target="_blank"
+                              className="text-primary hover:underline flex items-center gap-1"
+                            >
+                              <MapPin className="w-3 h-3" />
+                              Map
+                            </a>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">{alert.tripId.slice(0, 8)}...</TableCell>
+                          <TableCell>
+                            <Badge variant={alert.status === 'triggered' ? 'destructive' : 'outline'}>
+                              {alert.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button size="sm" variant="outline" onClick={() => navigate(`/track/${alert.tripId}`)}>
+                              Track Trip
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <div className="text-center py-12">
+                    <Shield className="w-16 h-16 text-muted-foreground/50 mx-auto mb-4" />
+                    <p className="text-muted-foreground">No active SOS alerts</p>
+                  </div>
+                )}
+              </div>
+            </Card>
+          </TabsContent>
+
         </Tabs>
       </div>
     </div>

@@ -116,7 +116,7 @@ Services automatically detect which mode to use based on environment variables.
 ## 📱 Mobile App
 
 The React Native mobile app is fully configured:
-- ✅ Expo SDK 50 setup
+- ✅ Expo SDK 54 setup (React Native 0.81, React 19.1)
 - ✅ Navigation configured (Expo Router)
 - ✅ Location permissions set
 - ✅ Push notification setup ready

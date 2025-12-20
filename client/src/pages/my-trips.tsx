@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { apiRequest, queryClient } from '@/lib/queryClient';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -9,10 +10,13 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ArrowLeft, Calendar, MapPin, Users, Star, Plus } from 'lucide-react';
 import { TripWithDriver, BookingWithDetails } from '@shared/schema';
 import { format } from 'date-fns';
+import { RatingModal } from '@/components/RatingModal';
+import { NotificationDropdown } from '@/components/NotificationDropdown';
 
 export default function MyTrips() {
   const [, navigate] = useLocation();
   const [activeTab, setActiveTab] = useState('bookings');
+  const [ratingBooking, setRatingBooking] = useState<BookingWithDetails | null>(null);
 
   const { data: bookings, isLoading: loadingBookings } = useQuery<BookingWithDetails[]>({
     queryKey: ['/api/bookings/my-bookings'],
@@ -20,6 +24,15 @@ export default function MyTrips() {
 
   const { data: myTrips, isLoading: loadingTrips } = useQuery<TripWithDriver[]>({
     queryKey: ['/api/trips/my-trips'],
+  });
+
+  const cancelBookingMutation = useMutation({
+    mutationFn: async (bookingId: string) => {
+      return await apiRequest('PUT', `/api/bookings/${bookingId}/cancel`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/bookings/my-bookings'] });
+    },
   });
 
   const getStatusColor = (status: string) => {
@@ -50,6 +63,9 @@ export default function MyTrips() {
             <Plus className="w-4 h-4 mr-2" />
             Create Trip
           </Button>
+          <div className="ml-4">
+            <NotificationDropdown />
+          </div>
         </div>
       </header>
 
@@ -111,14 +127,35 @@ export default function MyTrips() {
                       </div>
                     </div>
 
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => navigate(`/trip/${booking.trip.id}`)}
-                      data-testid={`button-view-trip-${booking.id}`}
-                    >
-                      View Trip Details
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => navigate(`/trip/${booking.trip.id}`)}
+                        data-testid={`button-view-trip-${booking.id}`}
+                      >
+                        View Trip
+                      </Button>
+                      {booking.status === 'confirmed' && new Date(booking.trip.departureTime) < new Date() && (
+                        <Button
+                          className="w-full"
+                          variant="secondary"
+                          onClick={() => setRatingBooking(booking)}
+                        >
+                          Rate Driver
+                        </Button>
+                      )}
+                      {(booking.status === 'confirmed' || booking.status === 'pending') && new Date(booking.trip.departureTime) > new Date() && (
+                        <Button
+                          className="w-full"
+                          variant="destructive"
+                          onClick={() => cancelBookingMutation.mutate(booking.id)}
+                          disabled={cancelBookingMutation.isPending}
+                        >
+                          Cancel Booking
+                        </Button>
+                      )}
+                    </div>
                   </Card>
                 ))}
               </div>
@@ -213,6 +250,16 @@ export default function MyTrips() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {ratingBooking && (
+        <RatingModal
+          isOpen={!!ratingBooking}
+          onClose={() => setRatingBooking(null)}
+          tripId={ratingBooking.trip.id}
+          driverId={ratingBooking.trip.driver.user.id}
+          driverName={ratingBooking.trip.driver.user.fullName}
+        />
+      )}
     </div>
   );
 }

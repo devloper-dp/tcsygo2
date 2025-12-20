@@ -13,8 +13,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { ArrowLeft, User, Car, Star, Camera, Shield, Check } from 'lucide-react';
-import { Driver } from '@shared/schema';
+import { ArrowLeft, User, Car, Star, Camera, Shield, Check, Calendar, MapPin, Activity } from 'lucide-react';
+import { Driver, TripWithDriver, BookingWithDetails } from '@shared/schema';
+import { format } from 'date-fns';
+import { RatingModal } from '@/components/RatingModal';
+import { NotificationDropdown } from '@/components/NotificationDropdown';
 
 export default function Profile() {
   const [, navigate] = useLocation();
@@ -25,21 +28,46 @@ export default function Profile() {
   const [phone, setPhone] = useState(user?.phone || '');
   const [bio, setBio] = useState(user?.bio || '');
 
+  const [ratingBooking, setRatingBooking] = useState<BookingWithDetails | null>(null);
+
   const { data: driverProfile } = useQuery<Driver>({
     queryKey: ['/api/drivers/my-profile'],
     enabled: user?.role === 'driver' || user?.role === 'both',
   });
 
+  const { data: bookings } = useQuery<BookingWithDetails[]>({
+    queryKey: ['/api/bookings/my-bookings'],
+  });
+
+  const { data: myTrips } = useQuery<TripWithDriver[]>({
+    queryKey: ['/api/trips/my-trips'],
+  });
+
+  const getStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      upcoming: 'bg-primary/10 text-primary',
+      ongoing: 'bg-success/10 text-success',
+      completed: 'bg-muted text-muted-foreground',
+      cancelled: 'bg-destructive/10 text-destructive',
+      confirmed: 'bg-success/10 text-success',
+      pending: 'bg-warning/10 text-warning',
+      rejected: 'bg-destructive/10 text-destructive',
+    };
+    return colors[status] || 'bg-muted text-muted-foreground';
+  };
+
   const updateProfileMutation = useMutation({
     mutationFn: async (data: any) => {
-      return await apiRequest('PUT', '/api/users/profile', data);
+      // Use the correct endpoint matching routes.ts: /api/users/:id
+      return await apiRequest('PUT', `/api/users/${user.id}`, data);
     },
-    onSuccess: () => {
+    onSuccess: (updatedUser) => {
       toast({
         title: 'Profile updated',
         description: 'Your profile has been successfully updated.',
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/users/profile'] });
+      // Invalidate the specific user query if it exists, or trigger a reload of auth user
+      queryClient.invalidateQueries({ queryKey: [`/api/users/${user.id}`] });
     },
     onError: () => {
       toast({
@@ -90,6 +118,9 @@ export default function Profile() {
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h1 className="text-xl font-display font-bold">Profile</h1>
+          <div className="ml-auto">
+            <NotificationDropdown />
+          </div>
         </div>
       </header>
 
@@ -140,12 +171,16 @@ export default function Profile() {
                 Driver Info
               </TabsTrigger>
             )}
+            <TabsTrigger value="history" data-testid="tab-history">
+              <Activity className="w-4 h-4 mr-2" />
+              History
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="personal">
             <Card className="p-6">
               <h3 className="text-lg font-semibold mb-6">Personal Information</h3>
-              
+
               <div className="space-y-6">
                 <div>
                   <Label htmlFor="fullName">Full Name</Label>
@@ -211,11 +246,11 @@ export default function Profile() {
                   <h3 className="text-lg font-semibold">Driver Information</h3>
                   {driverProfile && (
                     <Badge className={
-                      driverProfile.verificationStatus === 'verified' 
-                        ? 'bg-success/10 text-success' 
+                      driverProfile.verificationStatus === 'verified'
+                        ? 'bg-success/10 text-success'
                         : driverProfile.verificationStatus === 'pending'
-                        ? 'bg-warning/10 text-warning'
-                        : 'bg-destructive/10 text-destructive'
+                          ? 'bg-warning/10 text-warning'
+                          : 'bg-destructive/10 text-destructive'
                     }>
                       {driverProfile.verificationStatus}
                     </Badge>
@@ -288,8 +323,80 @@ export default function Profile() {
               </Card>
             </TabsContent>
           )}
+
+          <TabsContent value="history">
+            <h3 className="text-lg font-semibold mb-6">Trip History</h3>
+            <div className="space-y-6">
+              {bookings && bookings.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-3">My Rides</h4>
+                  <div className="space-y-4">
+                    {bookings.map((booking) => (
+                      <Card key={booking.id} className="p-4">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <div className="font-semibold text-sm">
+                              {booking.trip.pickupLocation} → {booking.trip.dropLocation}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {format(new Date(booking.trip.departureTime), 'MMM dd, yyyy • hh:mm a')}
+                            </div>
+                          </div>
+                          <Badge className={getStatusColor(booking.status)}>{booking.status}</Badge>
+                        </div>
+                        {booking.status === 'confirmed' && new Date(booking.trip.departureTime) < new Date() && (
+                          <Button size="sm" variant="outline" className="w-full mt-2" onClick={() => setRatingBooking(booking)}>
+                            Rate Driver
+                          </Button>
+                        )}
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {myTrips && myTrips.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-3 mt-6">Trips I Drove</h4>
+                  <div className="space-y-4">
+                    {myTrips.map((trip) => (
+                      <Card key={trip.id} className="p-4">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <div className="font-semibold text-sm">
+                              {trip.pickupLocation} → {trip.dropLocation}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {format(new Date(trip.departureTime), 'MMM dd, yyyy • hh:mm a')}
+                            </div>
+                          </div>
+                          <Badge className={getStatusColor(trip.status)}>{trip.status}</Badge>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!bookings?.length && !myTrips?.length && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>No history found.</p>
+                </div>
+              )}
+            </div>
+          </TabsContent>
         </Tabs>
       </div>
+
+      {ratingBooking && (
+        <RatingModal
+          isOpen={!!ratingBooking}
+          onClose={() => setRatingBooking(null)}
+          tripId={ratingBooking.trip.id}
+          driverId={ratingBooking.trip.driver.user.id}
+          driverName={ratingBooking.trip.driver.user.fullName}
+        />
+      )}
     </div>
   );
 }

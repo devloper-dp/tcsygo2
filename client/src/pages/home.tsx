@@ -3,6 +3,7 @@ import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { LocationAutocomplete } from '@/components/LocationAutocomplete';
+import { NotificationDropdown } from '@/components/NotificationDropdown';
 import { Calendar, ArrowRight, Users, Shield, Leaf, DollarSign } from 'lucide-react';
 import { Coordinates } from '@/lib/mapbox';
 import heroImage from '@assets/generated_images/Happy_carpooling_travelers_roadtrip_dc309ad7.png';
@@ -17,7 +18,7 @@ export default function Home() {
 
   const handleSearch = () => {
     if (!pickup || !drop) return;
-    
+
     const params = new URLSearchParams({
       pickup,
       drop,
@@ -25,7 +26,7 @@ export default function Home() {
       ...(dropCoords && { dropLat: dropCoords.lat.toString(), dropLng: dropCoords.lng.toString() }),
       ...(date && { date })
     });
-    
+
     navigate(`/search?${params.toString()}`);
   };
 
@@ -39,7 +40,7 @@ export default function Home() {
             </div>
             <span className="font-display font-bold text-xl">TCSYGO</span>
           </div>
-          
+
           <nav className="hidden md:flex items-center gap-6">
             <Button variant="ghost" onClick={() => navigate('/search')} data-testid="link-find-ride">
               Find a Ride
@@ -53,6 +54,7 @@ export default function Home() {
           </nav>
 
           <div className="flex items-center gap-3">
+            <NotificationDropdown />
             <Button variant="ghost" onClick={() => navigate('/login')} data-testid="button-login">
               Log In
             </Button>
@@ -64,12 +66,12 @@ export default function Home() {
       </header>
 
       <section className="relative h-[70vh] flex items-center justify-center overflow-hidden">
-        <div 
+        <div
           className="absolute inset-0 bg-cover bg-center"
           style={{ backgroundImage: `url(${heroImage})` }}
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/50 to-black/70" />
-        
+
         <div className="relative z-10 container mx-auto px-6">
           <div className="max-w-3xl mx-auto text-center mb-8">
             <h1 className="font-display font-bold text-5xl md:text-6xl text-white mb-4">
@@ -91,7 +93,7 @@ export default function Home() {
                 placeholder="Pickup location"
                 testId="input-pickup"
               />
-              
+
               <LocationAutocomplete
                 value={drop}
                 onChange={(val, coords) => {
@@ -113,8 +115,8 @@ export default function Home() {
                 />
               </div>
 
-              <Button 
-                size="lg" 
+              <Button
+                size="lg"
                 onClick={handleSearch}
                 disabled={!pickup || !drop}
                 className="whitespace-nowrap"
@@ -133,7 +135,7 @@ export default function Home() {
           <h2 className="font-display font-bold text-4xl text-center mb-12">
             Why Choose TCSYGO?
           </h2>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <Card className="p-8 text-center">
               <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
@@ -247,7 +249,7 @@ export default function Home() {
               </div>
               <span className="font-display font-bold text-xl">TCSYGO</span>
             </div>
-            
+
             <p className="text-sm text-muted-foreground">
               © 2024 TCSYGO. All rights reserved.
             </p>

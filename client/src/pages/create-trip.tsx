@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,7 +18,7 @@ import { InsertTrip } from '@shared/schema';
 export default function CreateTrip() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  
+
   const [pickup, setPickup] = useState('');
   const [pickupCoords, setPickupCoords] = useState<Coordinates>();
   const [drop, setDrop] = useState('');
@@ -32,8 +32,24 @@ export default function CreateTrip() {
     pets: false,
     music: true
   });
-  
+
   const [routeInfo, setRouteInfo] = useState<{ distance: number; duration: number; route: Coordinates[] }>();
+
+  const { data: driverProfile, isLoading: isLoadingDriver } = useQuery<any>({
+    queryKey: ['/api/drivers/my-profile'],
+  });
+
+  // Redirect if not a driver or not verified
+  useEffect(() => {
+    if (!isLoadingDriver && !driverProfile) {
+      toast({
+        title: "Driver Profile Required",
+        description: "You need to complete driver onboarding before posting trips.",
+        variant: "destructive"
+      });
+      navigate('/driver-onboarding');
+    }
+  }, [isLoadingDriver, driverProfile, navigate, toast]);
 
   const createTripMutation = useMutation({
     mutationFn: async (tripData: Partial<InsertTrip>) => {
@@ -58,7 +74,7 @@ export default function CreateTrip() {
 
   const calculateRoute = async () => {
     if (!pickupCoords || !dropCoords) return;
-    
+
     try {
       const route = await getRoute(pickupCoords, dropCoords);
       setRouteInfo({
@@ -66,7 +82,7 @@ export default function CreateTrip() {
         duration: route.duration,
         route: route.geometry
       });
-      
+
       if (!pricePerSeat) {
         const estimatedPrice = Math.round(route.distance * 8);
         setPricePerSeat(estimatedPrice.toString());
@@ -76,15 +92,25 @@ export default function CreateTrip() {
     }
   };
 
-  useState(() => {
+  useEffect(() => {
     if (pickupCoords && dropCoords) {
       calculateRoute();
     }
-  });
+  }, [pickupCoords, dropCoords]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    if (!driverProfile) {
+      toast({
+        title: 'Driver profile not found',
+        description: 'Please complete driver onboarding first.',
+        variant: 'destructive',
+      });
+      navigate('/driver-onboarding');
+      return;
+    }
+
     if (!pickupCoords || !dropCoords || !routeInfo) {
       toast({
         title: 'Missing information',
@@ -97,7 +123,7 @@ export default function CreateTrip() {
     const departureDateTime = new Date(`${departureDate}T${departureTime}`).toISOString();
 
     createTripMutation.mutate({
-      driverId: 'current-driver-id', // Will be replaced with actual driver ID
+      driverId: driverProfile.id,
       pickupLocation: pickup,
       pickupLat: pickupCoords.lat.toString(),
       pickupLng: pickupCoords.lng.toString(),
@@ -139,7 +165,7 @@ export default function CreateTrip() {
                 <MapPin className="w-5 h-5 text-primary" />
                 Route Details
               </h2>
-              
+
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="pickup">Pickup Location</Label>
@@ -186,7 +212,7 @@ export default function CreateTrip() {
                 <Calendar className="w-5 h-5 text-primary" />
                 Schedule
               </h2>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="date">Departure Date</Label>
@@ -219,7 +245,7 @@ export default function CreateTrip() {
                 <Users className="w-5 h-5 text-primary" />
                 Capacity & Pricing
               </h2>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="seats">Available Seats</Label>
@@ -258,7 +284,7 @@ export default function CreateTrip() {
 
             <Card className="p-6">
               <h2 className="text-lg font-semibold mb-4">Preferences</h2>
-              
+
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -301,9 +327,9 @@ export default function CreateTrip() {
               </div>
             </Card>
 
-            <Button 
-              type="submit" 
-              size="lg" 
+            <Button
+              type="submit"
+              size="lg"
               className="w-full"
               disabled={createTripMutation.isPending || !pickupCoords || !dropCoords || !departureDate || !departureTime}
               data-testid="button-publish-trip"

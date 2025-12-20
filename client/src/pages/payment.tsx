@@ -10,11 +10,15 @@ import { apiRequest, queryClient } from '@/lib/queryClient';
 import { ArrowLeft, CreditCard, Shield, CheckCircle } from 'lucide-react';
 import { BookingWithDetails } from '@shared/schema';
 
+
 declare global {
   interface Window {
     Razorpay: any;
   }
 }
+
+const RAZORPAY_KEY = import.meta.env.VITE_RAZORPAY_KEY_ID;
+const isDevPayment = !RAZORPAY_KEY || RAZORPAY_KEY.includes('placeholder');
 
 export default function Payment() {
   const [, navigate] = useLocation();
@@ -32,7 +36,16 @@ export default function Payment() {
       return await apiRequest('POST', '/api/payments/create-order', { bookingId });
     },
     onSuccess: (data) => {
-      handleRazorpayPayment(data);
+      if (isDevPayment) {
+        verifyPaymentMutation.mutate({
+          bookingId,
+          razorpayOrderId: data.razorpayOrderId,
+          razorpayPaymentId: `pay_mock_${Date.now()}`,
+          razorpaySignature: 'mock_signature'
+        });
+      } else {
+        handleRazorpayPayment(data);
+      }
     },
     onError: () => {
       toast({
@@ -61,6 +74,8 @@ export default function Payment() {
   });
 
   useEffect(() => {
+    if (isDevPayment) return;
+
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.async = true;
@@ -108,6 +123,20 @@ export default function Payment() {
     const razorpay = new window.Razorpay(options);
     razorpay.open();
   };
+
+  const handleSimulatePayment = () => {
+    // Mock successful payment response
+    const mockResponse = {
+      razorpayOrderId: `order_${Math.random().toString(36).substring(7)}`,
+      razorpayPaymentId: `pay_${Math.random().toString(36).substring(7)}`,
+      razorpaySignature: 'mock_signature',
+    };
+
+    // We need an order ID first usually, but for simulation we can skip or mock it
+    // But consistency suggests we should still create the order on backend
+    createPaymentMutation.mutate();
+  };
+
 
   if (isLoading || !booking) {
     return (
@@ -215,14 +244,16 @@ export default function Payment() {
           <Button
             size="lg"
             className="w-full"
-            onClick={() => createPaymentMutation.mutate()}
+            onClick={() => isDevPayment ? handleSimulatePayment() : createPaymentMutation.mutate()}
             disabled={createPaymentMutation.isPending || verifyPaymentMutation.isPending}
             data-testid="button-pay-now"
           >
             <CreditCard className="w-5 h-5 mr-2" />
             {createPaymentMutation.isPending || verifyPaymentMutation.isPending
               ? 'Processing...'
-              : `Pay ₹${total.toFixed(2)}`}
+              : isDevPayment
+                ? `Simulate Payment (Dev Mode)`
+                : `Pay ₹${total.toFixed(2)}`}
           </Button>
         </Card>
 

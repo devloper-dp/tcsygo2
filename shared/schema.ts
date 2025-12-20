@@ -336,3 +336,35 @@ export type BookingWithDetails = Booking & {
   passenger: User;
   payment?: Payment;
 };
+
+// SOS Alerts table
+export const sosAlerts = pgTable("sos_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tripId: varchar("trip_id").notNull().references(() => trips.id),
+  reporterId: varchar("reporter_id").notNull().references(() => users.id),
+  lat: decimal("lat", { precision: 10, scale: 7 }).notNull(),
+  lng: decimal("lng", { precision: 10, scale: 7 }).notNull(),
+  status: text("status").notNull().default("triggered"), // triggered | resolved
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  resolvedAt: timestamp("resolved_at"),
+});
+
+export const insertSOSAlertSchema = createInsertSchema(sosAlerts).omit({
+  id: true,
+  createdAt: true,
+  resolvedAt: true,
+});
+
+export type SOSAlert = typeof sosAlerts.$inferSelect;
+export type InsertSOSAlert = z.infer<typeof insertSOSAlertSchema>;
+
+export const sosAlertsRelations = relations(sosAlerts, ({ one }) => ({
+  trip: one(trips, {
+    fields: [sosAlerts.tripId],
+    references: [trips.id],
+  }),
+  reporter: one(users, {
+    fields: [sosAlerts.reporterId],
+    references: [users.id],
+  }),
+}));
