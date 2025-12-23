@@ -5,19 +5,22 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { LocationAutocomplete } from '@/components/LocationAutocomplete';
 import { MapView } from '@/components/MapView';
 import { useToast } from '@/hooks/use-toast';
-import { apiRequest, queryClient } from '@/lib/queryClient';
+import { queryClient } from '@/lib/queryClient';
 import { getRoute, Coordinates } from '@/lib/mapbox';
-import { ArrowLeft, MapPin, Calendar, Clock, Users, DollarSign, Route as RouteIcon } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Users, Route as RouteIcon } from 'lucide-react';
 import { InsertTrip } from '@shared/schema';
+import { supabase } from '@/lib/supabase';
+import { mapDriver } from '@/lib/mapper';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function CreateTrip() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const [pickup, setPickup] = useState('');
   const [pickupCoords, setPickupCoords] = useState<Coordinates>();
@@ -36,7 +39,22 @@ export default function CreateTrip() {
   const [routeInfo, setRouteInfo] = useState<{ distance: number; duration: number; route: Coordinates[] }>();
 
   const { data: driverProfile, isLoading: isLoadingDriver } = useQuery<any>({
-    queryKey: ['/api/drivers/my-profile'],
+    queryKey: ['my-driver-profile', user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data, error } = await supabase
+        .from('drivers')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error) {
+        // If not found, it's okay, return null to trigger redirect
+        return null;
+      }
+      return mapDriver(data);
+    },
+    enabled: !!user,
   });
 
   // Redirect if not a driver or not verified
@@ -53,14 +71,36 @@ export default function CreateTrip() {
 
   const createTripMutation = useMutation({
     mutationFn: async (tripData: Partial<InsertTrip>) => {
-      return await apiRequest('POST', '/api/trips', tripData);
+      // Map to snake_case
+      const dbTrip = {
+        driver_id: tripData.driverId,
+        pickup_location: tripData.pickupLocation,
+        pickup_lat: tripData.pickupLat,
+        pickup_lng: tripData.pickupLng,
+        drop_location: tripData.dropLocation,
+        drop_lat: tripData.dropLat,
+        drop_lng: tripData.dropLng,
+        departure_time: tripData.departureTime,
+        distance: tripData.distance,
+        duration: tripData.duration,
+        price_per_seat: tripData.pricePerSeat,
+        available_seats: tripData.availableSeats,
+        total_seats: tripData.totalSeats,
+        status: 'upcoming',
+        route: tripData.route,
+        preferences: tripData.preferences,
+      };
+
+      const { data, error } = await supabase.from('trips').insert(dbTrip).select().single();
+      if (error) throw error;
+      return data;
     },
     onSuccess: () => {
       toast({
         title: 'Trip created successfully!',
         description: 'Your trip has been published and is now visible to passengers.',
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/trips'] });
+      queryClient.invalidateQueries({ queryKey: ['my-created-trips'] });
       navigate('/my-trips');
     },
     onError: (error: any) => {

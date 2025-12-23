@@ -10,13 +10,15 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { MapView } from '@/components/MapView';
 import { useToast } from '@/hooks/use-toast';
-import { apiRequest, queryClient } from '@/lib/queryClient';
-import { ArrowLeft, Calendar, Clock, MapPin, Users, Star, Car, Check, X, Shield, Play, Square, ThumbsUp } from 'lucide-react';
+import { queryClient } from '@/lib/queryClient';
+import { ArrowLeft, Calendar, MapPin, Users, Star, Car, Check, X, Shield, Play, Square, ThumbsUp } from 'lucide-react';
 import { RatingModal } from '@/components/RatingModal';
 import { TripWithDriver } from '@shared/schema';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
-import { socket } from '@/lib/socket';
+import { supabase } from '@/lib/supabase';
+import { mapTrip } from '@/lib/mapper';
+import { locationTrackingService } from '@/lib/location-tracking';
 
 export default function TripDetails() {
   const [, navigate] = useLocation();
@@ -30,7 +32,18 @@ export default function TripDetails() {
   const watchIdRef = useRef<number | null>(null);
 
   const { data: trip, isLoading } = useQuery<TripWithDriver>({
-    queryKey: ['/api/trips', tripId],
+    queryKey: ['trip-details', tripId],
+    queryFn: async () => {
+      if (!tripId) throw new Error("Trip ID required");
+      const { data, error } = await supabase
+        .from('trips')
+        .select('*, driver:drivers(*, user:users(*))')
+        .eq('id', tripId)
+        .single();
+
+      if (error) throw error;
+      return mapTrip(data);
+    },
     enabled: !!tripId,
   });
 
@@ -38,14 +51,36 @@ export default function TripDetails() {
 
   const bookingMutation = useMutation({
     mutationFn: async (data: { tripId: string; seatsBooked: number }) => {
-      return await apiRequest('POST', '/api/bookings', data);
+      if (!user) throw new Error("Must be logged in");
+
+      // 1. Create booking
+      const bookingData = {
+        trip_id: data.tripId,
+        passenger_id: user.id,
+        seats_booked: data.seatsBooked,
+        // Calculate amount?
+        total_amount: parseInt(trip?.pricePerSeat.toString() || '0') * data.seatsBooked,
+        status: 'pending',
+        pickup_location: trip?.pickupLocation,
+        drop_location: trip?.dropLocation,
+      };
+
+      const { data: booking, error: bookingError } = await supabase
+        .from('bookings')
+        .insert(bookingData)
+        .select()
+        .single();
+
+      if (bookingError) throw bookingError;
+
+      return booking;
     },
     onSuccess: (data) => {
       toast({
         title: 'Booking initiated!',
         description: 'Proceeding to payment...',
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/trips', tripId] });
+      queryClient.invalidateQueries({ queryKey: ['trip-details', tripId] });
       navigate(`/payment/${data.id}`);
     },
     onError: (error: any) => {
@@ -59,14 +94,22 @@ export default function TripDetails() {
 
   const updateStatusMutation = useMutation({
     mutationFn: async (status: string) => {
-      return await apiRequest('PUT', `/api/trips/${tripId}/status`, { status });
+      const { data, error } = await supabase
+        .from('trips')
+        .update({ status: status })
+        .eq('id', tripId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
     },
     onSuccess: (_, status) => {
       toast({
         title: `Trip ${status === 'ongoing' ? 'Started' : 'Ended'}`,
         description: status === 'ongoing' ? 'Location sharing is active.' : 'Thank you for driving.',
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/trips', tripId] });
+      queryClient.invalidateQueries({ queryKey: ['trip-details', tripId] });
     },
     onError: (error: any) => {
       toast({
@@ -79,10 +122,7 @@ export default function TripDetails() {
 
   useEffect(() => {
     if (!isDriver || !trip || trip.status !== 'ongoing') {
-      if (watchIdRef.current) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-        watchIdRef.current = null;
-      }
+      locationTrackingService.stopTracking();
       return;
     }
 
@@ -91,34 +131,33 @@ export default function TripDetails() {
       return;
     }
 
-    // Start tracking
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      (position) => {
-        socket.emit('driver:location:update', {
-          tripId: trip.id,
-          driverId: trip.driver.id,
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          heading: position.coords.heading || 0,
-          speed: position.coords.speed || 0
-        });
-      },
-      (error) => {
-        console.error('Location error:', error);
-        toast({ title: 'Location tracking error', description: error.message, variant: 'destructive' });
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 5000,
-        maximumAge: 0
-      }
+    // Start tracking using the service
+    locationTrackingService.setUpdateInterval(5000);
+    locationTrackingService.startTracking(
+      trip.id,
+      trip.driver.id,
+      () => new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            resolve({
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+              heading: position.coords.heading || undefined,
+              speed: position.coords.speed || undefined
+            });
+          },
+          (error) => reject(error),
+          { enableHighAccuracy: true }
+        );
+      })
     );
 
+    // Also keep the broadcast for immediate realtime feel (optional, but service might handle it)
+    // Actually, LocationTrackingService uses upsert to table, and track-trip.tsx listens to table changes.
+    // So broadcast is redundant if we're using table changes.
+
     return () => {
-      if (watchIdRef.current) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-        watchIdRef.current = null;
-      }
+      locationTrackingService.stopTracking();
     };
   }, [isDriver, trip?.status, trip?.id]);
 
@@ -164,7 +203,7 @@ export default function TripDetails() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur">
         <div className="container mx-auto px-6 h-16 flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} data-testid="button-back">
+          <Button variant="ghost" size="icon" onClick={() => window.history.back()} data-testid="button-back">
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h1 className="text-xl font-display font-bold">Trip Details</h1>
@@ -466,3 +505,5 @@ export default function TripDetails() {
     </div>
   );
 }
+
+

@@ -10,10 +10,21 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Bell } from 'lucide-react';
-import { apiRequest, queryClient } from '@/lib/queryClient';
+import { queryClient } from '@/lib/queryClient';
 import { formatDistanceToNow } from 'date-fns';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
+import { Notification } from '@shared/schema';
 
-interface Notification {
+// Map database schema to simple notification interface if needed, or use shared schema directly
+// Looking at shared/schema, Notification has camelCase fields? No, mapper handles it usually, or we use raw Supabase data which is snake_case.
+// We should check shared schema. Assuming Supabase returns snake_case, we might need mapping.
+// Let's define the Supabase interface here for simplicity or use mapper.
+// I'll create a local mapper or assume we treat raw data for now, but UI expects camelCase probably.
+// Actually `client/src/lib/mapper.ts` didn't have `mapNotification`. I should check if I missed it or should add it.
+// For now, I'll map manually in queryFn.
+
+interface NotificationInterface {
     id: string;
     title: string;
     message: string;
@@ -24,28 +35,70 @@ interface Notification {
 
 export function NotificationDropdown() {
     const [isOpen, setIsOpen] = useState(false);
+    const { user } = useAuth();
 
-    const { data: notifications } = useQuery<Notification[]>({
-        queryKey: ['/api/notifications'],
+    const { data: notifications } = useQuery<NotificationInterface[]>({
+        queryKey: ['notifications', user?.id, user?.role],
+        queryFn: async () => {
+            if (!user) return [];
+
+            let query = supabase
+                .from('notifications')
+                .select('*');
+
+            if (user.role === 'admin') {
+                query = query.or(`user_id.eq.${user.id},recipient_id.eq.admin`);
+            } else {
+                query = query.eq('user_id', user.id);
+            }
+
+            const { data, error } = await query.order('created_at', { ascending: false });
+
+            if (error) throw error;
+
+            return (data || []).map((n: any) => ({
+                id: n.id,
+                title: n.title,
+                message: n.message,
+                type: n.type,
+                isRead: n.is_read,
+                createdAt: n.created_at
+            }));
+        },
         // Refetch every minute
-        refetchInterval: 60000
+        refetchInterval: 60000,
+        enabled: !!user,
     });
 
     const markReadMutation = useMutation({
         mutationFn: async (id: string) => {
-            return await apiRequest('PUT', `/api/notifications/${id}/read`, {});
+            const { error } = await supabase
+                .from('notifications')
+                .update({ is_read: true })
+                .eq('id', id);
+
+            if (error) throw error;
+            return true;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
+            // Invalidate to refetch
+            queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
         }
     });
 
     const markAllReadMutation = useMutation({
         mutationFn: async () => {
-            return await apiRequest('PUT', '/api/notifications/read-all', {});
+            if (!user) return;
+            const { error } = await supabase
+                .from('notifications')
+                .update({ is_read: true })
+                .eq('user_id', user.id);
+
+            if (error) throw error;
+            return true;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
+            queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
         }
     });
 

@@ -14,11 +14,17 @@ import TrackTrip from "@/pages/track-trip";
 import TripDetails from "@/pages/trip-details";
 import Login from "@/pages/login";
 import Signup from "@/pages/signup";
+import ForgotPassword from "@/pages/forgot-password";
+import ResetPassword from "@/pages/reset-password";
 import MyTrips from "@/pages/my-trips";
 import Profile from "@/pages/profile";
 import Payment from "@/pages/payment";
 import PaymentSuccess from "@/pages/payment-success";
+import PaymentMethods from "@/pages/payment-methods";
+import PaymentHistory from "@/pages/payment-history";
+import Earnings from "@/pages/earnings";
 import AdminDashboard from "@/pages/admin";
+import Help from "@/pages/help";
 
 function Router() {
   return (
@@ -31,11 +37,17 @@ function Router() {
       <ProtectedRoute path="/trip/:id" component={TripDetails} />
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
       <ProtectedRoute path="/my-trips" component={MyTrips} />
       <ProtectedRoute path="/profile" component={Profile} />
+      <ProtectedRoute path="/payment-methods" component={PaymentMethods} />
+      <ProtectedRoute path="/payment-history" component={PaymentHistory} />
+      <ProtectedRoute path="/earnings" component={Earnings} />
       <ProtectedRoute path="/payment/:bookingId" component={Payment} />
       <ProtectedRoute path="/payment-success" component={PaymentSuccess} />
       <ProtectedRoute path="/admin" component={AdminDashboard} />
+      <Route path="/help" component={Help} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -11,8 +11,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Star } from 'lucide-react';
-import { apiRequest, queryClient } from '@/lib/queryClient';
+import { queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface RatingModalProps {
     isOpen: boolean;
@@ -24,24 +26,31 @@ interface RatingModalProps {
 
 export function RatingModal({ isOpen, onClose, tripId, driverId, driverName }: RatingModalProps) {
     const { toast } = useToast();
+    const { user } = useAuth();
     const [rating, setRating] = useState(0);
     const [review, setReview] = useState('');
 
     const submitRatingMutation = useMutation({
         mutationFn: async () => {
-            return await apiRequest('POST', '/api/ratings', {
-                tripId,
-                toUserId: driverId, // We rate the driver (user)
+            if (!user) throw new Error("Must be logged in");
+
+            const { error } = await supabase.from('ratings').insert({
+                trip_id: tripId,
+                from_user_id: user.id,
+                to_user_id: driverId,
                 rating,
                 review
             });
+
+            if (error) throw error;
+            return true;
         },
         onSuccess: () => {
             toast({
                 title: 'Rating submitted',
                 description: 'Thank you for your feedback!',
             });
-            queryClient.invalidateQueries({ queryKey: ['/api/ratings'] });
+            // queryClient.invalidateQueries({ queryKey: ['/api/ratings'] }); // No specific query to invalidate yet
             onClose();
         },
         onError: (error: any) => {

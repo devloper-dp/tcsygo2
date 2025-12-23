@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -12,12 +12,14 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { apiRequest, queryClient } from '@/lib/queryClient';
-import { ArrowLeft, User, Car, Star, Camera, Shield, Check, Calendar, MapPin, Activity } from 'lucide-react';
+import { queryClient } from '@/lib/queryClient';
+import { ArrowLeft, User, Car, Star, Camera, Shield, Check, Activity, Loader2 } from 'lucide-react';
 import { Driver, TripWithDriver, BookingWithDetails } from '@shared/schema';
 import { format } from 'date-fns';
 import { RatingModal } from '@/components/RatingModal';
 import { NotificationDropdown } from '@/components/NotificationDropdown';
+import { supabase } from '@/lib/supabase';
+import { mapDriver, mapBooking, mapTrip } from '@/lib/mapper';
 
 export default function Profile() {
   const [, navigate] = useLocation();
@@ -27,20 +29,64 @@ export default function Profile() {
   const [fullName, setFullName] = useState(user?.fullName || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [bio, setBio] = useState(user?.bio || '');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [ratingBooking, setRatingBooking] = useState<BookingWithDetails | null>(null);
 
-  const { data: driverProfile } = useQuery<Driver>({
-    queryKey: ['/api/drivers/my-profile'],
+  const { data: driverProfile } = useQuery<Driver | null>({
+    queryKey: ['driver-profile', user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data, error } = await supabase
+        .from('drivers')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error) {
+        // It's possible the user is not a driver yet
+        return null;
+      }
+      return mapDriver(data);
+    },
     enabled: user?.role === 'driver' || user?.role === 'both',
   });
 
   const { data: bookings } = useQuery<BookingWithDetails[]>({
-    queryKey: ['/api/bookings/my-bookings'],
+    queryKey: ['my-bookings-history', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*, trip:trips(*, driver:drivers(*, user:users(*)))')
+        .eq('passenger_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return (data || []).map(mapBooking);
+    },
+    enabled: !!user,
   });
 
   const { data: myTrips } = useQuery<TripWithDriver[]>({
-    queryKey: ['/api/trips/my-trips'],
+    queryKey: ['my-trips-history', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      // First get driver ID
+      const { data: driver } = await supabase.from('drivers').select('id').eq('user_id', user.id).single();
+      if (!driver) return [];
+
+      const { data, error } = await supabase
+        .from('trips')
+        .select('*, driver:drivers(*, user:users(*))')
+        .eq('driver_id', driver.id)
+        .order('departure_time', { ascending: false });
+
+      if (error) throw error;
+      return (data || []).map(mapTrip);
+    },
+    enabled: !!user && (user.role === 'driver' || user.role === 'both'),
   });
 
   const getStatusColor = (status: string) => {
@@ -58,16 +104,32 @@ export default function Profile() {
 
   const updateProfileMutation = useMutation({
     mutationFn: async (data: any) => {
-      // Use the correct endpoint matching routes.ts: /api/users/:id
-      return await apiRequest('PUT', `/api/users/${user.id}`, data);
+      if (!user) throw new Error('Not logged in');
+
+      const { data: updatedUser, error } = await supabase
+        .from('users')
+        .update({
+          full_name: data.fullName,
+          phone: data.phone,
+          bio: data.bio
+        })
+        .eq('id', user.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return updatedUser;
     },
     onSuccess: (updatedUser) => {
       toast({
         title: 'Profile updated',
         description: 'Your profile has been successfully updated.',
       });
-      // Invalidate the specific user query if it exists, or trigger a reload of auth user
-      queryClient.invalidateQueries({ queryKey: [`/api/users/${user.id}`] });
+      // Invalidate queries?? Actually AuthContext should handle user updates if we refetch or update state.
+      // Since AuthContext listens to onAuthStateChange, it might get the update if Supabase emits it, 
+      // but usually we need to reload the user session or update local state.
+      // For now, simple success message.
+      queryClient.invalidateQueries({ queryKey: ['user', user?.id] });
     },
     onError: () => {
       toast({
@@ -77,6 +139,93 @@ export default function Profile() {
       });
     },
   });
+
+  const uploadPhotoMutation = useMutation({
+    mutationFn: async (file: File) => {
+      if (!user) throw new Error('Not logged in');
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+
+      try {
+        // Upload to Supabase Storage
+        const { error: uploadError } = await supabase.storage
+          .from('profile-photos')
+          .upload(filePath, file, { upsert: true });
+
+        if (uploadError) throw uploadError;
+
+        // Get public URL
+        const { data } = supabase.storage
+          .from('profile-photos')
+          .getPublicUrl(filePath);
+
+        // Update user profile with new photo URL
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({ profile_photo: data.publicUrl })
+          .eq('id', user.id);
+
+        if (updateError) throw updateError;
+
+        return data.publicUrl;
+      } catch (error: any) {
+        console.error('Storage upload failed:', error);
+        toast({
+          title: 'Upload failed',
+          description: error.message || 'Unable to upload photo. Please try again.',
+          variant: 'destructive',
+        });
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Photo updated',
+        description: 'Your profile photo has been updated successfully.',
+      });
+      queryClient.invalidateQueries({ queryKey: ['user', user?.id] });
+      // Reload to update auth context
+      window.location.reload();
+    },
+    onError: () => {
+      toast({
+        title: 'Upload failed',
+        description: 'Unable to upload photo. Please try again.',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Invalid file',
+        description: 'Please select an image file.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: 'File too large',
+        description: 'Please select an image smaller than 5MB.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setUploadingPhoto(true);
+    await uploadPhotoMutation.mutateAsync(file);
+    setUploadingPhoto(false);
+  };
 
   const handleSaveProfile = () => {
     updateProfileMutation.mutate({
@@ -132,8 +281,23 @@ export default function Profile() {
                 <AvatarImage src={user.profilePhoto || undefined} />
                 <AvatarFallback className="text-2xl">{user.fullName.charAt(0)}</AvatarFallback>
               </Avatar>
-              <button className="absolute bottom-0 right-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center hover-elevate active-elevate-2">
-                <Camera className="w-4 h-4 text-primary-foreground" />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoUpload}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingPhoto}
+                className="absolute bottom-0 right-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center hover-elevate active-elevate-2 disabled:opacity-50"
+              >
+                {uploadingPhoto ? (
+                  <Loader2 className="w-4 h-4 text-primary-foreground animate-spin" />
+                ) : (
+                  <Camera className="w-4 h-4 text-primary-foreground" />
+                )}
               </button>
             </div>
 
@@ -235,6 +399,18 @@ export default function Profile() {
                 >
                   {updateProfileMutation.isPending ? 'Saving...' : 'Save Changes'}
                 </Button>
+
+                <Separator className="my-6" />
+
+                <div>
+                  <h4 className="text-sm font-semibold mb-3">Payment Methods</h4>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Manage your saved payment methods for faster checkout
+                  </p>
+                  <Button variant="outline" onClick={() => navigate('/payment-methods')}>
+                    Manage Payment Methods
+                  </Button>
+                </div>
               </div>
             </Card>
           </TabsContent>

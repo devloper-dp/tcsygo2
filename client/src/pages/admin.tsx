@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { apiRequest, queryClient } from '@/lib/queryClient';
+import { queryClient } from '@/lib/queryClient';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/input';
 import {
   Table,
@@ -31,10 +32,29 @@ import {
 } from 'lucide-react';
 import { NotificationDropdown } from '@/components/NotificationDropdown';
 import { Driver, User, TripWithDriver, BookingWithDetails, Payment, SOSAlert } from '@shared/schema';
+import { supabase } from '@/lib/supabase';
+import { mapDriver, mapTrip, mapBooking, mapPayment, mapSOSAlert } from '@/lib/mapper';
 
 export default function AdminDashboard() {
   const [, navigate] = useLocation();
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Access Control: Only admins can view this page
+  if (!user || user.role !== 'admin') {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <Card className="max-w-md w-full p-8 text-center">
+          <Shield className="w-12 h-12 text-destructive mx-auto mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+          <p className="text-muted-foreground mb-6">You do not have administrative privileges to access this dashboard.</p>
+          <Button onClick={() => navigate('/')} className="w-full">
+            Return Home
+          </Button>
+        </Card>
+      </div>
+    );
+  }
 
   const { data: stats } = useQuery<{
     totalUsers: number;
@@ -43,38 +63,114 @@ export default function AdminDashboard() {
     totalRevenue: number;
     pendingVerifications: number;
   }>({
-    queryKey: ['/api/admin/stats'],
+    queryKey: ['admin-stats'],
+    queryFn: async () => {
+      const { count: totalUsers } = await supabase.from('users').select('*', { count: 'exact', head: true });
+      const { count: totalDrivers } = await supabase.from('drivers').select('*', { count: 'exact', head: true });
+      const { count: totalTrips } = await supabase.from('trips').select('*', { count: 'exact', head: true });
+      const { count: pendingVerifications } = await supabase.from('drivers').select('*', { count: 'exact', head: true }).eq('verification_status', 'pending');
+
+      // Revenue (simplified, calculating on client)
+      const { data: payments } = await supabase.from('payments').select('amount').eq('status', 'success');
+      const totalRevenue = payments?.reduce((sum, p) => sum + parseFloat(p.amount), 0) || 0;
+
+      return {
+        totalUsers: totalUsers || 0,
+        totalDrivers: totalDrivers || 0,
+        totalTrips: totalTrips || 0,
+        totalRevenue,
+        pendingVerifications: pendingVerifications || 0
+      };
+    }
   });
 
   const { data: pendingDrivers } = useQuery<(Driver & { user: User })[]>({
-    queryKey: ['/api/admin/drivers/pending'],
+    queryKey: ['admin-drivers-pending'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('drivers')
+        .select('*, user:users(*)')
+        .eq('verification_status', 'pending');
+
+      if (error) throw error;
+      return (data || []).map(mapDriver) as (Driver & { user: User })[];
+    }
   });
 
   const { data: allTrips } = useQuery<TripWithDriver[]>({
-    queryKey: ['/api/admin/trips'],
+    queryKey: ['admin-trips'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('trips')
+        .select('*, driver:drivers(*, user:users(*))')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return (data || []).map(mapTrip);
+    }
   });
 
   const { data: allBookings } = useQuery<BookingWithDetails[]>({
-    queryKey: ['/api/admin/bookings'],
+    queryKey: ['admin-bookings'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*, trip:trips(*, driver:drivers(*, user:users(*))), passenger:users(*)')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return (data || []).map(mapBooking);
+    }
   });
 
   const { data: allPayments } = useQuery<Payment[]>({
-    queryKey: ['/api/admin/payments'],
+    queryKey: ['admin-payments'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('payments')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return (data || []).map(mapPayment);
+    }
   });
 
-  const { data: allAlerts } = useQuery<(SOSAlert & { reporter: User })[]>({
-    queryKey: ['/api/admin/sos'],
+  const { data: allAlerts } = useQuery<(SOSAlert & { user: User })[]>({
+    queryKey: ['admin-sos'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('emergency_alerts')
+        .select('*, user:users(*)')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return (data || []).map(mapSOSAlert);
+    }
   });
 
   const verifyDriverMutation = useMutation({
     mutationFn: async ({ driverId, status }: { driverId: string; status: 'verified' | 'rejected' }) => {
-      return await apiRequest('PUT', `/api/drivers/${driverId}/verify`, { status });
+      const { error } = await supabase
+        .from('drivers')
+        .update({ verification_status: status })
+        .eq('id', driverId);
+
+      if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/drivers/pending'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-drivers-pending'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
     }
   });
+
+  const filteredTrips = allTrips?.filter(trip =>
+    searchTerm ? (
+      trip.pickupLocation.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      trip.dropLocation.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      trip.driver.user.fullName.toLowerCase().includes(searchTerm.toLowerCase())
+    ) : true
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -134,7 +230,7 @@ export default function AdminDashboard() {
               <DollarSign className="w-8 h-8 text-chart-1" />
             </div>
             <div className="text-3xl font-bold" data-testid="stat-revenue">
-              ₹{stats?.totalRevenue || 0}
+              ₹{stats?.totalRevenue.toFixed(2) || '0.00'}
             </div>
             <div className="text-sm text-muted-foreground">Total Revenue</div>
           </Card>
@@ -256,7 +352,7 @@ export default function AdminDashboard() {
                 </div>
               </div>
               <div className="p-6">
-                {allTrips && allTrips.length > 0 ? (
+                {filteredTrips && filteredTrips.length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -269,7 +365,7 @@ export default function AdminDashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {allTrips.slice(0, 10).map((trip) => (
+                      {filteredTrips.slice(0, 10).map((trip) => (
                         <TableRow key={trip.id}>
                           <TableCell>{trip.driver.user.fullName}</TableCell>
                           <TableCell>
@@ -423,8 +519,8 @@ export default function AdminDashboard() {
                         <TableRow key={alert.id} className="bg-destructive/5">
                           <TableCell>{new Date(alert.createdAt).toLocaleString()}</TableCell>
                           <TableCell>
-                            <div className="font-medium">{alert.reporter.fullName}</div>
-                            <div className="text-xs text-muted-foreground">{alert.reporter.phone}</div>
+                            <div className="font-medium">{alert.user?.fullName || 'Unknown'}</div>
+                            <div className="text-xs text-muted-foreground">{alert.user?.phone || '-'}</div>
                           </TableCell>
                           <TableCell>
                             <a

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { apiRequest, queryClient } from '@/lib/queryClient';
+import { queryClient } from '@/lib/queryClient';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -12,26 +12,80 @@ import { TripWithDriver, BookingWithDetails } from '@shared/schema';
 import { format } from 'date-fns';
 import { RatingModal } from '@/components/RatingModal';
 import { NotificationDropdown } from '@/components/NotificationDropdown';
+import { supabase } from '@/lib/supabase';
+import { mapBooking, mapTrip } from '@/lib/mapper';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function MyTrips() {
   const [, navigate] = useLocation();
   const [activeTab, setActiveTab] = useState('bookings');
   const [ratingBooking, setRatingBooking] = useState<BookingWithDetails | null>(null);
+  const { user } = useAuth();
 
   const { data: bookings, isLoading: loadingBookings } = useQuery<BookingWithDetails[]>({
-    queryKey: ['/api/bookings/my-bookings'],
+    queryKey: ['my-bookings', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*, trip:trips(*, driver:drivers(*, user:users(*)))')
+        .eq('passenger_id', user.id);
+
+      if (error) throw error;
+      return (data || []).map(mapBooking);
+    },
+    enabled: !!user,
   });
 
   const { data: myTrips, isLoading: loadingTrips } = useQuery<TripWithDriver[]>({
-    queryKey: ['/api/trips/my-trips'],
+    queryKey: ['my-created-trips', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      // First get driver ID
+      const { data: driver, error: driverError } = await supabase
+        .from('drivers')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!driver) return []; // Not a driver
+
+      const { data, error } = await supabase
+        .from('trips')
+        .select('*, driver:drivers(*, user:users(*))')
+        .eq('driver_id', driver.id)
+        .order('departure_time', { ascending: false });
+
+      if (error) throw error;
+      return (data || []).map(mapTrip);
+    },
+    enabled: !!user,
   });
 
   const cancelBookingMutation = useMutation({
     mutationFn: async (bookingId: string) => {
-      return await apiRequest('PUT', `/api/bookings/${bookingId}/cancel`);
+      // 1. Update booking status
+      const { data: booking, error: bookingError } = await supabase
+        .from('bookings')
+        .update({ status: 'cancelled' })
+        .eq('id', bookingId)
+        .select()
+        .single();
+
+      if (bookingError) throw bookingError;
+
+      // 2. Increment available seats (Optimistic: assume it succeeds)
+      const seats = booking.seats_booked;
+      const tripId = booking.trip_id;
+
+      const { data: trip } = await supabase.from('trips').select('available_seats').eq('id', tripId).single();
+      if (trip) {
+        await supabase.from('trips').update({ available_seats: trip.available_seats + seats }).eq('id', tripId);
+      }
+      return booking;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/bookings/my-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['my-bookings'] });
     },
   });
 

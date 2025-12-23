@@ -276,7 +276,7 @@ See `mobile/README.md` for detailed React Native setup instructions.
 
 **Backend**:
 - Node.js / Express
-- Supabase (PostgreSQL)
+- Supabase
 - Razorpay Payments
 - EventEmitter3
 

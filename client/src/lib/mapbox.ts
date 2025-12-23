@@ -1,5 +1,16 @@
-
+// Mapbox access token from environment variables
 export const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || 'pk.placeholder-mapbox-token';
+
+// Check if Mapbox is properly configured
+export const isMapboxConfigured = MAPBOX_TOKEN && !MAPBOX_TOKEN.includes('placeholder');
+
+if (!isMapboxConfigured) {
+  console.warn(`
+⚠️  Mapbox token not configured. Using mock data for development.
+Add VITE_MAPBOX_ACCESS_TOKEN to your .env file.
+Get a token from: https://account.mapbox.com/access-tokens/
+  `);
+}
 
 export interface Coordinates {
   lat: number;

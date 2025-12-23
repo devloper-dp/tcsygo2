@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { MAPBOX_TOKEN } from '@/lib/mapbox';
 import { Coordinates } from '@/lib/mapbox';
-import { socket } from '@/lib/socket';
+import { supabase } from '@/lib/supabase';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
@@ -40,35 +40,32 @@ export function MapView({
 
   useEffect(() => {
     if (!tripId) return;
-    // In dev mode with no map, we still might want socket updates, or just skip
-    if (isDevToken) return; 
+    if (isDevToken) return;
 
-    // Join the trip room
-    socket.emit('trip:join', tripId);
+    // Use Supabase Realtime
+    const channel = supabase.channel(`trip-${tripId}`);
 
-    const handleLocationUpdate = (data: { lat: number; lng: number; heading?: number }) => {
-      if (!map.current || !mapLoaded) return;
+    channel
+      .on('broadcast', { event: 'driver-location' }, (payload) => {
+        const { lat, lng } = payload.payload;
+        if (!map.current || !mapLoaded) return;
 
-      const { lat, lng } = data;
+        if (!driverMarkerRef.current) {
+          const el = document.createElement('div');
+          el.className = 'w-10 h-10 bg-primary rounded-full border-4 border-white shadow-xl flex items-center justify-center';
+          el.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.6-.4-1-1-1h-2v5zm-7-5h5v5h-5v-5zm-7-5h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/></svg>'; // Simple car/vehicle icon
 
-      if (!driverMarkerRef.current) {
-        const el = document.createElement('div');
-        el.className = 'w-10 h-10 bg-primary rounded-full border-4 border-white shadow-xl flex items-center justify-center';
-        el.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.6-.4-1-1-1h-2v5zm-7-5h5v5h-5v-5zm-7-5h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/></svg>'; // Simple car/vehicle icon
-
-        driverMarkerRef.current = new mapboxgl.Marker(el)
-          .setLngLat([lng, lat])
-          .addTo(map.current);
-      } else {
-        driverMarkerRef.current.setLngLat([lng, lat]);
-      }
-    };
-
-    socket.on('location:updated', handleLocationUpdate);
+          driverMarkerRef.current = new mapboxgl.Marker(el)
+            .setLngLat([lng, lat])
+            .addTo(map.current);
+        } else {
+          driverMarkerRef.current.setLngLat([lng, lat]);
+        }
+      })
+      .subscribe();
 
     return () => {
-      socket.emit('trip:leave', tripId);
-      socket.off('location:updated', handleLocationUpdate);
+      supabase.removeChannel(channel);
       if (driverMarkerRef.current) {
         driverMarkerRef.current.remove();
         driverMarkerRef.current = null;

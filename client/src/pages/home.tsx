@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { LocationAutocomplete } from '@/components/LocationAutocomplete';
 import { NotificationDropdown } from '@/components/NotificationDropdown';
+import { RecentSearches, PopularRoutes } from '@/components/SearchSuggestions';
 import { Calendar, ArrowRight, Users, Shield, Leaf, DollarSign } from 'lucide-react';
 import { Coordinates } from '@/lib/mapbox';
+import { useSearchStore } from '@/lib/search-store';
 import heroImage from '@assets/generated_images/Happy_carpooling_travelers_roadtrip_dc309ad7.png';
 
 export default function Home() {
@@ -16,8 +18,19 @@ export default function Home() {
   const [dropCoords, setDropCoords] = useState<Coordinates>();
   const [date, setDate] = useState('');
 
+  const { addRecentSearch } = useSearchStore();
+
   const handleSearch = () => {
     if (!pickup || !drop) return;
+
+    // Add to recent searches
+    addRecentSearch({
+      pickup,
+      drop,
+      pickupCoords,
+      dropCoords,
+      date,
+    });
 
     const params = new URLSearchParams({
       pickup,
@@ -127,6 +140,16 @@ export default function Home() {
               </Button>
             </div>
           </Card>
+        </div>
+      </section>
+
+      {/* Recent Searches and Popular Routes */}
+      <section className="py-16 bg-background">
+        <div className="container mx-auto px-6">
+          <div className="max-w-6xl mx-auto space-y-12">
+            <RecentSearches />
+            <PopularRoutes />
+          </div>
         </div>
       </section>
 

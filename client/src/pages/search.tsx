@@ -1,16 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
+import { TripListSkeleton } from '@/components/SkeletonLoaders';
+import { NoTripsFound } from '@/components/EmptyStates';
 import { LocationAutocomplete } from '@/components/LocationAutocomplete';
 import { TripCard } from '@/components/TripCard';
 import { MapView } from '@/components/MapView';
-import { Search as SearchIcon, MapPin, SlidersHorizontal } from 'lucide-react';
+import { AdvancedFilters } from '@/components/AdvancedFilters';
+import { Search as SearchIcon, MapPin } from 'lucide-react';
 import { TripWithDriver } from '@shared/schema';
 import { Coordinates } from '@/lib/mapbox';
+import { supabase } from '@/lib/supabase';
+import { mapTrip } from '@/lib/mapper';
+import { useSearchStore } from '@/lib/search-store';
 
 export default function Search() {
   const [, navigate] = useLocation();
@@ -30,11 +35,111 @@ export default function Search() {
   );
   const [date, setDate] = useState(searchParams.get('date') || '');
   const [isMobileMapOpen, setIsMobileMapOpen] = useState(false);
+  const { filters } = useSearchStore();
 
-  const { data: trips, isLoading } = useQuery<TripWithDriver[]>({
-    queryKey: ['/api/trips/search', pickup, drop, date],
+  const { data: allTrips, isLoading } = useQuery<TripWithDriver[]>({
+    queryKey: ['trips-search', pickup, drop, date],
+    queryFn: async () => {
+      let query = supabase
+        .from('trips')
+        .select('*, driver:drivers(*, user:users(*))')
+        .eq('status', 'upcoming')
+        .gt('available_seats', 0);
+
+      if (pickup) {
+        query = query.ilike('pickup_location', `%${pickup}%`);
+      }
+      if (drop) {
+        query = query.ilike('drop_location', `%${drop}%`);
+      }
+      if (date) {
+        const startOfDay = new Date(date);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(date);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        query = query
+          .gte('departure_time', startOfDay.toISOString())
+          .lte('departure_time', endOfDay.toISOString());
+      }
+
+      const { data, error } = await query.order('departure_time', { ascending: true });
+
+      if (error) throw error;
+
+      return (data || []).map(mapTrip);
+    },
     enabled: !!(pickup && drop),
   });
+
+  // Apply client-side filters
+  const trips = useMemo(() => {
+    if (!allTrips) return allTrips;
+
+    let filtered = [...allTrips];
+
+    // Price filter
+    if (filters.minPrice !== undefined) {
+      filtered = filtered.filter(trip => parseFloat(trip.pricePerSeat) >= filters.minPrice!);
+    }
+    if (filters.maxPrice !== undefined) {
+      filtered = filtered.filter(trip => parseFloat(trip.pricePerSeat) <= filters.maxPrice!);
+    }
+
+    // Seats filter
+    if (filters.minSeats) {
+      filtered = filtered.filter(trip => trip.availableSeats >= filters.minSeats!);
+    }
+
+    // Time filter
+    if (filters.departureTimeStart || filters.departureTimeEnd) {
+      filtered = filtered.filter(trip => {
+        const tripTime = new Date(trip.departureTime).toTimeString().slice(0, 5);
+        if (filters.departureTimeStart && tripTime < filters.departureTimeStart) return false;
+        if (filters.departureTimeEnd && tripTime > filters.departureTimeEnd) return false;
+        return true;
+      });
+    }
+
+    // Preferences filter
+    if (filters.preferences) {
+      Object.entries(filters.preferences).forEach(([key, value]) => {
+        if (value) {
+          filtered = filtered.filter(trip => trip.preferences?.[key as keyof typeof trip.preferences]);
+        }
+      });
+    }
+
+    // Sort
+    if (filters.sortBy) {
+      filtered.sort((a, b) => {
+        let aVal: any, bVal: any;
+        switch (filters.sortBy) {
+          case 'price':
+            aVal = parseFloat(a.pricePerSeat);
+            bVal = parseFloat(b.pricePerSeat);
+            break;
+          case 'departure':
+            aVal = new Date(a.departureTime).getTime();
+            bVal = new Date(b.departureTime).getTime();
+            break;
+          case 'duration':
+            aVal = a.duration;
+            bVal = b.duration;
+            break;
+          case 'rating':
+            aVal = parseFloat(a.driver?.rating || '0');
+            bVal = parseFloat(b.driver?.rating || '0');
+            break;
+          default:
+            return 0;
+        }
+        return filters.sortOrder === 'desc' ? bVal - aVal : aVal - bVal;
+      });
+    }
+
+    return filtered;
+  }, [allTrips, filters]);
 
   const markers = pickupCoords && dropCoords ? [
     {
@@ -100,9 +205,7 @@ export default function Search() {
                   data-testid="input-search-date"
                 />
 
-                <Button variant="outline" size="icon" data-testid="button-filter">
-                  <SlidersHorizontal className="w-4 h-4" />
-                </Button>
+                <AdvancedFilters />
               </div>
             </Card>
 
@@ -123,20 +226,7 @@ export default function Search() {
             </div>
 
             {isLoading ? (
-              <div className="space-y-4">
-                {[1, 2, 3].map((i) => (
-                  <Card key={i} className="p-6">
-                    <div className="flex gap-6">
-                      <Skeleton className="w-16 h-16 rounded-full" />
-                      <div className="flex-1 space-y-3">
-                        <Skeleton className="h-6 w-1/3" />
-                        <Skeleton className="h-4 w-full" />
-                        <Skeleton className="h-4 w-2/3" />
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
+              <TripListSkeleton count={5} />
             ) : trips && trips.length > 0 ? (
               <div className="space-y-4">
                 {trips.map((trip) => (
@@ -148,16 +238,7 @@ export default function Search() {
                 ))}
               </div>
             ) : pickup && drop ? (
-              <Card className="p-12 text-center">
-                <SearchIcon className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-xl font-semibold mb-2">No trips found</h3>
-                <p className="text-muted-foreground mb-6">
-                  Try adjusting your search criteria or check back later
-                </p>
-                <Button onClick={() => navigate('/create-trip')} data-testid="button-create-trip-cta">
-                  Create a Trip Instead
-                </Button>
-              </Card>
+              <NoTripsFound onAdjustFilters={() => { }} />
             ) : (
               <Card className="p-12 text-center">
                 <SearchIcon className="w-16 h-16 text-muted-foreground mx-auto mb-4" />

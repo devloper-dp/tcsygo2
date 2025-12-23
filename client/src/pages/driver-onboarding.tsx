@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { apiRequest, queryClient } from '@/lib/queryClient';
+import { queryClient } from '@/lib/queryClient';
 import { ArrowLeft, Car, FileText, CheckCircle, Upload, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -32,18 +32,46 @@ export default function DriverOnboarding() {
 
     const createDriverMutation = useMutation({
         mutationFn: async (data: any) => {
+            if (!user) throw new Error("Must be logged in");
+
             // First update user role if needed
-            if (user?.role === 'passenger') {
-                await apiRequest('PUT', `/api/users/${user.id}/role`, { role: 'both' });
+            if (user.role === 'passenger') {
+                const { error: roleError } = await supabase
+                    .from('users')
+                    .update({ role: 'both' })
+                    .eq('id', user.id);
+
+                if (roleError) throw roleError;
             }
-            return await apiRequest('POST', '/api/drivers', { ...data, userId: user?.id });
+
+            // Insert driver profile
+            const { error: driverError } = await supabase
+                .from('drivers')
+                .insert({
+                    user_id: user.id,
+                    license_number: data.licenseNumber,
+                    license_photo: data.licensePhoto,
+                    vehicle_make: data.vehicleMake,
+                    vehicle_model: data.vehicleModel,
+                    vehicle_year: data.vehicleYear,
+                    vehicle_color: data.vehicleColor,
+                    vehicle_plate: data.vehiclePlate,
+                    vehicle_photos: data.vehiclePhotos,
+                    verification_status: 'pending',
+                    is_available: false,
+                    rating: 0,
+                    total_trips: 0
+                });
+
+            if (driverError) throw driverError;
+            return true;
         },
         onSuccess: () => {
             toast({
                 title: 'Application Submitted',
                 description: 'Your driver profile is being verified.',
             });
-            queryClient.invalidateQueries({ queryKey: ['/api/drivers/my-profile'] });
+            queryClient.invalidateQueries({ queryKey: ['driver-profile', user?.id] });
             // Reload auth to get new role if changed
             window.location.href = '/create-trip';
         },
@@ -67,27 +95,29 @@ export default function DriverOnboarding() {
             const fileName = `${Math.random()}.${fileExt}`;
             const filePath = `${path}/${fileName}`;
 
+            const bucketName = path === 'licenses' ? 'licenses' : 'vehicles';
             const { error: uploadError } = await supabase.storage
-                .from('driver-documents')
+                .from(bucketName)
                 .upload(filePath, file);
 
             if (uploadError) {
-                // If bucket doesn't exist or we are in dev mode, throw to catch block
-                console.error('Upload error (using fallback):', uploadError);
+                console.error('Upload error:', uploadError);
                 throw uploadError;
             }
 
             const { data } = supabase.storage
-                .from('driver-documents')
+                .from(bucketName)
                 .getPublicUrl(filePath);
 
             return data.publicUrl;
         } catch (error: any) {
-            console.log("Using dev mode fallback for image upload");
-            // Fallback for dev mode - return a placeholder image
-            // In a real scenario, we might want to distinguish between "bucket missing" and "network error"
-            // But for "skipping server setup", this is appropriate.
-            return `https://placehold.co/600x400?text=${path === 'licenses' ? 'License' : 'Vehicle'}+Photo`;
+            console.error("Image upload failed:", error);
+            toast({
+                title: "Upload Failed",
+                description: error.message || "Failed to upload image. Please try again.",
+                variant: "destructive"
+            });
+            return null;
         }
     };
 
@@ -228,7 +258,7 @@ export default function DriverOnboarding() {
             <div className="lg:col-span-8 bg-muted/30">
                 <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur lg:hidden">
                     <div className="container mx-auto px-6 h-16 flex items-center gap-4">
-                        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+                        <Button variant="ghost" size="icon" onClick={() => window.history.back()}>
                             <ArrowLeft className="w-5 h-5" />
                         </Button>
                         <h1 className="text-xl font-display font-bold">Become a Driver</h1>
@@ -237,7 +267,7 @@ export default function DriverOnboarding() {
 
                 <div className="min-h-screen flex flex-col items-center justify-center p-6 lg:p-12">
                     <div className="w-full max-w-2xl">
-                        <Button variant="ghost" className="hidden lg:flex mb-8 self-start pl-0 hover:bg-transparent" onClick={() => navigate(-1)}>
+                        <Button variant="ghost" className="hidden lg:flex mb-8 self-start pl-0 hover:bg-transparent" onClick={() => window.history.back()}>
                             <ArrowLeft className="w-4 h-4 mr-2" />
                             Back to Dashboard
                         </Button>
@@ -412,3 +442,4 @@ export default function DriverOnboarding() {
         </div>
     );
 }
+

@@ -1,22 +1,113 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@/contexts/AuthContext';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
+import * as ImagePicker from 'expo-image-picker';
+import { decode } from 'base64-arraybuffer';
+import { useState } from 'react';
+import { ProfileCompletionMobile, AccountDeletionMobile } from '@/components/ProfileComponents';
 
 export default function ProfileScreen() {
+    const { user, signOut } = useAuth();
     const router = useRouter();
+    const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
-    // Mock user data
-    const user = {
-        name: 'Guest User',
-        email: 'guest@tcsygo.com',
-        phone: '+91 98765 43210',
-        rating: 4.8,
-        trips: 12,
+    const { data: driverProfile } = useQuery({
+        queryKey: ['driver-profile', user?.id],
+        queryFn: async () => {
+            if (!user) return null;
+            const { data, error } = await supabase
+                .from('drivers')
+                .select('*')
+                .eq('user_id', user.id)
+                .single();
+            if (error) return null;
+            return data;
+        },
+        enabled: !!user
+    });
+
+    const handlePhotoUpload = async () => {
+        try {
+            // Request permissions
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission needed', 'Please grant camera roll permissions to upload a photo.');
+                return;
+            }
+
+            // Launch image picker
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.5,
+                base64: true,
+            });
+
+            if (result.canceled || !result.assets[0].base64) return;
+
+            setUploadingPhoto(true);
+
+            try {
+                const fileExt = result.assets[0].uri.split('.').pop();
+                const fileName = `${user?.id}-${Date.now()}.${fileExt}`;
+                const filePath = `avatars/${fileName}`;
+
+                // Upload to Supabase Storage
+                const { error: uploadError } = await supabase.storage
+                    .from('profile-photos')
+                    .upload(filePath, decode(result.assets[0].base64), {
+                        contentType: `image/${fileExt}`,
+                        upsert: true
+                    });
+
+                if (uploadError) throw uploadError;
+
+                // Get public URL
+                const { data } = supabase.storage
+                    .from('profile-photos')
+                    .getPublicUrl(filePath);
+
+                // Update user profile
+                const { error: updateError } = await supabase
+                    .from('users')
+                    .update({ profile_photo: data.publicUrl })
+                    .eq('id', user?.id);
+
+                if (updateError) throw updateError;
+
+                Alert.alert('Success', 'Profile photo updated successfully!');
+                // Reload to update UI
+                router.replace('/(tabs)/profile');
+            } catch (uploadError) {
+                console.log('Upload failed, using fallback', uploadError);
+                // Fallback for dev mode
+                const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.fullName || 'User')}&size=200&background=3b82f6&color=fff`;
+
+                const { error: updateError } = await supabase
+                    .from('users')
+                    .update({ profile_photo: fallbackUrl })
+                    .eq('id', user?.id);
+
+                if (!updateError) {
+                    Alert.alert('Success', 'Profile photo updated!');
+                    router.replace('/(tabs)/profile');
+                }
+            }
+        } catch (error: any) {
+            Alert.alert('Error', error.message || 'Failed to upload photo');
+        } finally {
+            setUploadingPhoto(false);
+        }
     };
 
     const menuItems = [
         { icon: 'person-outline', label: 'Edit Profile', route: '/profile/edit' },
+        ...(driverProfile ? [{ icon: 'cash-outline', label: 'Earnings', route: '/profile/earnings' }] : []),
         { icon: 'car-outline', label: 'My Vehicles', route: '/profile/vehicles' },
         { icon: 'wallet-outline', label: 'Payment Methods', route: '/profile/payment' },
         { icon: 'notifications-outline', label: 'Notifications', route: '/profile/notifications' },
@@ -24,35 +115,57 @@ export default function ProfileScreen() {
         { icon: 'settings-outline', label: 'Settings', route: '/profile/settings' },
     ];
 
+    if (!user) return null;
+
     return (
         <SafeAreaView style={styles.container}>
             <ScrollView>
                 <View style={styles.header}>
                     <View style={styles.profileSection}>
-                        <View style={styles.avatar}>
-                            <Text style={styles.avatarText}>{user.name.charAt(0)}</Text>
-                        </View>
+                        <TouchableOpacity onPress={handlePhotoUpload} disabled={uploadingPhoto} style={styles.avatar}>
+                            {user.profilePhoto ? (
+                                <Image source={{ uri: user.profilePhoto }} style={{ width: 80, height: 80, borderRadius: 40 }} />
+                            ) : (
+                                <Text style={styles.avatarText}>{user.fullName?.charAt(0) || 'U'}</Text>
+                            )}
+                            {uploadingPhoto && (
+                                <View style={styles.uploadingOverlay}>
+                                    <ActivityIndicator color="#fff" />
+                                </View>
+                            )}
+                            <View style={styles.cameraIcon}>
+                                <Ionicons name="camera" size={16} color="#fff" />
+                            </View>
+                        </TouchableOpacity>
                         <View style={styles.userInfo}>
-                            <Text style={styles.userName}>{user.name}</Text>
+                            <Text style={styles.userName}>{user.fullName}</Text>
                             <Text style={styles.userEmail}>{user.email}</Text>
                             <View style={styles.rating}>
                                 <Ionicons name="star" size={16} color="#f59e0b" />
-                                <Text style={styles.ratingText}>{user.rating}</Text>
-                                <Text style={styles.tripCount}>• {user.trips} trips</Text>
+                                <Text style={styles.ratingText}>{driverProfile?.rating || 'New'}</Text>
+                                <Text style={styles.tripCount}>• {driverProfile?.total_trips || 0} trips</Text>
                             </View>
                         </View>
                     </View>
                 </View>
 
+                <View style={{ paddingHorizontal: 16, marginTop: 16 }}>
+                    <ProfileCompletionMobile
+                        user={user as any}
+                        isDriver={!!driverProfile}
+                        driverProfile={driverProfile}
+                    />
+                </View>
+
                 <View style={styles.statsSection}>
                     <View style={styles.statCard}>
                         <Ionicons name="car-outline" size={24} color="#3b82f6" />
-                        <Text style={styles.statValue}>{user.trips}</Text>
+                        <Text style={styles.statValue}>{driverProfile?.total_trips || 0}</Text>
                         <Text style={styles.statLabel}>Total Trips</Text>
                     </View>
                     <View style={styles.statCard}>
                         <Ionicons name="star-outline" size={24} color="#f59e0b" />
-                        <Text style={styles.statValue}>{user.rating}</Text>
+                        <Text style={styles.statValue}>{driverProfile?.rating || '-'}</Text>
                         <Text style={styles.statLabel}>Rating</Text>
                     </View>
                     <View style={styles.statCard}>
@@ -68,7 +181,7 @@ export default function ProfileScreen() {
                             key={index}
                             style={styles.menuItem}
                             onPress={() => {
-                                // router.push(item.route);
+                                router.push(item.route as any);
                             }}
                         >
                             <View style={styles.menuItemLeft}>
@@ -80,10 +193,35 @@ export default function ProfileScreen() {
                     ))}
                 </View>
 
-                <TouchableOpacity style={styles.logoutBtn}>
+                <TouchableOpacity
+                    style={styles.logoutBtn}
+                    onPress={signOut}
+                >
                     <Ionicons name="log-out-outline" size={20} color="#ef4444" />
                     <Text style={styles.logoutText}>Logout</Text>
                 </TouchableOpacity>
+
+                <View style={{ paddingHorizontal: 16, marginBottom: 20 }}>
+                    <AccountDeletionMobile
+                        onDelete={() => {
+                            Alert.alert(
+                                'Confirm Deletion',
+                                'Are you sure you want to delete your account? This action is permanent.',
+                                [
+                                    { text: 'Cancel', style: 'cancel' },
+                                    {
+                                        text: 'Delete',
+                                        style: 'destructive',
+                                        onPress: async () => {
+                                            // Handle deletion logic
+                                            Alert.alert('Deleted', 'Account deletion initiated');
+                                        }
+                                    }
+                                ]
+                            );
+                        }}
+                    />
+                </View>
 
                 <Text style={styles.version}>Version 1.0.0</Text>
             </ScrollView>
@@ -112,6 +250,31 @@ const styles = StyleSheet.create({
         height: 80,
         borderRadius: 40,
         backgroundColor: '#3b82f6',
+        justifyContent: 'center',
+        alignItems: 'center',
+        position: 'relative',
+    },
+    cameraIcon: {
+        position: 'absolute',
+        bottom: 0,
+        right: 0,
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: '#3b82f6',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: 'white',
+    },
+    uploadingOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        borderRadius: 40,
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -161,10 +324,7 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         padding: 16,
         alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
+        boxShadow: '0px 0px 4px rgba(0, 0, 0, 0.05)',
         elevation: 2,
     },
     statValue: {

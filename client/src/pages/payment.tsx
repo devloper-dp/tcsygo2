@@ -6,10 +6,11 @@ import { Card } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { apiRequest, queryClient } from '@/lib/queryClient';
+import { queryClient } from '@/lib/queryClient';
 import { ArrowLeft, CreditCard, Shield, CheckCircle } from 'lucide-react';
 import { BookingWithDetails } from '@shared/schema';
-
+import { supabase } from '@/lib/supabase';
+import { mapBooking } from '@/lib/mapper';
 
 declare global {
   interface Window {
@@ -18,7 +19,6 @@ declare global {
 }
 
 const RAZORPAY_KEY = import.meta.env.VITE_RAZORPAY_KEY_ID;
-const isDevPayment = !RAZORPAY_KEY || RAZORPAY_KEY.includes('placeholder');
 
 export default function Payment() {
   const [, navigate] = useLocation();
@@ -27,30 +27,36 @@ export default function Payment() {
   const bookingId = params?.bookingId;
 
   const { data: booking, isLoading } = useQuery<BookingWithDetails>({
-    queryKey: ['/api/bookings', bookingId],
+    queryKey: ['booking-payment', bookingId],
+    queryFn: async () => {
+      if (!bookingId) throw new Error("Booking ID required");
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*, trip:trips(*, driver:drivers(*, user:users(*))), passenger:users(*)')
+        .eq('id', bookingId)
+        .single();
+
+      if (error) throw error;
+      return mapBooking(data);
+    },
     enabled: !!bookingId,
   });
 
   const createPaymentMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest('POST', '/api/payments/create-order', { bookingId });
+      const { data, error } = await supabase.functions.invoke('create-payment-order', {
+        body: { bookingId }
+      });
+      if (error) throw error;
+      return data;
     },
     onSuccess: (data) => {
-      if (isDevPayment) {
-        verifyPaymentMutation.mutate({
-          bookingId,
-          razorpayOrderId: data.razorpayOrderId,
-          razorpayPaymentId: `pay_mock_${Date.now()}`,
-          razorpaySignature: 'mock_signature'
-        });
-      } else {
-        handleRazorpayPayment(data);
-      }
+      handleRazorpayPayment(data);
     },
-    onError: () => {
+    onError: (error: any) => {
       toast({
         title: 'Payment failed',
-        description: 'Unable to create payment order. Please try again.',
+        description: error.message || 'Unable to create payment order. Please try again.',
         variant: 'destructive',
       });
     },
@@ -58,11 +64,23 @@ export default function Payment() {
 
   const verifyPaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
-      return await apiRequest('POST', '/api/payments/verify', paymentData);
+      // Call Supabase Edge Function to verify payment
+      const { data, error } = await supabase.functions.invoke('verify-payment', {
+        body: paymentData
+      });
+
+      if (error) throw error;
+      return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/bookings'] });
-      navigate('/payment-success');
+      queryClient.invalidateQueries({ queryKey: ['booking-payment', bookingId] });
+      // Also invalidate trip details to show updated seats?
+      queryClient.invalidateQueries({ queryKey: ['trip-details'] });
+      navigate('/payment-success'); // Should create this page if it doesn't exist, or redirect to home/trip
+      // Actually navigate back to trip or home with success param? 
+      // The original code navigated to /payment-success. Let's assume it exists or I should check routes.
+      // If /payment-success path is not handled, 404.
+      // I'll check routes later. For now stick to existing logic.
     },
     onError: () => {
       toast({
@@ -74,8 +92,6 @@ export default function Payment() {
   });
 
   useEffect(() => {
-    if (isDevPayment) return;
-
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.async = true;
@@ -89,8 +105,8 @@ export default function Payment() {
   const handleRazorpayPayment = (orderData: any) => {
     const options = {
       key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
-      amount: parseFloat(booking?.totalAmount || '0') * 100,
-      currency: 'INR',
+      amount: orderData.amount, // from order creation response
+      currency: orderData.currency,
       name: 'TCSYGO',
       description: 'Trip Booking Payment',
       order_id: orderData.razorpayOrderId,
@@ -124,19 +140,6 @@ export default function Payment() {
     razorpay.open();
   };
 
-  const handleSimulatePayment = () => {
-    // Mock successful payment response
-    const mockResponse = {
-      razorpayOrderId: `order_${Math.random().toString(36).substring(7)}`,
-      razorpayPaymentId: `pay_${Math.random().toString(36).substring(7)}`,
-      razorpaySignature: 'mock_signature',
-    };
-
-    // We need an order ID first usually, but for simulation we can skip or mock it
-    // But consistency suggests we should still create the order on backend
-    createPaymentMutation.mutate();
-  };
-
 
   if (isLoading || !booking) {
     return (
@@ -157,7 +160,7 @@ export default function Payment() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur">
         <div className="container mx-auto px-6 h-16 flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} data-testid="button-back">
+          <Button variant="ghost" size="icon" onClick={() => window.history.back()} data-testid="button-back">
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h1 className="text-xl font-display font-bold">Payment</h1>
@@ -244,16 +247,14 @@ export default function Payment() {
           <Button
             size="lg"
             className="w-full"
-            onClick={() => isDevPayment ? handleSimulatePayment() : createPaymentMutation.mutate()}
+            onClick={() => createPaymentMutation.mutate()} // Logic is inside mutation now
             disabled={createPaymentMutation.isPending || verifyPaymentMutation.isPending}
             data-testid="button-pay-now"
           >
             <CreditCard className="w-5 h-5 mr-2" />
             {createPaymentMutation.isPending || verifyPaymentMutation.isPending
               ? 'Processing...'
-              : isDevPayment
-                ? `Simulate Payment (Dev Mode)`
-                : `Pay ₹${total.toFixed(2)}`}
+              : `Pay ₹${total.toFixed(2)}`}
           </Button>
         </Card>
 

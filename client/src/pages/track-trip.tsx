@@ -1,12 +1,16 @@
+import { useState, useEffect } from 'react';
 import { useLocation, useRoute } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Phone, Shield } from 'lucide-react';
+import { ArrowLeft, Phone, Shield, Navigation } from 'lucide-react';
 import { MapView } from '@/components/MapView';
 import { TripWithDriver } from '@shared/schema';
+import { supabase } from '@/lib/supabase';
+import { mapTrip } from '@/lib/mapper';
+import { locationTrackingService, LocationUpdate } from '@/lib/location-tracking';
 
 import {
     AlertDialog,
@@ -20,29 +24,88 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
 
 export default function TrackTrip() {
     const [, navigate] = useLocation();
     const [, params] = useRoute('/track/:id');
     const tripId = params?.id;
     const { toast } = useToast();
+    const [driverLocation, setDriverLocation] = useState<LocationUpdate | null>(null);
+    const [eta, setEta] = useState<string>('Calculating...');
 
     const { data: trip, isLoading } = useQuery<TripWithDriver>({
-        queryKey: ['/api/trips', tripId],
+        queryKey: ['track-trip', tripId],
+        queryFn: async () => {
+            if (!tripId) throw new Error("Trip ID required");
+            const { data, error } = await supabase
+                .from('trips')
+                .select('*, driver:drivers(*, user:users(*))')
+                .eq('id', tripId)
+                .single();
+
+            if (error) throw error;
+            return mapTrip(data);
+        },
         enabled: !!tripId,
     });
+
+    // Subscribe to real-time location updates
+    useEffect(() => {
+        if (!tripId) return;
+
+        // Get initial location
+        locationTrackingService.getCurrentLocation(tripId).then(location => {
+            if (location) {
+                setDriverLocation(location);
+            }
+        });
+
+        // Subscribe to updates
+        const unsubscribe = locationTrackingService.subscribeToTrip({
+            tripId,
+            onUpdate: (location) => {
+                setDriverLocation(location);
+                // Calculate ETA (simplified - in production, use a routing API)
+                if (trip) {
+                    const distance = calculateDistance(
+                        location.lat,
+                        location.lng,
+                        Number(trip.dropLat),
+                        Number(trip.dropLng)
+                    );
+                    const speed = location.speed || 40; // km/h
+                    const timeInMinutes = Math.round((distance / speed) * 60);
+                    setEta(`${timeInMinutes} min`);
+                }
+            },
+            onError: (error) => {
+                console.error('Location tracking error:', error);
+                toast({
+                    title: 'Location update failed',
+                    description: 'Unable to get driver location',
+                    variant: 'destructive',
+                });
+            },
+        });
+
+        return () => {
+            unsubscribe();
+        };
+    }, [tripId, trip]);
 
     const handleSOS = async () => {
         if (!trip) return;
 
         try {
-            await apiRequest('POST', '/api/sos', {
-                tripId: trip.id,
-                reporterId: trip.driver.userId, // In a real app this should be the current user
-                lat: trip.pickupLat, // Ideally use current location
-                lng: trip.pickupLng,
+            const { error } = await supabase.from('emergency_alerts').insert({
+                trip_id: trip.id,
+                user_id: trip.driver.userId,
+                lat: driverLocation?.lat || trip.pickupLat,
+                lng: driverLocation?.lng || trip.pickupLng,
+                status: 'triggered'
             });
+
+            if (error) throw error;
 
             toast({
                 title: "EMERGENCY ALERT SENT",
@@ -51,6 +114,7 @@ export default function TrackTrip() {
                 duration: 10000,
             });
         } catch (error) {
+            console.error("SOS Error:", error);
             toast({
                 title: "Failed to send alert",
                 description: "Please call 100 immediately.",
@@ -71,6 +135,31 @@ export default function TrackTrip() {
     }
 
     const driver = trip.driver;
+
+    // Prepare markers for map
+    const markers = [
+        {
+            id: 'pickup',
+            coordinates: { lat: Number(trip.pickupLat), lng: Number(trip.pickupLng) },
+            color: '#22c55e',
+            popup: `<strong>Pickup:</strong> ${trip.pickupLocation}`
+        },
+        {
+            id: 'drop',
+            coordinates: { lat: Number(trip.dropLat), lng: Number(trip.dropLng) },
+            color: '#ef4444',
+            popup: `<strong>Drop:</strong> ${trip.dropLocation}`
+        },
+    ];
+
+    if (driverLocation) {
+        markers.push({
+            id: 'driver',
+            coordinates: { lat: driverLocation.lat, lng: driverLocation.lng },
+            color: '#3b82f6',
+            popup: `<strong>Driver:</strong> ${driver.user.fullName}`
+        });
+    }
 
     return (
         <div className="min-h-screen bg-background flex flex-col">
@@ -122,8 +211,7 @@ export default function TrackTrip() {
 
             <div className="flex-1 relative">
                 <MapView
-                    tripId={tripId}
-                    onMapClick={() => { }}
+                    markers={markers}
                     className="w-full h-full absolute inset-0"
                     zoom={14}
                 />
@@ -141,6 +229,17 @@ export default function TrackTrip() {
                                 <p className="text-sm text-muted-foreground">
                                     {driver.vehicleMake} {driver.vehicleModel} • {driver.vehiclePlate}
                                 </p>
+                                {driverLocation && (
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <Navigation className="w-3 h-3 text-primary" />
+                                        <span className="text-xs font-medium text-primary">ETA: {eta}</span>
+                                        {driverLocation.speed && (
+                                            <span className="text-xs text-muted-foreground">
+                                                • {Math.round(driverLocation.speed)} km/h
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                             <Button size="icon" variant="secondary" className="rounded-full h-10 w-10">
                                 <Phone className="w-4 h-4" />
@@ -156,4 +255,17 @@ export default function TrackTrip() {
             </div>
         </div>
     );
+}
+
+// Helper function to calculate distance between two coordinates (Haversine formula)
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371; // Radius of the Earth in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
 }

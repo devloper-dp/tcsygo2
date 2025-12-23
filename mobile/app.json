@@ -2,6 +2,7 @@
   "expo": {
     "name": "TCSYGO",
     "slug": "tcsygo",
+    "scheme": "tcsygo",
     "version": "1.0.0",
     "sdkVersion": "54.0.0",
     "orientation": "portrait",
@@ -50,6 +51,10 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "supabaseUrl": "https://borcxncdyrazhymspnfu.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJvcmN4bmNkeXJhemh5bXNwbmZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYzMDI5MjcsImV4cCI6MjA4MTg3ODkyN30.hascGVgcI8wyL82TBpwgnpqSB0K9PYB4RehYNYuG50s"
     }
   }
 }
