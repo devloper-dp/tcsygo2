@@ -1,0 +1,44 @@
+name: Deploy Supabase Functions
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'supabase/functions/**'
+      - 'scripts/deploy-edge-functions.js'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Install dependencies (scripts only)
+        run: npm ci || npm install
+        # We need npm install to ensure 'fs', 'path' etc are available if they are external (they are built-in), 
+        # but 'package.json' might have other deps possibly used in future. 
+        # Minimal install is safer. 
+        # Actually our script only uses node built-ins, but it's good practice to have the environment ready.
+
+      - name: Deploy All Edge Functions
+        run: npm run deploy:functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          # We pass the project ref as an ENV var which our script can pick up or use the one from .env if we create it.
+          # Since .env is usually gitignored, we should inject the env var.
+          # Our script reads .env for project ref. Let's make it also check process.env to be CI friendly.
+          # But first let's just write the necessary .env file for the script to consume, or update the script.
+          # Easiest is to write a temporary .env file.
+          VITE_SUPABASE_URL: https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co

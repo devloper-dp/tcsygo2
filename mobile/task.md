@@ -1,0 +1,179 @@
+# Complete TCSYGO Mobile App - Rapido-Style Features
+
+## Phase 1: Core Ride Booking Features
+- [/] Instant ride booking service (QuickBookService)
+  - [x] Basic quick booking implemented
+  - [ ] Add real-time driver matching
+  - [ ] Implement driver acceptance flow
+  - [ ] Add booking timeout handling
+- [ ] Ride scheduling for future dates
+  - [x] ScheduledRideManager service exists
+  - [ ] Complete UI integration
+  - [ ] Add reminder notifications
+- [ ] Fare estimation before booking
+  - [x] Basic fare estimation in RideService
+  - [ ] Add detailed breakdown component
+  - [ ] Include all charges (surge, taxes, etc.)
+- [ ] Surge pricing indicators
+  - [x] SurgePricingService implemented
+  - [ ] Add visual indicators in UI
+  - [ ] Show surge zones on map
+- [ ] Promo code application during booking
+  - [x] PromoCodeService exists
+  - [ ] Integrate into booking flow
+  - [ ] Add promo code validation UI
+
+## Phase 2: Real-time Tracking Features
+- [ ] Driver arrival countdown timer
+  - [x] DriverArrivalTimer component exists
+  - [ ] Integrate with live location updates
+  - [ ] Add accurate ETA calculation
+- [ ] Turn-by-turn navigation display
+  - [ ] Implement navigation service
+  - [ ] Add route polyline rendering
+  - [ ] Integrate with MapService
+- [ ] Share ride status with contacts
+  - [x] SocialService partially implemented
+  - [ ] Add live tracking link generation
+  - [ ] Implement contact sharing UI
+- [ ] Trip recording/history with route replay
+  - [x] TripReplay component exists
+  - [ ] Complete route recording logic
+  - [ ] Add playback controls
+- [ ] Geofencing alerts (pickup/drop proximity)
+  - [x] GeofenceAlerts component exists
+  - [ ] Add haptic feedback
+  - [ ] Implement notification triggers
+
+## Phase 3: Payment Features
+- [ ] Multiple payment methods (UPI, Wallet, Cards, Cash)
+  - [x] PaymentService supports all methods
+  - [ ] Add Razorpay SDK integration
+  - [ ] Implement payment UI components
+- [x] Wallet system with balance
+  - [x] WalletSystem component exists
+  - [x] Add wallet recharge flow
+  - [x] Implement transaction history
+- [ ] Auto-pay after ride completion
+  - [x] AutoPaySetup component exists
+  - [ ] Complete auto-pay logic
+  - [ ] Add payment confirmation
+- [ ] Payment receipts/invoices
+  - [x] Receipt generation in PaymentService
+  - [ ] Add PDF generation
+  - [ ] Implement email/download options
+- [ ] Ride fare breakdown with taxes
+  - [x] FareBreakdown component exists
+  - [ ] Add detailed tax calculations
+  - [ ] Show all charges clearly
+- [ ] Tip driver option
+  - [x] TipDriver component exists
+  - [ ] Integrate with payment flow
+  - [ ] Add tip suggestions
+
+## Phase 4: User Experience Features
+- [ ] Onboarding tutorial for new users
+  - [x] OnboardingTutorial component exists
+  - [ ] Add interactive walkthrough
+  - [ ] Implement skip/complete logic
+- [ ] Quick actions (Repeat last ride, Saved places)
+  - [x] QuickActions component exists
+  - [ ] Complete repeat ride functionality
+  - [ ] Add saved places management
+- [ ] Ride preferences (AC/Non-AC, Music, etc.)
+  - [x] RidePreferences component exists
+  - [ ] Integrate with booking flow
+  - [ ] Save user preferences
+- [ ] Multi-language support
+  - [x] LanguageSelector component exists
+  - [x] i18n setup complete
+  - [ ] Add more language translations
+- [ ] Dark mode toggle
+  - [x] DarkModeToggle component exists
+  - [ ] Complete theme implementation
+  - [ ] Persist theme preference
+- [ ] Offline mode indicators
+  - [x] OfflineIndicator component exists
+  - [ ] Add offline data caching
+  - [ ] Implement sync on reconnect
+
+## Phase 5: Safety Features
+- [x] Safety Center Hub
+  - [x] Centralized Safety Center screen created
+  - [x] Linked from Profile menu
+- [x] Share trip details with emergency contacts
+  - [x] EmergencyButton component exists
+  - [x] Add automatic sharing on trip start
+  - [x] Implement contact management
+- [x] In-ride safety check-ins
+  - [x] SafetyCheckIn component exists
+  - [x] Add automated check-in prompts
+  - [x] Implement escalation logic
+- [x] Driver photo verification before ride
+  - [x] DriverVerification component exists
+  - [x] Add photo comparison UI
+  - [x] Implement mismatch reporting
+- [x] Ride insurance information
+  - [x] RideInsuranceCard component exists
+  - [x] Add insurance details
+  - [x] Implement claim process info
+- [x] Safety tips display
+  - [x] SafetyTipsModal component exists
+  - [x] Add comprehensive safety guidelines
+  - [x] Show context-specific tips
+
+## Phase 6: Notifications & Communication
+- [ ] Push notifications for booking confirmations
+  - [x] Reconcile `RideService.ts` between web and mobile
+- [x] Replace mock location search with `MapService.getAutocompleteSuggestions`
+- [x] Implement actual promo code validation in `promo-service.ts` (Verified real)
+- [x] Standardize `split_fare_request` table and mobile implementation
+- [ ] Driver arrival notifications
+  - [ ] Add proximity-based triggers
+  - [ ] Implement notification scheduling
+- [ ] Ride status updates
+  - [ ] Add real-time status notifications
+  - [ ] Implement status change alerts
+- [ ] Payment reminders
+  - [ ] Add payment due notifications
+  - [ ] Implement reminder scheduling
+- [ ] Promotional offers
+  - [ ] Add offer notification system
+  - [ ] Implement targeted promotions
+
+## Phase 7: Social Features
+- [x] Referral System
+  - [x] Refer & Earn screen implemented
+  - [x] Referral code generation and sharing
+  - [x] Earnings tracking
+- [ ] Share ride with friends (split fare)
+  - [x] SplitFare components exist
+  - [ ] Complete split fare logic
+  - [ ] Add payment tracking per person
+- [ ] Ride sharing with colleagues
+  - [ ] Add corporate ride sharing
+  - [ ] Implement group bookings
+  - [ ] Add expense reporting
+
+## Phase 8: Bug Fixes & Improvements
+- [ ] Remove mock implementations
+  - [ ] Replace mock ETA calculation in trip/[id].tsx
+  - [ ] Remove mock route points in location-tracking.ts
+  - [ ] Replace mock navigation in add place screen
+- [ ] Complete incomplete features
+  - [ ] Add toast notifications (currently commented out)
+  - [ ] Complete FareBreakdownModal import
+  - [ ] Fix all TypeScript errors
+- [ ] Remove duplicate code
+  - [ ] Consolidate payment services
+  - [ ] Merge duplicate notification logic
+  - [ ] Unify location tracking services
+- [ ] Performance optimizations
+  - [ ] Optimize map rendering
+  - [ ] Reduce unnecessary re-renders
+  - [ ] Implement proper caching
+- [ ] Testing & Validation
+  - [ ] Test all payment flows
+  - [ ] Validate location tracking
+  - [ ] Test offline functionality
+  - [ ] Verify notification delivery

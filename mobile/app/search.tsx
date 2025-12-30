@@ -6,13 +6,15 @@ import { useQuery } from '@tanstack/react-query';
 import { Map, Marker } from '../components/Map';
 import { Ionicons } from '@expo/vector-icons';
 import { LocationAutocomplete } from '../components/LocationAutocomplete';
-import { TripCard, TripWithDriver } from '../components/TripCard';
+import { TripCard } from '../components/TripCard';
+import { TripWithDriver } from '../types/schema';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Text } from '../components/ui/text';
 import { supabase } from '../lib/supabase';
 import { mapTrip } from '../lib/mapper';
-import { Coordinates } from '../lib/mapbox';
+import { useAuth } from '@/contexts/AuthContext';
+import { Coordinates } from '../lib/maps';
 
 export default function SearchScreen() {
     const router = useRouter();
@@ -31,6 +33,60 @@ export default function SearchScreen() {
             : undefined
     );
     const [date, setDate] = useState(params.date as string || '');
+    const [savedSearches, setSavedSearches] = useState<any[]>([]);
+    const { user } = useAuth(); // Need auth for saved searches
+
+    useEffect(() => {
+        if (user) {
+            fetchSavedSearches();
+        }
+    }, [user]);
+
+    const fetchSavedSearches = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('saved_searches')
+                .select('*')
+                .eq('user_id', user?.id)
+                .order('created_at', { ascending: false })
+                .limit(5);
+
+            if (data) setSavedSearches(data);
+        } catch (error) {
+            console.error('Error fetching saved searches:', error);
+        }
+    };
+
+    const saveSearch = async (pickupLoc: string, dropLoc: string) => {
+        if (!user || (!pickupLoc && !dropLoc)) return;
+
+        try {
+            // Check if similar search exists recently
+            const { data: existing } = await supabase
+                .from('saved_searches')
+                .select('id')
+                .eq('user_id', user.id)
+                .eq('pickup_location', pickupLoc)
+                .eq('drop_location', dropLoc)
+                .limit(1);
+
+            if (existing && existing.length > 0) return;
+
+            await supabase
+                .from('saved_searches')
+                .insert({
+                    user_id: user.id,
+                    name: `${pickupLoc} to ${dropLoc}`,
+                    pickup_location: pickupLoc,
+                    drop_location: dropLoc
+                });
+
+            fetchSavedSearches();
+        } catch (error) {
+            console.error('Error saving search:', error);
+        }
+    };
+
     const [showMap, setShowMap] = useState(false);
 
     const { data: trips, isLoading } = useQuery<TripWithDriver[]>({
@@ -67,6 +123,17 @@ export default function SearchScreen() {
         },
         enabled: true, // Always enable or check params
     });
+
+    // Call saveSearch when search params change significantly (debounce needed in real app, basic implementation here)
+    useEffect(() => {
+        if (pickup && drop && trips && trips.length > 0) {
+            const timer = setTimeout(() => {
+                saveSearch(pickup, drop);
+            }, 2000);
+            return () => clearTimeout(timer);
+        }
+    }, [pickup, drop, trips]);
+
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: '#f9fafb' }} edges={['top']}>
@@ -135,6 +202,36 @@ export default function SearchScreen() {
                 </View>
             ) : (
                 <ScrollView className="flex-1 p-4" contentContainerStyle={{ paddingBottom: 20 }}>
+                    {!pickup && !drop && (
+                        <View className="mb-6">
+                            <Text className="text-lg font-bold mb-3">Recent Searches</Text>
+                            {savedSearches.length > 0 ? (
+                                savedSearches.map((search) => (
+                                    <TouchableOpacity
+                                        key={search.id}
+                                        className="flex-row items-center p-3 bg-white rounded-lg border border-gray-100 mb-2"
+                                        onPress={() => {
+                                            setPickup(search.pickup_location || '');
+                                            setDrop(search.drop_location || '');
+                                            // Trigger search?
+                                        }}
+                                    >
+                                        <View className="bg-gray-100 p-2 rounded-full mr-3">
+                                            <Ionicons name="time-outline" size={20} color="#4b5563" />
+                                        </View>
+                                        <View className="flex-1">
+                                            <Text className="font-semibold text-gray-800" numberOfLines={1}>{search.pickup_location || 'Anywhere'}</Text>
+                                            <Text className="text-gray-500 text-xs" numberOfLines={1}>to {search.drop_location || 'Anywhere'}</Text>
+                                        </View>
+                                        <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+                                    </TouchableOpacity>
+                                ))
+                            ) : (
+                                <Text className="text-gray-400 italic">No recent searches</Text>
+                            )}
+                        </View>
+                    )}
+
                     {isLoading ? (
                         <View className="flex-1 items-center justify-center py-10">
                             <ActivityIndicator size="large" color="#3b82f6" />
@@ -150,7 +247,7 @@ export default function SearchScreen() {
                                 />
                             ))}
                         </View>
-                    ) : (
+                    ) : (pickup || drop) ? (
                         <Card className="p-8 items-center">
                             <Ionicons name="search" size={64} color="#9ca3af" style={{ marginBottom: 16 }} />
                             <Text variant="h3" className="text-center mb-2">No trips found</Text>
@@ -161,7 +258,7 @@ export default function SearchScreen() {
                                 Offer a Ride Instead
                             </Button>
                         </Card>
-                    )}
+                    ) : null}
                 </ScrollView>
             )}
         </SafeAreaView>

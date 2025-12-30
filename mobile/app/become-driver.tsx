@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
@@ -46,6 +47,22 @@ export default function BecomeDriverScreen() {
 
     const [isDraftLoaded, setIsDraftLoaded] = useState(false);
 
+    // Check for existing driver profile
+    const { data: driverProfile, isLoading: isLoadingProfile } = useQuery({ // Added typing fix by removing <any> to infer or just let it be
+        queryKey: ['driver-profile-onboarding', user?.id],
+        queryFn: async () => {
+            if (!user) return null;
+            const { data, error } = await supabase
+                .from('drivers')
+                .select('*')
+                .eq('user_id', user.id)
+                .single();
+            if (error) return null; // PostgrestError if not found
+            return data;
+        },
+        enabled: !!user,
+    });
+
     // Load draft on mount
     useEffect(() => {
         async function loadDraft() {
@@ -64,6 +81,62 @@ export default function BecomeDriverScreen() {
         }
         loadDraft();
     }, []);
+
+    if (isLoadingProfile) {
+        return (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <ActivityIndicator size="large" color="#3b82f6" />
+            </View>
+        );
+    }
+
+    if (driverProfile) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                        <Ionicons name="arrow-back" size={24} color="#1f2937" />
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>Driver Status</Text>
+                    <View style={{ width: 40 }} />
+                </View>
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 16 }}>
+                    {driverProfile.verification_status === 'pending' ? (
+                        <>
+                            <Ionicons name="time-outline" size={64} color="#f59e0b" />
+                            <Text style={{ fontSize: 24, fontWeight: 'bold', textAlign: 'center' }}>Application Pending</Text>
+                            <Text style={{ fontSize: 16, color: '#6b7280', textAlign: 'center' }}>
+                                Your driver application is currently under review. We will notify you once your verification is complete.
+                            </Text>
+                        </>
+                    ) : driverProfile.verification_status === 'verified' ? (
+                        <>
+                            <Ionicons name="checkmark-circle-outline" size={64} color="#22c55e" />
+                            <Text style={{ fontSize: 24, fontWeight: 'bold', textAlign: 'center' }}>You are verified!</Text>
+                            <Text style={{ fontSize: 16, color: '#6b7280', textAlign: 'center' }}>
+                                You can now start accepting rides and earning money.
+                            </Text>
+                            <TouchableOpacity
+                                style={styles.nextBtn}
+                                onPress={() => router.replace('/(tabs)/profile')}
+                            >
+                                <Text style={styles.nextBtnText}>Go to Profile</Text>
+                            </TouchableOpacity>
+                        </>
+                    ) : (
+                        <>
+                            <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
+                            <Text style={{ fontSize: 24, fontWeight: 'bold', textAlign: 'center' }}>Application Rejected</Text>
+                            <Text style={{ fontSize: 16, color: '#6b7280', textAlign: 'center' }}>
+                                Unfortunately your application was rejected. Please contact support for more details.
+                            </Text>
+                        </>
+                    )}
+                </View>
+            </SafeAreaView>
+        );
+    }
+
 
     // Save draft on change
     useEffect(() => {
@@ -117,39 +190,67 @@ export default function BecomeDriverScreen() {
     const uploadImage = async (base64: string, field: 'license' | 'vehicle') => {
         try {
             setUploading(true);
-            const fileName = `${user?.id}/${Date.now()}.jpg`;
-            const bucket = 'driver-documents';
+            const fileExt = 'jpg';
+            const fileName = `${user?.id}/${Date.now()}.${fileExt}`;
+            const bucket = field === 'license' ? 'licenses' : 'vehicles';
 
-            try {
-                const { data, error } = await supabase.storage
-                    .from(bucket)
-                    .upload(fileName, decode(base64), {
-                        contentType: 'image/jpeg'
-                    });
+            // Ensure we use the correct bucket based on the field type
+            // Note: 'licenses' bucket should be private, 'vehicles' public
 
-                if (error) throw error;
+            const { data, error } = await supabase.storage
+                .from(bucket)
+                .upload(fileName, decode(base64), {
+                    contentType: 'image/jpeg',
+                    upsert: true
+                });
 
-                const { data: { publicUrl } } = supabase.storage
-                    .from(bucket)
-                    .getPublicUrl(fileName);
-
-                if (field === 'license') {
-                    setFormData(prev => ({ ...prev, licensePhoto: publicUrl }));
-                } else {
-                    setFormData(prev => ({ ...prev, vehiclePhotos: [...prev.vehiclePhotos, publicUrl] }));
-                }
-
-            } catch (uploadError) {
-                console.log("Upload failed, using fallback", uploadError);
-                const fallbackUrl = `https://placehold.co/600x400?text=${field === 'license' ? 'License' : 'Vehicle'}+Photo`;
-                if (field === 'license') {
-                    setFormData(prev => ({ ...prev, licensePhoto: fallbackUrl }));
-                } else {
-                    setFormData(prev => ({ ...prev, vehiclePhotos: [...prev.vehiclePhotos, fallbackUrl] }));
-                }
+            if (error) {
+                console.error('Supabase Upload Error:', error);
+                throw new Error(error.message);
             }
+
+            const { data: { publicUrl } } = supabase.storage
+                .from(bucket)
+                .getPublicUrl(fileName);
+
+            // For private buckets like licenses, we normally wouldn't use getPublicUrl 
+            // but for this MVP we might need signed URLs or just rely on RLS if public is false
+            // However, the schema setup showed 'licenses' bucket as private.
+            // If it's private, getPublicUrl returns a URL but it might not be accessible without a token.
+            // For now, let's assume we store the path or signed URL. 
+            // BUT the schema setup showed: 'vehicles' is public, 'licenses' is private.
+            // We should store the path for licenses if we can't get a public URL.
+
+            // Let's stick to the previous pattern but be robust.
+
+            if (field === 'license') {
+                // Store the path or a signed URL. For simplicity in this app structure, 
+                // we'll assume the backend handles the viewing or we generate a signed URL when viewing.
+                // But the UI needs to show a preview. 
+                // Let's try to get a signed URL for immediate preview if it's private.
+
+                // Check if we can get a Signed URL
+                const { data: signedData, error: signedError } = await supabase.storage
+                    .from(bucket)
+                    .createSignedUrl(fileName, 60 * 60); // 1 hour
+
+                if (signedData) {
+                    setFormData(prev => ({ ...prev, licensePhoto: signedData.signedUrl }));
+                } else {
+                    // If signed URL fails (maybe bucket is actually public?), try public
+                    setFormData(prev => ({ ...prev, licensePhoto: publicUrl }));
+                }
+            } else {
+                setFormData(prev => ({ ...prev, vehiclePhotos: [...prev.vehiclePhotos, publicUrl] }));
+            }
+
         } catch (error: any) {
-            Alert.alert('Upload Failed', error.message || 'Could not upload image');
+            console.error("Upload failed", error);
+            Alert.alert(
+                'Upload Failed',
+                `Could not upload image: ${error.message}. Please check your connection and try again.`
+            );
+            // Do NOT fallback to placeholder silently
         } finally {
             setUploading(false);
         }

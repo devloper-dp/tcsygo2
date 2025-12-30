@@ -27,9 +27,10 @@ Create a `.env` file in the mobile directory:
 ```
 EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=your_mapbox_token
 EXPO_PUBLIC_RAZORPAY_KEY_ID=your_razorpay_key_id
 ```
+
+**Note**: Maps use OpenStreetMap which requires no API keys or account creation!
 
 ### Running the App
 
@@ -65,7 +66,7 @@ mobile/
 │   └── ...
 ├── lib/                   # Utilities and configs
 │   ├── supabase.ts
-│   ├── mapbox.ts
+│   ├── maps.ts
 │   └── razorpay.ts
 ├── contexts/              # React contexts
 │   └── AuthContext.tsx
@@ -89,7 +90,8 @@ mobile/
 
 - **Expo**: Framework for React Native
 - **Expo Router**: File-based routing
-- **React Native Maps**: Interactive maps
+- **React Native Maps**: Interactive maps with OpenStreetMap tiles
+- **OpenStreetMap**: Free mapping service (no API keys required)
 - **Supabase**: Backend and realtime database
 - **TanStack Query**: Data fetching and caching
 - **NativeWind**: Tailwind CSS for React Native

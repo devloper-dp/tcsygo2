@@ -1,17 +1,22 @@
-import { View, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput, ActivityIndicator } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
 import { Text } from '@/components/ui/text';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+
+// Payment methods configuration for Razorpay
+const PAYMENT_METHODS_CONFIG = [
+    { id: 'upi', label: 'UPI (GPay, PhonePe)', icon: 'logo-google' as const },
+    { id: 'card', label: 'Credit / Debit Card', icon: 'card-outline' as const },
+    { id: 'netbanking', label: 'Net Banking', icon: 'business-outline' as const },
+    { id: 'wallet', label: 'Wallets', icon: 'wallet-outline' as const },
+];
 
 export function PaymentMethodSelectorMobile({ selectedMethod, onSelect }: { selectedMethod: string, onSelect: (id: string) => void }) {
-    const methods = [
-        { id: 'upi', label: 'UPI (GPay, PhonePe)', icon: 'logo-google' },
-        { id: 'card', label: 'Credit / Debit Card', icon: 'card-outline' },
-        { id: 'netbanking', label: 'Net Banking', icon: 'business-outline' },
-        { id: 'wallet', label: 'Wallets', icon: 'wallet-outline' },
-    ];
+    const methods = PAYMENT_METHODS_CONFIG;
+    // const { AutoPaySetup } = require('./AutoPaySetup'); // In a real app, import properly
 
     return (
         <View style={styles.container}>
@@ -42,6 +47,21 @@ export function PaymentMethodSelectorMobile({ selectedMethod, onSelect }: { sele
                     />
                 </TouchableOpacity>
             ))}
+
+            {/* Auto Pay & Split Fare Links */}
+            <View style={{ marginTop: 16 }}>
+                <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                    <Ionicons name="flash" size={20} color="#f59e0b" style={{ marginRight: 8 }} />
+                    <Text style={{ fontSize: 16, color: '#374151' }}>Set up Auto Pay</Text>
+                    <Ionicons name="chevron-forward" size={16} color="#9ca3af" style={{ marginLeft: 'auto' }} />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name="people" size={20} color="#3b82f6" style={{ marginRight: 8 }} />
+                    <Text style={{ fontSize: 16, color: '#374151' }}>Split Fare</Text>
+                    <Ionicons name="chevron-forward" size={16} color="#9ca3af" style={{ marginLeft: 'auto' }} />
+                </TouchableOpacity>
+            </View>
         </View>
     );
 }
@@ -53,29 +73,44 @@ export function PromoCodeDialogMobile({
 }: {
     visible: boolean;
     onClose: () => void;
-    onApply: (code: string, discount: number) => void;
+    onApply: (code: string, discount: number, id: string) => void;
 }) {
     const [code, setCode] = useState('');
-    const [loading, setLoading] = useState(false);
+    const [loadingApply, setLoadingApply] = useState(false);
 
-    const availableOffers = [
-        { code: 'FIRST50', discount: 50, description: '₹50 off on your first trip' },
-        { code: 'SAVE20', discount: 20, description: '20% off up to ₹100' },
-    ];
+    const { data: availableOffers, isLoading: isLoadingOffers } = useQuery({
+        queryKey: ['promo-codes'],
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from('promo_codes')
+                .select('*')
+                .eq('is_active', true)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            return (data || []).map((m: any) => ({
+                id: m.id,
+                code: m.code,
+                discount: parseFloat(m.discount_value),
+                description: m.discount_type === 'percentage' ? `${m.discount_value}% off` : `₹${m.discount_value} off`,
+                discountType: m.discount_type
+            }));
+        },
+        enabled: visible
+    });
 
     const handleApply = () => {
-        setLoading(true);
-        // Mock API call
-        setTimeout(() => {
-            const offer = availableOffers.find(o => o.code === code.toUpperCase());
-            if (offer) {
-                onApply(offer.code, offer.discount);
-                onClose();
-            } else {
-                alert('Invalid promo code');
-            }
-            setLoading(false);
-        }, 1000);
+        if (!code) return;
+        setLoadingApply(true);
+
+        const offer = availableOffers?.find(o => o.code.toUpperCase() === code.toUpperCase());
+        if (offer) {
+            onApply(offer.code, offer.discount, offer.id);
+            onClose();
+        } else {
+            alert('Invalid or expired promo code');
+        }
+        setLoadingApply(false);
     };
 
     return (
@@ -99,28 +134,36 @@ export function PromoCodeDialogMobile({
                         />
                         <Button
                             onPress={handleApply}
-                            disabled={!code || loading}
+                            disabled={!code || loadingApply}
                             className="ml-2"
                         >
-                            {loading ? '...' : 'Apply'}
+                            {loadingApply ? '...' : 'Apply'}
                         </Button>
                     </View>
 
                     <Text style={styles.offersTitle}>Available Offers</Text>
-                    <ScrollView style={styles.offersList}>
-                        {availableOffers.map((offer) => (
-                            <TouchableOpacity
-                                key={offer.code}
-                                style={styles.offerItem}
-                                onPress={() => setCode(offer.code)}
-                            >
-                                <View style={styles.offerBadge}>
-                                    <Text style={styles.offerCode}>{offer.code}</Text>
-                                </View>
-                                <Text style={styles.offerDesc}>{offer.description}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
+                    {isLoadingOffers ? (
+                        <ActivityIndicator color="#3b82f6" style={{ marginVertical: 20 }} />
+                    ) : (
+                        <ScrollView style={styles.offersList}>
+                            {availableOffers && availableOffers.length > 0 ? (
+                                availableOffers.map((offer) => (
+                                    <TouchableOpacity
+                                        key={offer.code}
+                                        style={styles.offerItem}
+                                        onPress={() => setCode(offer.code)}
+                                    >
+                                        <View style={styles.offerBadge}>
+                                            <Text style={styles.offerCode}>{offer.code}</Text>
+                                        </View>
+                                        <Text style={styles.offerDesc}>{offer.description}</Text>
+                                    </TouchableOpacity>
+                                ))
+                            ) : (
+                                <Text style={{ color: '#9ca3af', textAlign: 'center', marginTop: 20 }}>No offers available</Text>
+                            )}
+                        </ScrollView>
+                    )}
                 </View>
             </View>
         </Modal>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -16,6 +16,18 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      if (user.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/');
+      }
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,11 +35,31 @@ export default function Login() {
     try {
       setLoading(true);
       await signIn(email, password);
-      toast({
-        title: 'Welcome back!',
-        description: 'You have successfully logged in.',
-      });
-      navigate('/');
+
+      // Fetch current user details after successful login
+      const { data: { user } } = await import('@/lib/supabase').then(m => m.supabase.auth.getUser());
+
+      if (user) {
+        // Fetch role from public.users table as it's the source of truth
+        const { data: profile } = await import('@/lib/supabase')
+          .then(m => m.supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .single()
+          );
+
+        toast({
+          title: 'Welcome back!',
+          description: 'You have successfully logged in.',
+        });
+
+        if (profile?.role === 'admin') {
+          navigate('/admin');
+        } else {
+          navigate('/');
+        }
+      }
     } catch (error: any) {
       toast({
         title: 'Login failed',

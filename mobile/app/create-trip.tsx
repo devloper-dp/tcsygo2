@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons'; // Or Lucide
-import { Map, Marker } from '../components/Map'; // Assuming Map supports Polyline if needed, or just markers for now
+import { Map, Marker, Polyline } from '../components/Map';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { LocationAutocomplete } from '@/components/LocationAutocomplete';
@@ -12,8 +12,9 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input'; // Assuming this exists or using TextInput with styles
 import { Text } from '@/components/ui/text';
-import { getRoute, Coordinates } from '@/lib/mapbox';
-import { Switch } from 'react-native'; // Or UI component if available
+import { MapService, Coordinates } from '@/services/MapService';
+import { Switch, Platform } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 // Simple label component if not in UI lib
 const Label = ({ children }: { children: string }) => (
@@ -29,8 +30,10 @@ const CreateTripScreen = () => {
     const [drop, setDrop] = useState('');
     const [dropCoords, setDropCoords] = useState<Coordinates>();
 
-    const [date, setDate] = useState('');
-    const [time, setTime] = useState('');
+    const [date, setDate] = useState(new Date());
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [showTimePicker, setShowTimePicker] = useState(false);
+
     const [seats, setSeats] = useState('4');
     const [price, setPrice] = useState('');
     const [preferences, setPreferences] = useState({
@@ -38,6 +41,24 @@ const CreateTripScreen = () => {
         pets: false,
         music: true
     });
+
+    const onDateChange = (event: any, selectedDate?: Date) => {
+        setShowDatePicker(false);
+        if (selectedDate) {
+            const currentDate = new Date(date);
+            currentDate.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+            setDate(currentDate);
+        }
+    };
+
+    const onTimeChange = (event: any, selectedTime?: Date) => {
+        setShowTimePicker(false);
+        if (selectedTime) {
+            const currentDate = new Date(date);
+            currentDate.setHours(selectedTime.getHours(), selectedTime.getMinutes());
+            setDate(currentDate);
+        }
+    };
 
     const [routeInfo, setRouteInfo] = useState<{ distance: number; duration: number; route: Coordinates[] }>();
 
@@ -58,10 +79,17 @@ const CreateTripScreen = () => {
     });
 
     useEffect(() => {
-        if (!isLoadingDriver && !driverProfile) {
-            Alert.alert("Driver Profile Required", "You need to complete driver onboarding before posting trips.", [
-                { text: "OK", onPress: () => router.push('/become-driver') }
-            ]);
+        if (!isLoadingDriver) {
+            if (!driverProfile) {
+                Alert.alert("Driver Profile Required", "You need to complete driver onboarding before posting trips.", [
+                    { text: "OK", onPress: () => router.push('/become-driver') }
+                ]);
+            } else if (driverProfile.verification_status !== 'verified') {
+                Alert.alert("Verification Pending", "Your driver profile is still under review. You cannot create trips yet.", [
+                    { text: "Check Status", onPress: () => router.push('/become-driver') },
+                    { text: "Cancel", style: "cancel", onPress: () => router.back() }
+                ]);
+            }
         }
     }, [isLoadingDriver, driverProfile]);
 
@@ -69,15 +97,15 @@ const CreateTripScreen = () => {
         if (!pickupCoords || !dropCoords) return;
 
         try {
-            const route = await getRoute(pickupCoords, dropCoords);
+            const route = await MapService.getRoute(pickupCoords, dropCoords);
             setRouteInfo({
-                distance: route.distance,
-                duration: route.duration,
+                distance: route.distance / 1000, // meters to km
+                duration: Math.round(route.duration / 60), // seconds to minutes
                 route: route.geometry
             });
 
             if (!price) {
-                const estimatedPrice = Math.round(route.distance * 8);
+                const estimatedPrice = Math.round((route.distance / 1000) * 8);
                 setPrice(estimatedPrice.toString());
             }
         } catch (error) {
@@ -116,13 +144,12 @@ const CreateTripScreen = () => {
             return;
         }
 
-        if (!pickup || !drop || !date || !time || !price || !pickupCoords || !dropCoords) {
+        if (!pickup || !drop || !price || !pickupCoords || !dropCoords) {
             Alert.alert('Error', 'Please fill in all required fields');
             return;
         }
 
-        const departureDateTime = `${date}T${time}:00`;
-        // Note: Basic ISO string construction. Ideally use date-fns/parseISO if inputs are standard
+        const departureDateTime = date.toISOString();
 
         const tripData = {
             driver_id: driverProfile.id, // Use driver profile ID
@@ -169,6 +196,13 @@ const CreateTripScreen = () => {
                     >
                         {pickupCoords && <Marker coordinate={{ latitude: pickupCoords.lat, longitude: pickupCoords.lng }} title="Pickup" pinColor="green" />}
                         {dropCoords && <Marker coordinate={{ latitude: dropCoords.lat, longitude: dropCoords.lng }} title="Drop" pinColor="red" />}
+                        {routeInfo && routeInfo.route && routeInfo.route.length > 0 && (
+                            <Polyline
+                                coordinates={routeInfo.route.map(coord => ({ latitude: coord.lat, longitude: coord.lng }))}
+                                strokeColor="#3b82f6"
+                                strokeWidth={4}
+                            />
+                        )}
                     </Map>
                 </View>
 
@@ -221,22 +255,43 @@ const CreateTripScreen = () => {
                         <Text variant="h3" className="text-lg font-semibold mb-4">Schedule</Text>
                         <View className="flex-row gap-4">
                             <View className="flex-1">
-                                <Label>Date (YYYY-MM-DD)</Label>
-                                <Input
-                                    placeholder="2024-12-25"
-                                    value={date}
-                                    onChangeText={setDate}
-                                />
+                                <Label>Date</Label>
+                                <TouchableOpacity
+                                    onPress={() => setShowDatePicker(true)}
+                                    className="border border-gray-300 rounded-lg p-3 bg-white"
+                                >
+                                    <Text>{date.toLocaleDateString()}</Text>
+                                </TouchableOpacity>
                             </View>
                             <View className="flex-1">
-                                <Label>Time (HH:MM)</Label>
-                                <Input
-                                    placeholder="09:00"
-                                    value={time}
-                                    onChangeText={setTime}
-                                />
+                                <Label>Time</Label>
+                                <TouchableOpacity
+                                    onPress={() => setShowTimePicker(true)}
+                                    className="border border-gray-300 rounded-lg p-3 bg-white"
+                                >
+                                    <Text>{date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                                </TouchableOpacity>
                             </View>
                         </View>
+
+                        {(showDatePicker || (Platform.OS === 'ios' && showDatePicker)) && (
+                            <DateTimePicker
+                                value={date}
+                                mode="date"
+                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                onChange={onDateChange}
+                                minimumDate={new Date()}
+                            />
+                        )}
+
+                        {(showTimePicker || (Platform.OS === 'ios' && showTimePicker)) && (
+                            <DateTimePicker
+                                value={date}
+                                mode="time"
+                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                onChange={onTimeChange}
+                            />
+                        )}
                     </Card>
 
                     <Card className="p-4">

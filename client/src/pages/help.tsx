@@ -7,9 +7,12 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Mail, Phone, MessageCircle, HelpCircle } from 'lucide-react';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function HelpPage() {
     const { toast } = useToast();
+    const { user } = useAuth();
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [message, setMessage] = useState('');
@@ -54,17 +57,36 @@ export default function HelpPage() {
         e.preventDefault();
         setLoading(true);
 
-        // Simulate sending message
-        setTimeout(() => {
+        try {
+            const { error } = await supabase
+                .from('support_tickets')
+                .insert({
+                    name,
+                    email,
+                    message,
+                    user_id: user?.id || null, // Optional link to user if logged in
+                    status: 'open'
+                });
+
+            if (error) throw error;
+
             toast({
-                title: 'Message sent',
-                description: 'We\'ll get back to you within 24 hours.',
+                title: 'Ticket Created',
+                description: 'We have received your message and will get back to you shortly.',
             });
             setName('');
             setEmail('');
             setMessage('');
+        } catch (error: any) {
+            console.error('Support ticket error:', error);
+            toast({
+                title: 'Submission Failed',
+                description: error.message || 'Could not submit ticket. Please try again.',
+                variant: 'destructive',
+            });
+        } finally {
             setLoading(false);
-        }, 1000);
+        }
     };
 
     return (

@@ -14,17 +14,17 @@ export function HomeMap() {
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
-    const { data: trips } = useQuery({
-        queryKey: ['active-trips-map'],
+    const { data: drivers } = useQuery({
+        queryKey: ['live-drivers-map'],
         queryFn: async () => {
             const { data, error } = await supabase
-                .from('trips')
-                .select('*')
-                .eq('status', 'upcoming')
-                .limit(20);
+                .from('live_locations')
+                .select('*, driver:profiles(*)')
+                .limit(50); // Show up to 50 nearby drivers
             if (error) throw error;
             return data;
         },
+        refetchInterval: 10000, // Refresh every 10 seconds
     });
 
     useEffect(() => {
@@ -106,18 +106,16 @@ export function HomeMap() {
                         </Marker>
                     )}
 
-                    {trips?.map((trip) => (
+                    {drivers?.map((driver) => (
                         <Marker
-                            key={trip.id}
+                            key={driver.id}
                             coordinate={{
-                                latitude: parseFloat(trip.pickup_lat),
-                                longitude: parseFloat(trip.pickup_lng),
+                                latitude: driver.latitude,
+                                longitude: driver.longitude,
                             }}
-                            onPress={() => router.push(`/trip/${trip.id}`)}
                         >
-                            <View style={styles.tripMarker}>
-                                <Ionicons name="car" size={16} color="white" />
-                                <Text style={styles.priceText}>₹{trip.price_per_seat}</Text>
+                            <View style={styles.driverMarker}>
+                                <Ionicons name="car" size={20} color="white" />
                             </View>
                         </Marker>
                     ))}
@@ -205,14 +203,10 @@ const styles = StyleSheet.create({
         borderWidth: 2,
         borderColor: 'white',
     },
-    tripMarker: {
-        flexDirection: 'row',
-        alignItems: 'center',
+    driverMarker: {
         backgroundColor: '#3b82f6',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
+        padding: 6,
         borderRadius: 20,
-        gap: 4,
         borderWidth: 2,
         borderColor: 'white',
         shadowColor: '#000',
@@ -220,11 +214,6 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 4,
         elevation: 3,
-    },
-    priceText: {
-        color: 'white',
-        fontSize: 12,
-        fontWeight: 'bold',
     },
     locateBtn: {
         position: 'absolute',

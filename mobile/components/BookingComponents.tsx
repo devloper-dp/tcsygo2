@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, Alert, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/ui/card';
 
@@ -25,6 +25,33 @@ export function BookingConfirmationModal({
     seatsToBook,
     totalAmount,
 }: BookingConfirmationProps) {
+    // Import RidePreferences dynamically or assume it is imported
+    const RidePreferences = require('./RidePreferences').RidePreferences;
+
+    const [promoCode, setPromoCode] = useState('');
+    const [discount, setDiscount] = useState(0);
+    const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
+
+    const handleApplyPromo = () => {
+        if (promoCode.toUpperCase() === 'FIRST50') {
+            const disc = Math.min(totalAmount * 0.5, 100);
+            setDiscount(disc);
+            setAppliedPromo('FIRST50');
+            Alert.alert('Success', 'Promo code applied! ₹' + disc + ' saved.');
+        } else if (promoCode.toUpperCase() === 'RAPIDO20') {
+            const disc = Math.min(totalAmount * 0.2, 50);
+            setDiscount(disc);
+            setAppliedPromo('RAPIDO20');
+            Alert.alert('Success', 'Promo code applied! ₹' + disc + ' saved.');
+        } else {
+            Alert.alert('Invalid Code', 'Please enter a valid promo code');
+            setDiscount(0);
+            setAppliedPromo(null);
+        }
+    };
+
+    const finalAmount = totalAmount - discount;
+
     return (
         <Modal
             visible={visible}
@@ -70,6 +97,30 @@ export function BookingConfirmationModal({
                             </View>
                         </Card>
 
+                        {/* Ride Preferences Integration */}
+                        <RidePreferences
+                            style={{ marginBottom: 16 }}
+                            showSaveButton={false}
+                            userId={null} // Pass user ID if available in context
+                        />
+
+                        {/* Promo Code Section */}
+                        <View style={styles.promoContainer}>
+                            <Ionicons name="pricetag-outline" size={20} color="#3b82f6" />
+                            <TextInput
+                                style={styles.promoInput}
+                                placeholder="Enter Promo Code"
+                                value={promoCode}
+                                onChangeText={setPromoCode}
+                                autoCapitalize="characters"
+                            />
+                            <TouchableOpacity onPress={handleApplyPromo} disabled={!!appliedPromo}>
+                                <Text style={[styles.applyText, appliedPromo && { color: 'green' }]}>
+                                    {appliedPromo ? 'APPLIED' : 'APPLY'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+
                         <Card style={styles.priceCard}>
                             <View style={styles.priceRow}>
                                 <Text style={styles.priceLabel}>Price per seat</Text>
@@ -79,10 +130,16 @@ export function BookingConfirmationModal({
                                 <Text style={styles.priceLabel}>Number of seats</Text>
                                 <Text style={styles.priceValue}>×{seatsToBook}</Text>
                             </View>
+                            {discount > 0 && (
+                                <View style={styles.priceRow}>
+                                    <Text style={[styles.priceLabel, { color: '#10b981' }]}>Discrete</Text>
+                                    <Text style={[styles.priceValue, { color: '#10b981' }]}>-₹{discount}</Text>
+                                </View>
+                            )}
                             <View style={styles.divider} />
                             <View style={styles.priceRow}>
                                 <Text style={styles.totalLabel}>Total Amount</Text>
-                                <Text style={styles.totalValue}>₹{totalAmount}</Text>
+                                <Text style={styles.totalValue}>₹{finalAmount}</Text>
                             </View>
                         </Card>
 
@@ -103,7 +160,7 @@ export function BookingConfirmationModal({
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.confirmBtn}
-                            onPress={onConfirm}
+                            onPress={() => onConfirm()}
                         >
                             <Text style={styles.confirmBtnText}>Confirm & Pay</Text>
                         </TouchableOpacity>
@@ -320,5 +377,27 @@ const styles = StyleSheet.create({
     },
     seatButtonTextActive: {
         color: 'white',
+    },
+    promoContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#eff6ff',
+        padding: 12,
+        borderRadius: 12,
+        marginBottom: 16,
+        gap: 12,
+        borderWidth: 1,
+        borderColor: '#bfdbfe',
+    },
+    promoInput: {
+        flex: 1,
+        fontSize: 16,
+        color: '#1f2937',
+        fontWeight: '600',
+    },
+    applyText: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#3b82f6',
     },
 });

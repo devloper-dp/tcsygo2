@@ -35,7 +35,7 @@ export default function PaymentHistory() {
                     bookingId: b.id,
                     tripId: b.trip.id,
                     date: b.created_at,
-                    route: `${b.trip.pickup_location} → ${b.trip.drop_location}`,
+                    route: `${b.pickup_location} → ${b.drop_location}`,
                     amount: parseFloat(b.payment[0].amount),
                     platformFee: parseFloat(b.payment[0].platform_fee),
                     status: b.payment[0].status,

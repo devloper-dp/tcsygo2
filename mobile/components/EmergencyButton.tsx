@@ -5,6 +5,7 @@ import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { SafetyService } from '@/services/SafetyService';
 
 interface EmergencyButtonProps {
     tripId: string;
@@ -52,18 +53,11 @@ export function EmergencyButton({ tripId, style }: EmergencyButtonProps) {
 
             const location = await Location.getCurrentPositionAsync({});
 
-            // Create emergency alert
-            const { error: alertError } = await supabase
-                .from('emergency_alerts')
-                .insert({
-                    trip_id: tripId,
-                    user_id: user?.id,
-                    lat: location.coords.latitude,
-                    lng: location.coords.longitude,
-                    status: 'active',
-                });
-
-            if (alertError) throw alertError;
+            // Trigger emergency protocol via service
+            await SafetyService.triggerEmergencyProtocol(tripId, user!.id, {
+                lat: location.coords.latitude,
+                lng: location.coords.longitude,
+            });
 
             // Notification to admin is handled by Database Trigger (server-side)
 

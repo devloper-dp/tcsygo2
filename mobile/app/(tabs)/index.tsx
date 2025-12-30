@@ -1,16 +1,20 @@
 import { View, StyleSheet, TouchableOpacity, ScrollView, ImageBackground } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { LocationAutocomplete } from '@/components/LocationAutocomplete';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Text } from '@/components/ui/text';
 import { Calendar } from '@/components/ui/calendar';
-import { Coordinates } from '@/lib/mapbox';
-import { QuickActions, PopularRoutesMobile } from '@/components/HomeComponents';
+import { Coordinates } from '@/lib/maps';
+import { QuickActions } from '@/components/QuickActions';
+import { PopularRoutesMobile } from '@/components/HomeComponents';
 import { HomeMap } from '@/components/HomeMap';
+import { RideService, Ride } from '@/services/RideService';
+import { supabase } from '@/lib/supabase';
+import { QuickBookModal } from '@/components/QuickBookModal';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -20,6 +24,48 @@ export default function HomeScreen() {
   const [dropCoords, setDropCoords] = useState<Coordinates>();
   const [selectedDate, setSelectedDate] = useState<Date>();
   const [showDatePicker, setShowDatePicker] = useState(false);
+
+  // State for QuickActions data
+  const [recentRide, setRecentRide] = useState<{ destination: string; time: string } | undefined>();
+  const [savedPlaces, setSavedPlaces] = useState<Array<{ id: string, name: string, icon: string, lat?: number, lng?: number }>>([]);
+  const [showQuickBook, setShowQuickBook] = useState(false);
+
+  useEffect(() => {
+    fetchUserData();
+  }, []);
+
+  const fetchUserData = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const rides = await RideService.getRecentRides(user.id, 1);
+    if (rides.length > 0) {
+      setRecentRide({
+        destination: rides[0].drop_location,
+        time: new Date(rides[0].created_at).toLocaleDateString()
+      });
+    }
+
+    const { data: places, error: placesError } = await supabase
+      .from('saved_places')
+      .select('*')
+      .eq('user_id', user.id);
+
+    if (placesError) {
+      console.log('Error fetching saved places:', placesError);
+      setSavedPlaces([]);
+    } else if (places && places.length > 0) {
+      setSavedPlaces(places.map((p: any) => ({
+        id: p.id,
+        name: p.label || p.name,
+        icon: p.place_type === 'home' ? 'home' : p.place_type === 'work' ? 'briefcase' : 'location',
+        lat: p.latitude,
+        lng: p.longitude
+      })));
+    } else {
+      setSavedPlaces([]);
+    }
+  };
 
   const handleSearch = () => {
     if (!pickup || !drop) return;
@@ -40,6 +86,34 @@ export default function HomeScreen() {
     });
   };
 
+  const handleQuickAction = async (action: string) => {
+    console.log('Quick Action:', action);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    if (action === 'repeat_ride') {
+      const rides = await RideService.getRecentRides(user.id, 1);
+      if (rides.length > 0) {
+        const ride = rides[0];
+        setPickup(ride.pickup_location);
+        setPickupCoords({ lat: ride.pickup_lat, lng: ride.pickup_lng });
+        setDrop(ride.drop_location);
+        setDropCoords({ lat: ride.drop_lat, lng: ride.drop_lng });
+      }
+    } else if (action === 'add_place') {
+      router.push('/saved-places' as any);
+    } else if (action.startsWith('place_')) {
+      const placeId = action.split('_')[1];
+      const place = savedPlaces.find(p => p.id === placeId);
+      if (place) {
+        setDrop(place.name);
+        if (place.lat && place.lng) {
+          setDropCoords({ lat: place.lat, lng: place.lng });
+        }
+      }
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
@@ -50,23 +124,25 @@ export default function HomeScreen() {
           </View>
           <Text variant="h3" className="text-primary text-xl font-bold">TCSYGO</Text>
         </View>
-        <TouchableOpacity onPress={() => router.push('/(tabs)/profile')}>
-          <Ionicons name="person-circle-outline" size={32} color="#3b82f6" />
-        </TouchableOpacity>
+        <View className="flex-row items-center gap-2">
+          <TouchableOpacity onPress={() => router.push('/notifications')}>
+            <Ionicons name="notifications-outline" size={24} color="#3b82f6" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/profile')}>
+            <Ionicons name="person-circle-outline" size={32} color="#3b82f6" />
+            <View style={{ position: 'absolute', bottom: 0, right: 0, width: 10, height: 10, borderRadius: 5, backgroundColor: '#10b981', borderWidth: 1, borderColor: 'white' }} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Hero Section */}
-        <View style={styles.hero}>
-          <Text style={styles.heroTitle}>Share Your Journey</Text>
-          <Text style={styles.heroSubtitle}>
-            Connect with travelers, save money, and reduce your carbon footprint
-          </Text>
+        {/* Search Card */}
+        <View className="px-4 py-6 bg-blue-600 pb-12">
+          <Text style={styles.heroTitle}>Where to today?</Text>
         </View>
 
-        {/* Search Card */}
         <View className="px-4 -mt-8">
-          <Card className="p-4 bg-white">
+          <Card className="p-4 bg-white shadow-lg">
             <View className="gap-4">
               <View className="relative z-20">
                 <LocationAutocomplete
@@ -98,8 +174,9 @@ export default function HomeScreen() {
               >
                 <Ionicons name="calendar-outline" size={20} color="#6b7280" />
                 <Text style={styles.dateText}>
-                  {selectedDate ? selectedDate.toLocaleDateString() : 'Select date'}
+                  {selectedDate ? selectedDate.toLocaleDateString() : 'Now'}
                 </Text>
+                {!selectedDate && <Text style={{ fontSize: 10, color: '#10b981', marginLeft: 'auto', fontWeight: 'bold' }}>CHEAPEST</Text>}
               </TouchableOpacity>
 
               {showDatePicker && (
@@ -122,13 +199,41 @@ export default function HomeScreen() {
                 <Ionicons name="search" size={20} color="white" style={{ marginRight: 8 }} />
                 Search Rides
               </Button>
+
+              <Button
+                onPress={() => setShowQuickBook(true)}
+                disabled={!pickup || !drop}
+                variant="outline"
+                size="lg"
+                className="w-full"
+              >
+                <Ionicons name="flash" size={20} color="#3b82f6" style={{ marginRight: 8 }} />
+                Quick Book (Instant)
+              </Button>
             </View>
           </Card>
         </View>
 
-        {/* Quick Actions */}
+        {pickupCoords && dropCoords && (
+          <QuickBookModal
+            visible={showQuickBook}
+            onClose={() => setShowQuickBook(false)}
+            pickup={{ address: pickup, coords: pickupCoords }}
+            drop={{ address: drop, coords: dropCoords }}
+            onBookingSuccess={(bookingId) => {
+              setShowQuickBook(false);
+              router.push(`/booking/${bookingId}`);
+            }}
+          />
+        )}
+
+        {/* Quick Actions (Rapido Style) */}
         <View className="px-4 mt-8">
-          <QuickActions />
+          <QuickActions
+            onAction={handleQuickAction}
+            recentRide={recentRide}
+            savedPlaces={savedPlaces}
+          />
         </View>
 
         {/* Map View */}
@@ -269,25 +374,11 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  hero: {
-    backgroundColor: '#3b82f6',
-    paddingHorizontal: 24,
-    paddingTop: 40,
-    paddingBottom: 60,
-    alignItems: 'center',
-  },
   heroTitle: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#ffffff',
-    textAlign: 'center',
     marginBottom: 12,
-  },
-  heroSubtitle: {
-    fontSize: 16,
-    color: '#e0e7ff',
-    textAlign: 'center',
-    lineHeight: 24,
   },
   dateButton: {
     flexDirection: 'row',

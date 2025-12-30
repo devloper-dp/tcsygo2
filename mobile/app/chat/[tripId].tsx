@@ -26,9 +26,44 @@ export default function ChatScreen() {
 
     useEffect(() => {
         fetchMessages();
-        const interval = setInterval(fetchMessages, 3000); // Poll every 3 seconds
-        return () => clearInterval(interval);
-    }, []);
+
+        const channel = supabase
+            .channel(`trip_chat:${tripId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'messages',
+                    filter: `trip_id=eq.${tripId}`,
+                },
+                (payload) => {
+                    const message = payload.new;
+                    // Check if message is for this conversation
+                    const isRelevant =
+                        (message.sender_id === user?.id && message.receiver_id === otherUserId) ||
+                        (message.sender_id === otherUserId && message.receiver_id === user?.id);
+
+                    if (isRelevant) {
+                        setMessages((current) => {
+                            // Avoid duplicates
+                            if (current.some(m => m.id === message.id)) return current;
+                            return [...current, {
+                                id: message.id,
+                                senderId: message.sender_id,
+                                message: message.message,
+                                createdAt: message.created_at,
+                            }];
+                        });
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [tripId, user?.id, otherUserId]);
 
     const fetchMessages = async () => {
         try {
@@ -72,7 +107,7 @@ export default function ChatScreen() {
             if (error) throw error;
 
             setNewMessage('');
-            fetchMessages();
+            // Real-time will handle adding the message to the list
         } catch (error) {
             console.error('Error sending message:', error);
         } finally {

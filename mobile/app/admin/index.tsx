@@ -33,7 +33,7 @@ import {
     AlertTriangle
 } from 'lucide-react-native';
 import { NotificationDropdown } from '@/components/NotificationDropdown';
-import { mapDriver, mapTrip, mapBooking, mapPayment, mapSOSAlert } from '@/lib/mapper';
+import { mapDriver, mapTrip, mapBooking, mapPayment, mapEmergencyAlert } from '@/lib/mapper';
 
 export default function AdminDashboard() {
     const router = useRouter();
@@ -118,12 +118,12 @@ export default function AdminDashboard() {
         queryKey: ['admin-sos'],
         queryFn: async () => {
             const { data, error } = await supabase
-                .from('sos_alerts')
-                .select('*, reporter:users(*)')
+                .from('emergency_alerts')
+                .select('*, user:users(*)')
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
-            return (data || []).map(mapSOSAlert);
+            return (data || []).map(mapEmergencyAlert);
         }
     });
 
@@ -475,8 +475,8 @@ export default function AdminDashboard() {
                                                     <TableCell className="w-[150px]"><Text>{new Date(alert.createdAt).toLocaleString()}</Text></TableCell>
                                                     <TableCell className="w-[150px]">
                                                         <View>
-                                                            <Text>{alert.reporter?.fullName || 'Unknown'}</Text>
-                                                            <Text className="text-xs text-gray-500">{alert.reporter?.phone}</Text>
+                                                            <Text>{alert.user?.fullName || 'Unknown'}</Text>
+                                                            <Text className="text-xs text-gray-500">{alert.user?.phone}</Text>
                                                         </View>
                                                     </TableCell>
                                                     <TableCell className="w-[100px]">

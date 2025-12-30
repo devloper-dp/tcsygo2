@@ -3,6 +3,8 @@ import { Text } from '@/components/ui/text';
 import { Card } from '@/components/ui/card';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
 
 interface QuickAction {
     id: string;
@@ -13,43 +15,51 @@ interface QuickAction {
     color: string;
 }
 
-export function QuickActions() {
-    const router = useRouter();
+// Quick actions configuration
+const QUICK_ACTIONS_CONFIG: QuickAction[] = [
+    {
+        id: 'search',
+        title: 'Find a Ride',
+        description: 'Search for available trips',
+        icon: 'search',
+        route: '/search',
+        color: '#3b82f6',
+    },
+    {
+        id: 'create',
+        title: 'Offer a Ride',
+        description: 'Create a new trip',
+        icon: 'car',
+        route: '/create-trip',
+        color: '#10b981',
+    },
+    {
+        id: 'bookings',
+        title: 'My Bookings',
+        description: 'View your trips',
+        icon: 'calendar',
+        route: '/bookings',
+        color: '#f59e0b',
+    },
+    {
+        id: 'wallet',
+        title: 'Wallet',
+        description: 'Manage payments',
+        icon: 'wallet',
+        route: '/wallet',
+        color: '#8b5cf6',
+    },
+];
 
-    const actions: QuickAction[] = [
-        {
-            id: 'search',
-            title: 'Find a Ride',
-            description: 'Search for available trips',
-            icon: 'search',
-            route: '/search',
-            color: '#3b82f6',
-        },
-        {
-            id: 'create',
-            title: 'Offer a Ride',
-            description: 'Create a new trip',
-            icon: 'car',
-            route: '/create-trip',
-            color: '#10b981',
-        },
-        {
-            id: 'bookings',
-            title: 'My Bookings',
-            description: 'View your trips',
-            icon: 'calendar',
-            route: '/bookings',
-            color: '#f59e0b',
-        },
-        {
-            id: 'wallet',
-            title: 'Wallet',
-            description: 'Manage payments',
-            icon: 'wallet',
-            route: '/wallet',
-            color: '#8b5cf6',
-        },
-    ];
+interface QuickActionsProps {
+    onAction?: (action: string, data?: any) => void;
+    recentRide?: { destination: string; time: string };
+    savedPlaces?: any[];
+}
+
+export function QuickActions({ onAction, recentRide, savedPlaces }: QuickActionsProps) {
+    const router = useRouter();
+    const actions = QUICK_ACTIONS_CONFIG;
 
     return (
         <View style={styles.container}>
@@ -57,6 +67,25 @@ export function QuickActions() {
                 Quick Actions
             </Text>
             <View style={styles.grid}>
+                {/* Dynamic Action: Repeat Ride */}
+                {recentRide && (
+                    <TouchableOpacity
+                        style={styles.actionCard}
+                        onPress={() => onAction?.('repeat', recentRide)}
+                        activeOpacity={0.7}
+                    >
+                        <View style={[styles.iconContainer, { backgroundColor: '#e0e7ff' }]}>
+                            <Ionicons name="reload" size={24} color="#3b82f6" />
+                        </View>
+                        <Text style={styles.actionTitle} className="font-medium" numberOfLines={1}>
+                            Repeat Ride
+                        </Text>
+                        <Text style={styles.actionDescription} className="text-gray-600" numberOfLines={1}>
+                            To {recentRide.destination}
+                        </Text>
+                    </TouchableOpacity>
+                )}
+
                 {actions.map((action) => (
                     <TouchableOpacity
                         key={action.id}
@@ -90,30 +119,53 @@ interface PopularRoute {
 
 export function PopularRoutesMobile() {
     const router = useRouter();
+    const { data: routes, isLoading } = useQuery<PopularRoute[]>({
+        queryKey: ['popular-routes-mobile'],
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from('trips')
+                .select('pickup_location, drop_location, price_per_seat')
+                .eq('status', 'completed')
+                .order('created_at', { ascending: false })
+                .limit(150);
 
-    const routes: PopularRoute[] = [
-        {
-            id: '1',
-            from: 'Whitefield',
-            to: 'Koramangala',
-            tripCount: 45,
-            avgPrice: 150,
+            if (error) throw error;
+
+            // Aggregate routes
+            const routeMap = new Map<string, { from: string; to: string; count: number; totalPrice: number }>();
+
+            data?.forEach((trip: any) => {
+                const key = `${trip.pickup_location}|${trip.drop_location}`;
+                const existing = routeMap.get(key);
+                const price = parseFloat(trip.price_per_seat) || 0;
+
+                if (existing) {
+                    existing.count += 1;
+                    existing.totalPrice += price;
+                } else {
+                    routeMap.set(key, {
+                        from: trip.pickup_location,
+                        to: trip.drop_location,
+                        count: 1,
+                        totalPrice: price
+                    });
+                }
+            });
+
+            // Convert and calculate average prices
+            return Array.from(routeMap.values())
+                .map((route, index) => ({
+                    id: String(index + 1),
+                    from: route.from,
+                    to: route.to,
+                    tripCount: route.count,
+                    avgPrice: Math.round(route.totalPrice / route.count)
+                }))
+                .sort((a, b) => b.tripCount - a.tripCount)
+                .slice(0, 3);
         },
-        {
-            id: '2',
-            from: 'Electronic City',
-            to: 'MG Road',
-            tripCount: 38,
-            avgPrice: 200,
-        },
-        {
-            id: '3',
-            from: 'Hebbal',
-            to: 'Indiranagar',
-            tripCount: 32,
-            avgPrice: 120,
-        },
-    ];
+        staleTime: 1000 * 60 * 30, // 30 minutes
+    });
 
     const handleRoutePress = (route: PopularRoute) => {
         router.push({
@@ -124,6 +176,10 @@ export function PopularRoutesMobile() {
             },
         });
     };
+
+    if (isLoading || !routes || routes.length === 0) {
+        return null;
+    }
 
     return (
         <View style={styles.container}>

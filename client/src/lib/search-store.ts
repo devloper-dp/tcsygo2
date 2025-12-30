@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { Coordinates } from './mapbox';
+import { Coordinates } from './maps';
 
 export interface SearchFilters {
     minPrice?: number;

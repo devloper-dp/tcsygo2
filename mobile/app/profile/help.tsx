@@ -4,14 +4,33 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+// FAQ Configuration - In production, this could be fetched from a CMS or database
+const FAQ_ITEMS = [
+    {
+        q: 'How do I book a trip?',
+        a: 'Go to the Search tab, enter your pickup and drop locations, select a trip that matches your schedule, and confirm your booking by completing the payment.'
+    },
+    {
+        q: 'How do I become a driver?',
+        a: 'You can apply to become a driver from the Profile tab. Go to "Become a Driver" and complete the registration process including vehicle details and document verification.'
+    },
+    {
+        q: 'How are payments handled?',
+        a: 'We use secure payment gateways like Razorpay to process all transactions safely. You can pay using UPI, cards, net banking, or wallets.'
+    },
+    {
+        q: 'Can I cancel my booking?',
+        a: 'Yes, you can cancel your booking from the My Bookings section. Cancellation charges may apply based on the time of cancellation.'
+    },
+    {
+        q: 'How do I contact support?',
+        a: 'You can reach us via email at support@tcsygo.com or call us at +91 98765 43210. We\'re available 24/7 to help you.'
+    },
+];
+
 export default function HelpSupportScreen() {
     const router = useRouter();
-
-    const faqItems = [
-        { q: 'How do I book a trip?', a: 'Go to the Search tab, enter your destination, select a trip, and confirm your booking.' },
-        { q: 'How do I become a driver?', a: 'You can apply to become a driver from the My Vehicles section in your profile.' },
-        { q: 'How are payments handled?', a: 'We use secure payment gateways like Razorpay to process all transactions safely.' },
-    ];
+    const faqItems = FAQ_ITEMS;
 
     return (
         <SafeAreaView style={styles.container}>

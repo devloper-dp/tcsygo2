@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useLocation } from 'wouter';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -13,17 +13,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { queryClient } from '@/lib/queryClient';
-import { ArrowLeft, User, Car, Star, Camera, Shield, Check, Activity, Loader2 } from 'lucide-react';
+import { ArrowLeft, User, Car, Star, Camera, Shield, Check, Activity, Loader2, Settings, Wallet, Users as UsersIcon } from 'lucide-react';
 import { Driver, TripWithDriver, BookingWithDetails } from '@shared/schema';
 import { format } from 'date-fns';
 import { RatingModal } from '@/components/RatingModal';
-import { NotificationDropdown } from '@/components/NotificationDropdown';
+import { Navbar } from '@/components/Navbar';
 import { supabase } from '@/lib/supabase';
 import { mapDriver, mapBooking, mapTrip } from '@/lib/mapper';
+import { RidePreferences } from '@/components/RidePreferences';
+import { EmergencyContactsWrapper } from '@/components/EmergencyContactsWrapper';
+import { WalletBalanceWidget } from '@/components/WalletBalanceWidget';
+import { AutoPaySetup } from '@/components/AutoPaySetup';
+import { RideStatistics } from '@/components/RideStatistics';
 
 export default function Profile() {
   const [, navigate] = useLocation();
-  const { user, signOut } = useAuth();
+  const { user, signOut, updateProfile } = useAuth();
   const { toast } = useToast();
 
   const [fullName, setFullName] = useState(user?.fullName || '');
@@ -42,12 +47,10 @@ export default function Profile() {
         .from('drivers')
         .select('*')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (error) {
-        // It's possible the user is not a driver yet
-        return null;
-      }
+      if (error) return null;
+      if (!data) return null;
       return mapDriver(data);
     },
     enabled: user?.role === 'driver' || user?.role === 'both',
@@ -74,7 +77,7 @@ export default function Profile() {
     queryFn: async () => {
       if (!user) return [];
       // First get driver ID
-      const { data: driver } = await supabase.from('drivers').select('id').eq('user_id', user.id).single();
+      const { data: driver } = await supabase.from('drivers').select('id').eq('user_id', user.id).maybeSingle();
       if (!driver) return [];
 
       const { data, error } = await supabase
@@ -102,137 +105,60 @@ export default function Profile() {
     return colors[status] || 'bg-muted text-muted-foreground';
   };
 
-  const updateProfileMutation = useMutation({
-    mutationFn: async (data: any) => {
-      if (!user) throw new Error('Not logged in');
 
-      const { data: updatedUser, error } = await supabase
-        .from('users')
-        .update({
-          full_name: data.fullName,
-          phone: data.phone,
-          bio: data.bio
-        })
-        .eq('id', user.id)
-        .select()
-        .single();
 
-      if (error) throw error;
-      return updatedUser;
-    },
-    onSuccess: (updatedUser) => {
-      toast({
-        title: 'Profile updated',
-        description: 'Your profile has been successfully updated.',
-      });
-      // Invalidate queries?? Actually AuthContext should handle user updates if we refetch or update state.
-      // Since AuthContext listens to onAuthStateChange, it might get the update if Supabase emits it, 
-      // but usually we need to reload the user session or update local state.
-      // For now, simple success message.
-      queryClient.invalidateQueries({ queryKey: ['user', user?.id] });
-    },
-    onError: () => {
-      toast({
-        title: 'Update failed',
-        description: 'Unable to update profile. Please try again.',
-        variant: 'destructive',
-      });
-    },
-  });
 
-  const uploadPhotoMutation = useMutation({
-    mutationFn: async (file: File) => {
-      if (!user) throw new Error('Not logged in');
-
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-      const filePath = `avatars/${fileName}`;
-
-      try {
-        // Upload to Supabase Storage
-        const { error: uploadError } = await supabase.storage
-          .from('profile-photos')
-          .upload(filePath, file, { upsert: true });
-
-        if (uploadError) throw uploadError;
-
-        // Get public URL
-        const { data } = supabase.storage
-          .from('profile-photos')
-          .getPublicUrl(filePath);
-
-        // Update user profile with new photo URL
-        const { error: updateError } = await supabase
-          .from('users')
-          .update({ profile_photo: data.publicUrl })
-          .eq('id', user.id);
-
-        if (updateError) throw updateError;
-
-        return data.publicUrl;
-      } catch (error: any) {
-        console.error('Storage upload failed:', error);
-        toast({
-          title: 'Upload failed',
-          description: error.message || 'Unable to upload photo. Please try again.',
-          variant: 'destructive',
-        });
-        throw error;
-      }
-    },
-    onSuccess: () => {
-      toast({
-        title: 'Photo updated',
-        description: 'Your profile photo has been updated successfully.',
-      });
-      queryClient.invalidateQueries({ queryKey: ['user', user?.id] });
-      // Reload to update auth context
-      window.location.reload();
-    },
-    onError: () => {
-      toast({
-        title: 'Upload failed',
-        description: 'Unable to upload photo. Please try again.',
-        variant: 'destructive',
-      });
-    },
-  });
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!user) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: 'Invalid file',
-        description: 'Please select an image file.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast({
-        title: 'File too large',
-        description: 'Please select an image smaller than 5MB.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     setUploadingPhoto(true);
-    await uploadPhotoMutation.mutateAsync(file);
-    setUploadingPhoto(false);
+    try {
+      // Use the storage service helper function
+      const { uploadProfilePhoto } = await import('@/lib/storage-service');
+      const result = await uploadProfilePhoto(user.id, file);
+
+      if (!result.success) {
+        toast({
+          title: 'Upload failed',
+          description: result.error || 'Unable to upload photo.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Update profile using AuthContext
+      await updateProfile({ profilePhoto: result.url });
+    } catch (error: any) {
+      console.error('Photo upload failed:', error);
+      toast({
+        title: 'Upload failed',
+        description: error.message || 'Unable to upload photo.',
+        variant: 'destructive',
+      });
+    } finally {
+      setUploadingPhoto(false);
+    }
   };
 
-  const handleSaveProfile = () => {
-    updateProfileMutation.mutate({
-      fullName,
-      phone,
-      bio,
-    });
+
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const handleSaveProfile = async () => {
+    try {
+      setIsUpdating(true);
+      await updateProfile({
+        fullName,
+        phone,
+        bio,
+      });
+    } catch (error) {
+      // Error handled by AuthContext
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   const handleSignOut = async () => {
@@ -260,18 +186,8 @@ export default function Profile() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur">
-        <div className="container mx-auto px-6 h-16 flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/')} data-testid="button-back">
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <h1 className="text-xl font-display font-bold">Profile</h1>
-          <div className="ml-auto">
-            <NotificationDropdown />
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-background relative z-0">
+      <Navbar />
 
       <div className="container mx-auto px-6 py-8 max-w-4xl">
         <Card className="p-8 mb-6">
@@ -279,7 +195,7 @@ export default function Profile() {
             <div className="relative">
               <Avatar className="w-24 h-24">
                 <AvatarImage src={user.profilePhoto || undefined} />
-                <AvatarFallback className="text-2xl">{user.fullName.charAt(0)}</AvatarFallback>
+                <AvatarFallback className="text-2xl">{(user?.fullName || '').charAt(0)}</AvatarFallback>
               </Avatar>
               <input
                 ref={fileInputRef}
@@ -324,10 +240,18 @@ export default function Profile() {
         </Card>
 
         <Tabs defaultValue="personal" className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsList className="grid w-full max-w-4xl grid-cols-2 md:grid-cols-4">
             <TabsTrigger value="personal" data-testid="tab-personal">
               <User className="w-4 h-4 mr-2" />
               Personal Info
+            </TabsTrigger>
+            <TabsTrigger value="settings" data-testid="tab-settings">
+              <Settings className="w-4 h-4 mr-2" />
+              Settings
+            </TabsTrigger>
+            <TabsTrigger value="safety" data-testid="tab-safety">
+              <Shield className="w-4 h-4 mr-2" />
+              Safety
             </TabsTrigger>
             {(user.role === 'driver' || user.role === 'both') && (
               <TabsTrigger value="driver" data-testid="tab-driver">
@@ -394,10 +318,10 @@ export default function Profile() {
 
                 <Button
                   onClick={handleSaveProfile}
-                  disabled={updateProfileMutation.isPending}
+                  disabled={isUpdating}
                   data-testid="button-save-profile"
                 >
-                  {updateProfileMutation.isPending ? 'Saving...' : 'Save Changes'}
+                  {isUpdating ? 'Saving...' : 'Save Changes'}
                 </Button>
 
                 <Separator className="my-6" />
@@ -415,22 +339,85 @@ export default function Profile() {
             </Card>
           </TabsContent>
 
+          <TabsContent value="settings">
+            <div className="space-y-6">
+              {/* Wallet Balance Widget */}
+              <WalletBalanceWidget />
+
+              {/* Ride Preferences */}
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Settings className="w-5 h-5" />
+                  Ride Preferences
+                </h3>
+                <RidePreferences />
+              </Card>
+
+              {/* Auto-Pay Setup */}
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Wallet className="w-5 h-5" />
+                  Auto-Pay Settings
+                </h3>
+                <AutoPaySetup />
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="safety">
+            <div className="space-y-6">
+              {/* Emergency Contacts */}
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Shield className="w-5 h-5" />
+                  Emergency Contacts
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Add trusted contacts who will be notified in case of emergency
+                </p>
+                <EmergencyContactsWrapper />
+              </Card>
+
+              {/* Safety Tips */}
+              <Card className="p-6 bg-muted/50">
+                <h4 className="font-semibold mb-3 flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-primary" />
+                  Safety Tips
+                </h4>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  <li>• Always verify driver details before getting in the vehicle</li>
+                  <li>• Share your trip details with emergency contacts</li>
+                  <li>• Use the in-app safety check-in feature during rides</li>
+                  <li>• Keep your phone charged and accessible</li>
+                  <li>• Trust your instincts - if something feels wrong, cancel the ride</li>
+                </ul>
+              </Card>
+            </div>
+          </TabsContent>
+
           {(user.role === 'driver' || user.role === 'both') && (
             <TabsContent value="driver">
               <Card className="p-6">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-lg font-semibold">Driver Information</h3>
-                  {driverProfile && (
-                    <Badge className={
-                      driverProfile.verificationStatus === 'verified'
-                        ? 'bg-success/10 text-success'
-                        : driverProfile.verificationStatus === 'pending'
-                          ? 'bg-warning/10 text-warning'
-                          : 'bg-destructive/10 text-destructive'
-                    }>
-                      {driverProfile.verificationStatus}
-                    </Badge>
-                  )}
+                  <div className="flex items-center gap-3">
+                    {driverProfile && (
+                      <Badge className={
+                        driverProfile.verificationStatus === 'verified'
+                          ? 'bg-success/10 text-success'
+                          : driverProfile.verificationStatus === 'pending'
+                            ? 'bg-warning/10 text-warning'
+                            : 'bg-destructive/10 text-destructive'
+                      }>
+                        {driverProfile.verificationStatus}
+                      </Badge>
+                    )}
+                    {driverProfile && driverProfile.verificationStatus === 'rejected' && (
+                      <Button size="sm" variant="outline" onClick={() => navigate('/driver-onboarding')}>
+                        Re-apply
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 {driverProfile ? (
@@ -501,64 +488,80 @@ export default function Profile() {
           )}
 
           <TabsContent value="history">
-            <h3 className="text-lg font-semibold mb-6">Trip History</h3>
             <div className="space-y-6">
-              {bookings && bookings.length > 0 && (
-                <div>
-                  <h4 className="font-medium mb-3">My Rides</h4>
-                  <div className="space-y-4">
-                    {bookings.map((booking) => (
-                      <Card key={booking.id} className="p-4">
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <div className="font-semibold text-sm">
-                              {booking.trip.pickupLocation} → {booking.trip.dropLocation}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {format(new Date(booking.trip.departureTime), 'MMM dd, yyyy • hh:mm a')}
-                            </div>
-                          </div>
-                          <Badge className={getStatusColor(booking.status)}>{booking.status}</Badge>
-                        </div>
-                        {booking.status === 'confirmed' && new Date(booking.trip.departureTime) < new Date() && (
-                          <Button size="sm" variant="outline" className="w-full mt-2" onClick={() => setRatingBooking(booking)}>
-                            Rate Driver
-                          </Button>
-                        )}
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* Ride Statistics Summary */}
+              <RideStatistics />
 
-              {myTrips && myTrips.length > 0 && (
-                <div>
-                  <h4 className="font-medium mb-3 mt-6">Trips I Drove</h4>
-                  <div className="space-y-4">
-                    {myTrips.map((trip) => (
-                      <Card key={trip.id} className="p-4">
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <div className="font-semibold text-sm">
-                              {trip.pickupLocation} → {trip.dropLocation}
+              <h3 className="text-lg font-semibold">Trip History</h3>
+              <div className="space-y-6">
+                {bookings && bookings.length > 0 && (
+                  <div>
+                    <h4 className="font-medium mb-3">My Rides</h4>
+                    <div className="space-y-4">
+                      {bookings.map((booking) => (
+                        <Card
+                          key={booking.id}
+                          className="p-4 cursor-pointer hover:shadow-md transition-shadow"
+                          onClick={() => navigate(`/track/${booking.trip.id}`)}
+                        >
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <div className="font-semibold text-sm">
+                                {booking.trip.pickupLocation} → {booking.trip.dropLocation}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {format(new Date(booking.trip.departureTime), 'MMM dd, yyyy • hh:mm a')}
+                              </div>
                             </div>
-                            <div className="text-xs text-muted-foreground">
-                              {format(new Date(trip.departureTime), 'MMM dd, yyyy • hh:mm a')}
-                            </div>
+                            <Badge className={getStatusColor(booking.status)}>{booking.status}</Badge>
                           </div>
-                          <Badge className={getStatusColor(trip.status)}>{trip.status}</Badge>
-                        </div>
-                      </Card>
-                    ))}
+                          {booking.status === 'confirmed' && new Date(booking.trip.departureTime) < new Date() && (
+                            <Button size="sm" variant="outline" className="w-full mt-2" onClick={(e) => {
+                              e.stopPropagation();
+                              setRatingBooking(booking);
+                            }}>
+                              Rate Driver
+                            </Button>
+                          )}
+                        </Card>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {!bookings?.length && !myTrips?.length && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <p>No history found.</p>
-                </div>
-              )}
+                {myTrips && myTrips.length > 0 && (
+                  <div>
+                    <h4 className="font-medium mb-3 mt-6">Trips I Drove</h4>
+                    <div className="space-y-4">
+                      {myTrips.map((trip) => (
+                        <Card
+                          key={trip.id}
+                          className="p-4 cursor-pointer hover:shadow-md transition-shadow"
+                          onClick={() => navigate(`/track/${trip.id}`)}
+                        >
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <div className="font-semibold text-sm">
+                                {trip.pickupLocation} → {trip.dropLocation}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {format(new Date(trip.departureTime), 'MMM dd, yyyy • hh:mm a')}
+                              </div>
+                            </div>
+                            <Badge className={getStatusColor(trip.status)}>{trip.status}</Badge>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!bookings?.length && !myTrips?.length && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p>No history found.</p>
+                  </div>
+                )}
+              </div>
             </div>
           </TabsContent>
         </Tabs>

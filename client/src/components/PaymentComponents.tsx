@@ -25,17 +25,28 @@ export function PromoCodeDialog({ isOpen, onClose, onApply, currentAmount }: Pro
     const [error, setError] = useState('');
     const [isValidating, setIsValidating] = useState(false);
 
-    const { data: availablePromoCodes, isLoading } = useQuery<PromoCode[]>({
+    const { data: availablePromoCodes, isLoading, error: promoError } = useQuery<PromoCode[]>({
         queryKey: ['promo-codes'],
         queryFn: async () => {
-            const { data, error } = await supabase
-                .from('promo_codes')
-                .select('*')
-                .eq('is_active', true)
-                .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`);
+            try {
+                const now = new Date().toISOString();
+                const { data, error } = await supabase
+                    .from('promo_codes')
+                    .select('*')
+                    .eq('is_active', true)
+                    .lte('valid_from', now)
+                    .gte('valid_until', now);
 
-            if (error) throw error;
-            return (data || []).map(mapPromoCode);
+                if (error) {
+                    console.error('Promo codes query error:', error);
+                    throw error;
+                }
+                return (data || []).map(mapPromoCode);
+            } catch (err) {
+                console.error('Failed to fetch promo codes:', err);
+                // Return empty array instead of throwing to prevent UI breakage
+                return [];
+            }
         },
     });
 
@@ -43,29 +54,57 @@ export function PromoCodeDialog({ isOpen, onClose, onApply, currentAmount }: Pro
         setError('');
         setIsValidating(true);
 
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 500));
+        try {
+            // Check against loaded promo codes
+            const foundPromo = (availablePromoCodes || []).find(
+                p => p.code.toLowerCase() === promoCode.toLowerCase()
+            );
 
-        const foundPromo = (availablePromoCodes || []).find(
-            p => p.code.toLowerCase() === promoCode.toLowerCase()
-        );
+            if (foundPromo) {
+                // Determine discount and apply
+                onApply(foundPromo);
+                onClose();
+                setPromoCode('');
+            } else {
+                // If not in the pre-fetched list, it might be a hidden or specific user code
+                // Try fetching directly from DB for this specific code
+                const { data: specificPromo, error: fetchError } = await supabase
+                    .from('promo_codes')
+                    .select('*')
+                    .eq('code', promoCode.toUpperCase())
+                    .eq('is_active', true)
+                    .single();
 
-        if (foundPromo) {
-            onApply(foundPromo);
-            onClose();
-            setPromoCode('');
-        } else {
-            setError('Invalid promo code');
+                if (specificPromo) {
+                    const now = new Date();
+                    const validFrom = new Date(specificPromo.valid_from);
+                    const validUntil = new Date(specificPromo.valid_until);
+
+                    if (now >= validFrom && now <= validUntil) {
+                        onApply(mapPromoCode(specificPromo));
+                        onClose();
+                        setPromoCode('');
+                    } else {
+                        setError('Promo code is expired or not yet valid');
+                    }
+                } else {
+                    setError('Invalid promo code');
+                }
+            }
+        } catch (err) {
+            console.error('Promo validation error:', err);
+            setError('Failed to validate promo code');
+        } finally {
+            setIsValidating(false);
         }
-
-        setIsValidating(false);
     };
 
     const calculateDiscount = (promo: PromoCode) => {
-        if (promo.type === 'percentage') {
-            return Math.round((currentAmount * promo.discount) / 100);
+        const value = parseFloat(promo.discountValue);
+        if (promo.discountType === 'percentage') {
+            return Math.round((currentAmount * value) / 100);
         }
-        return promo.discount;
+        return value;
     };
 
     return (
@@ -126,7 +165,11 @@ export function PromoCodeDialog({ isOpen, onClose, onApply, currentAmount }: Pro
                                                 <Tag className="w-4 h-4 text-primary" />
                                                 <span className="font-mono font-semibold text-sm">{promo.code}</span>
                                             </div>
-                                            <p className="text-sm text-muted-foreground">{promo.description}</p>
+                                            <p className="text-sm text-muted-foreground">
+                                                {promo.discountType === 'percentage'
+                                                    ? `${promo.discountValue}% OFF`
+                                                    : `₹${promo.discountValue} OFF`}
+                                            </p>
                                         </div>
                                         <Badge variant="secondary">
                                             Save ₹{calculateDiscount(promo)}
@@ -149,33 +192,40 @@ interface PaymentMethodSelectorProps {
     onSelect: (method: string) => void;
 }
 
+// Payment methods configuration for Razorpay
+const PAYMENT_METHODS = [
+    {
+        id: 'upi',
+        name: 'UPI',
+        description: 'Google Pay, PhonePe, Paytm',
+        icon: '📱',
+        enabled: true,
+    },
+    {
+        id: 'card',
+        name: 'Credit/Debit Card',
+        description: 'Visa, Mastercard, RuPay',
+        icon: '💳',
+        enabled: true,
+    },
+    {
+        id: 'netbanking',
+        name: 'Net Banking',
+        description: 'All major banks',
+        icon: '🏦',
+        enabled: true,
+    },
+    {
+        id: 'wallet',
+        name: 'Wallet',
+        description: 'Paytm, PhonePe, Amazon Pay',
+        icon: '👛',
+        enabled: true,
+    },
+] as const;
+
 export function PaymentMethodSelector({ selectedMethod, onSelect }: PaymentMethodSelectorProps) {
-    const paymentMethods = [
-        {
-            id: 'upi',
-            name: 'UPI',
-            description: 'Google Pay, PhonePe, Paytm',
-            icon: '📱',
-        },
-        {
-            id: 'card',
-            name: 'Credit/Debit Card',
-            description: 'Visa, Mastercard, RuPay',
-            icon: '💳',
-        },
-        {
-            id: 'netbanking',
-            name: 'Net Banking',
-            description: 'All major banks',
-            icon: '🏦',
-        },
-        {
-            id: 'wallet',
-            name: 'Wallet',
-            description: 'Paytm, PhonePe, Amazon Pay',
-            icon: '👛',
-        },
-    ];
+    const paymentMethods = PAYMENT_METHODS.filter(method => method.enabled);
 
     return (
         <div className="space-y-3">

@@ -1,19 +1,21 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
+import { queryClient } from '@/lib/queryClient';
+import { useAuth } from '@/contexts/AuthContext';
 import { ArrowLeft, DollarSign, TrendingUp, Calendar, Download } from 'lucide-react';
-import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { format, subDays } from 'date-fns';
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 
 export default function Earnings() {
     const [, navigate] = useLocation();
     const { user } = useAuth();
+    const { toast } = useToast();
     const [timeRange, setTimeRange] = useState('30');
 
     const { data: driverProfile } = useQuery({
@@ -75,7 +77,7 @@ export default function Earnings() {
                             tripId: trip.id,
                             amount: amount,
                             status: payment.payout_status || 'pending',
-                            route: `${trip.pickup_location} → ${trip.drop_location}`,
+                            route: `${booking.pickup_location} → ${booking.drop_location}`,
                         });
                     }
                 });
@@ -90,6 +92,34 @@ export default function Earnings() {
         },
         enabled: !!driverProfile,
     });
+
+    const requestPayoutMutation = useMutation({
+        mutationFn: async () => {
+            if (!driverProfile) return;
+            const { data, error } = await supabase.rpc('request_payout', {
+                p_driver_id: driverProfile.id
+            });
+
+            if (error) throw error;
+            if (!data.success) throw new Error(data.message);
+            return data;
+        },
+        onSuccess: (data: any) => {
+            toast({
+                title: 'Payout Requested',
+                description: `Successfully requested ₹${data.amount}.`,
+            });
+            queryClient.invalidateQueries({ queryKey: ['earnings'] });
+        },
+        onError: (error: any) => {
+            toast({
+                title: 'Request Failed',
+                description: error.message || 'Could not request payout',
+                variant: 'destructive',
+            });
+        }
+    });
+
 
     if (!user || user.role === 'passenger') {
         return (
@@ -144,7 +174,18 @@ export default function Earnings() {
                             <Calendar className="w-5 h-5 text-warning" />
                         </div>
                         <div className="text-3xl font-bold">₹{earnings?.pending.toFixed(2) || '0.00'}</div>
-                        <p className="text-xs text-muted-foreground mt-1">Awaiting transfer</p>
+                        <div className="flex items-center justify-between mt-1">
+                            <p className="text-xs text-muted-foreground">Awaiting transfer</p>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-xs"
+                                disabled={!earnings?.pending || earnings.pending <= 0 || requestPayoutMutation.isPending}
+                                onClick={() => requestPayoutMutation.mutate()}
+                            >
+                                {requestPayoutMutation.isPending ? 'Requesting...' : 'Request Payout'}
+                            </Button>
+                        </div>
                     </Card>
 
                     <Card className="p-6">

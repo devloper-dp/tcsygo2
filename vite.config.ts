@@ -14,6 +14,7 @@ export default defineConfig({
     },
   },
   root: path.resolve(__dirname, "client"),
+  envDir: path.resolve(__dirname),
   build: {
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
@@ -21,7 +22,15 @@ export default defineConfig({
   server: {
     fs: {
       strict: true,
-      deny: ["**/.*"],
+      deny: [".git", "**/.*"],
+      allow: [
+        // Allow access to project root and attached_assets
+        path.resolve(__dirname),
+      ],
+    },
+    cors: {
+      origin: '*',
+      credentials: true,
     },
   },
 });

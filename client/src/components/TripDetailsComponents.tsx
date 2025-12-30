@@ -69,8 +69,17 @@ export function SimilarTrips({ currentTripId, pickupLocation, dropLocation, onTr
                             </div>
                         </div>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Clock className="w-3 h-3" />
                             <span>{new Date(trip.departureTime).toLocaleString()}</span>
+                        </div>
+                        <div className="mt-2 space-y-1">
+                            <div className="flex items-center gap-2 text-xs">
+                                <MapPin className="w-3 h-3 text-green-500" />
+                                <span className="truncate text-muted-foreground">{trip.pickupLocation}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs">
+                                <MapPin className="w-3 h-3 text-red-500" />
+                                <span className="truncate text-muted-foreground">{trip.dropLocation}</span>
+                            </div>
                         </div>
                     </div>
                 ))}
@@ -127,33 +136,3 @@ export function TripTimeline({ pickupLocation, dropLocation, departureTime, dura
     );
 }
 
-interface DriverVerificationBadgesProps {
-    verificationStatus: string;
-    totalTrips: number;
-    rating: number;
-}
-
-export function DriverVerificationBadges({ verificationStatus, totalTrips, rating }: DriverVerificationBadgesProps) {
-    return (
-        <div className="flex flex-wrap gap-2">
-            {verificationStatus === 'verified' && (
-                <Badge variant="secondary" className="gap-1">
-                    <Shield className="w-3 h-3" />
-                    Verified Driver
-                </Badge>
-            )}
-            {totalTrips >= 10 && (
-                <Badge variant="secondary" className="gap-1">
-                    <CheckCircle className="w-3 h-3" />
-                    Experienced ({totalTrips}+ trips)
-                </Badge>
-            )}
-            {rating >= 4.5 && (
-                <Badge variant="secondary" className="gap-1">
-                    <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                    Top Rated
-                </Badge>
-            )}
-        </div>
-    );
-}

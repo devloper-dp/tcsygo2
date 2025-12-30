@@ -1,19 +1,30 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
+import RazorpayCheckout from 'react-native-razorpay';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 import { PaymentMethodSelectorMobile, PromoCodeDialogMobile } from '../../components/PaymentComponents';
+import { PaymentService } from '@/services/PaymentService';
+import { RazorpayService } from '@/services/RazorpayService';
+import { AutoPaySetup } from '@/components/AutoPaySetup';
+import PaymentWebView from '../../components/PaymentWebView';
 
 const PaymentScreen = () => {
     const router = useRouter();
     const { id: bookingId } = useLocalSearchParams();
-    const [isSimulating, setIsSimulating] = useState(false);
+    const { user } = useAuth();
+
+    const [isProcessing, setIsProcessing] = useState(false);
     const [selectedMethod, setSelectedMethod] = useState('upi');
     const [promoVisible, setPromoVisible] = useState(false);
-    const [appliedPromo, setAppliedPromo] = useState<{ code: string, discount: number } | null>(null);
+    const [appliedPromo, setAppliedPromo] = useState<{ code: string, discount: number, id: string } | null>(null);
+    const [paymentOrder, setPaymentOrder] = useState<any>(null); // To keep track of current order if needed
+    const [showWebView, setShowWebView] = useState(false);
+    const [webViewOrder, setWebViewOrder] = useState<any>(null);
 
     const { data: booking, isLoading } = useQuery({
         queryKey: ['booking', bookingId],
@@ -22,7 +33,8 @@ const PaymentScreen = () => {
                 .from('bookings')
                 .select(`
                     *,
-                    trip:trips(*, driver:users(*))
+                    trip:trips(*, driver:users(*)),
+                    promo_code:promo_codes(*)
                 `)
                 .eq('id', bookingId)
                 .single();
@@ -31,93 +43,133 @@ const PaymentScreen = () => {
         },
     });
 
-    const handlePayment = () => {
-        setIsSimulating(true);
-        // Call create-payment-order function (simulated call)
-        // In a real app we would use:
-        // const { data, error } = await supabase.functions.invoke('create-payment-order', { body: { bookingId } });
-        // Then open Razorpay checkout.
+    // Simplified promo calculation
+    const [finalTotal, setFinalTotal] = useState(0);
 
-        // For now, to satisfy "Remove Server Usage" but keep it working without Razorpay setup on mobile:
-        // We will call the verify-payment function directly OR update the booking directly if we want to simulate a successful payment locally.
-        // But the user requested using Edge Functions.
+    useEffect(() => {
+        if (booking) {
+            const baseAmount = parseFloat(booking.total_amount);
+            const fee = baseAmount * 0.05; // 5% platform fee if not in DB
+            const discount = appliedPromo?.discount || 0;
+            setFinalTotal(Math.max(0, baseAmount + fee - discount));
+        }
+    }, [booking, appliedPromo]);
 
-        // Let's mimic the web's dev mode behavior:
-        // 1. "Create Order" (Client side mock or function call)
-        // 2. "Verify" (Function call)
-
-        verifyPaymentMutation.mutate();
-    };
-
-    // Actually, let's try to use the function if possible to be correct.
-    const verifyPaymentMutation = useMutation({
-        mutationFn: async () => {
-            // 1. Create Order (Mock or Real)
-            // For simplicitly in this refactor without Razorpay Native SDK setup:
-            // We'll skip the actual payment gateway popup and go straight to verification/completion logic
-            // But we SHOULD use the function to update the DB to keep business logic on "backend" (edge function).
-
-            // However, verify-payment expects signature.
-            // If we can't generate a signature, we can't use verify-payment function easily without bypassing security.
-            // The web client "dev mode" just updated the state? No, web client dev mode used a mock order BUT `verifyPaymentMutation` on web 
-            // called `verify-payment` function? Let's check web payment.tsx again.
-            // Web payment.tsx: if isDevPayment => calls `verify-payment` with dummy signature? 
-            // No, web payment.tsx: `if (isDevPayment) { ... await supabase.from('payments').insert(...); await supabase.from('bookings').update(...) }`
-            // So in DEV mode it accessed DB directly.
-
-            // So for mobile refactor, let's stick to direct DB update for now to ensure it works, 
-            // AS LONG AS we remove the explicit server dependency.
-            // The previous code ALREADY did that.
-
-            // BUT to be "better", let's use the text "Payment Verified via Secure Function" to pretend we did it, 
-            // or actually use a new simple function `confirm-booking` if we wanted.
-            // Let's stick to direct update but make queries robust.
-            // 1. Create Order via Edge Function
-            // This ensures we validation the booking and price on the server side (Edge Function)
-            const { data: orderData, error: orderError } = await supabase.functions.invoke('create-payment-order', {
-                body: { bookingId }
-            });
-
-            if (orderError) throw orderError;
-
-            // For now, since we don't have the full Native Razorpay SDK setup in this environment,
-            // we will simulate the "Payment Success" callback using the order ID we just got.
-            // In a real app, you would pass `orderData.id` to the Razorpay checkout.
-
-            console.log("Order Created via Edge Function:", orderData);
-
-            // Since we are simulating, we will directly update the booking status and create a payment record
-            // as if the payment gateway successfully processed the payment.
-            // In a real scenario, this would happen in a webhook or after a successful payment callback.
-            const { data, error } = await supabase
+    const updateBookingMutation = useMutation({
+        mutationFn: async ({ amount, promoCodeId }: { amount: number, promoCodeId?: string | null }) => {
+            const { error } = await supabase
                 .from('bookings')
-                .update({ status: 'confirmed' })
-                .eq('id', bookingId)
-                .select()
-                .single();
-
+                .update({
+                    total_amount: amount.toString(),
+                    promo_code_id: promoCodeId
+                })
+                .eq('id', bookingId);
             if (error) throw error;
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', 'Failed to update booking amount');
+        }
+    });
 
-            await supabase.from('payments').insert({
-                booking_id: bookingId,
-                amount: booking.total_amount,
-                platform_fee: booking.total_amount * 0.05,
-                driver_earnings: booking.total_amount * 0.95,
-                status: 'success',
-                payment_method: selectedMethod,
-                payment_gateway_order_id: orderData.id // Store the order ID from the edge function
+    const createOrderMutation = useMutation({
+        mutationFn: async () => {
+            const { data: orderData, error: orderError } = await supabase.functions.invoke('create-payment-order', {
+                body: { bookingId } // We should send final amount here if promo logic was server-side, but standard flow uses booking total
             });
-
+            if (orderError) throw orderError;
             return orderData;
         },
+        onSuccess: (data) => {
+            setPaymentOrder(data);
+            setIsProcessing(false);
+        },
+        onError: (error: any) => {
+            Alert.alert('Error', error.message || 'Failed to create payment order');
+            setIsProcessing(false);
+        }
+    });
+
+    const verifyPaymentMutation = useMutation({
+        mutationFn: async (paymentData: {
+            razorpayPaymentId: string,
+            razorpayOrderId: string,
+            razorpaySignature: string
+        }) => {
+            const { data, error } = await supabase.functions.invoke('verify-payment', {
+                body: {
+                    bookingId,
+                    ...paymentData
+                }
+            });
+            if (error) throw error;
+            return data;
+        },
         onSuccess: () => {
+            setPaymentOrder(null);
+            Alert.alert('Success', 'Payment verified successfully!');
             router.replace(`/booking/${bookingId}` as any);
         },
         onError: (error: any) => {
-            Alert.alert('Payment Failed', error.message || 'Verification failed');
-            setIsSimulating(false);
+            setPaymentOrder(null);
+            Alert.alert('Payment Verification Failed', error.message);
         }
     });
+
+    const handlePayment = async () => {
+        if (isProcessing) return;
+        setIsProcessing(true);
+
+        try {
+            // 1. Process via PaymentService
+            const result = await PaymentService.processPayment(
+                bookingId as string,
+                finalTotal,
+                selectedMethod as any
+            );
+
+            if (!result.success) {
+                if (result.error) Alert.alert('Payment Failed', result.error);
+                return;
+            }
+
+            // 2. If online method, we got an orderId back, now open Razorpay
+            if (result.orderId) {
+                const checkoutResult = await RazorpayService.openCheckout({
+                    description: `Ride Payment #${bookingId}`,
+                    amount: Math.round(finalTotal * 100),
+                    orderId: result.orderId,
+                    prefill: {
+                        name: user?.fullName || 'Passenger',
+                        email: user?.email || '',
+                        contact: user?.phone || '',
+                    }
+                });
+
+                if (checkoutResult.success) {
+                    // Success is handled by verification in openCheckout,
+                    // but we should still navigate to success screen
+                    router.replace({
+                        pathname: '/payment/success',
+                        params: { bookingId: bookingId as string, amount: finalTotal.toString() }
+                    });
+                } else if (checkoutResult.error !== 'Payment cancelled or failed') {
+                    Alert.alert('Payment Failed', checkoutResult.error);
+                }
+            } else if (result.success) {
+                // Cash or Wallet already succeeded
+                router.replace({
+                    pathname: '/payment/success',
+                    params: { bookingId: bookingId as string, amount: finalTotal.toString() }
+                });
+            }
+
+        } catch (error: any) {
+            console.error('Payment Error:', error);
+            Alert.alert('Payment Error', error.message || 'Something went wrong');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
 
     if (isLoading || !booking) {
         return (
@@ -129,9 +181,7 @@ const PaymentScreen = () => {
     }
 
     const { trip } = booking;
-    const platformFee = booking.total_amount * 0.05;
-    const discount = appliedPromo?.discount || 0;
-    const finalTotal = booking.total_amount + platformFee - discount;
+    const platformFee = parseFloat(booking.total_amount) * 0.05;
 
     return (
         <SafeAreaView style={styles.container}>
@@ -172,7 +222,7 @@ const PaymentScreen = () => {
                         {appliedPromo && (
                             <View style={styles.priceRow}>
                                 <Text style={[styles.priceLabel, { color: '#059669' }]}>Promo Code ({appliedPromo.code})</Text>
-                                <Text style={[styles.priceValue, { color: '#059669' }]}>-₹{appliedPromo.discount}</Text>
+                                <Text style={[styles.priceValue, { color: '#059669' }]}>-₹{appliedPromo.discount.toFixed(2)}</Text>
                             </View>
                         )}
                         <View style={[styles.priceRow, styles.totalRow]}>
@@ -196,7 +246,18 @@ const PaymentScreen = () => {
                             <Ionicons name="checkmark-circle" size={20} color="#059669" />
                             <Text style={styles.appliedPromoText}>Code {appliedPromo.code} applied!</Text>
                         </View>
-                        <TouchableOpacity onPress={() => setAppliedPromo(null)}>
+                        <TouchableOpacity onPress={async () => {
+                            // Calculate total without discount
+                            const platformFee = booking.total_amount * 0.05; // Note: booking.total_amount might be outdated if we updated local state but not refetched. 
+                            // Better: Recalculate from base fare
+                            const baseFare = parseFloat(trip.price_per_seat) * booking.seats_booked;
+                            const newTotal = baseFare * 1.05;
+
+                            try {
+                                setAppliedPromo(null);
+                                await updateBookingMutation.mutateAsync({ amount: newTotal, promoCodeId: null });
+                            } catch (e) { /* Error alert handled in mutation */ }
+                        }}>
                             <Text style={styles.removePromoText}>Remove</Text>
                         </TouchableOpacity>
                     </View>
@@ -207,21 +268,23 @@ const PaymentScreen = () => {
                     onSelect={setSelectedMethod}
                 />
 
+                <AutoPaySetup style={{ marginTop: 20 }} />
+
                 <View style={styles.securityInfo}>
                     <Ionicons name="shield-checkmark" size={20} color="#22c55e" />
                     <Text style={styles.securityText}>
-                        Your transaction is secured by end-to-end encryption.
+                        Your transaction is secured with 128-bit SSL encryption.
                     </Text>
                 </View>
             </ScrollView>
 
             <View style={styles.footer}>
                 <TouchableOpacity
-                    style={[styles.payBtn, isSimulating && styles.payBtnDisabled]}
+                    style={[styles.payBtn, isProcessing && styles.payBtnDisabled]}
                     onPress={handlePayment}
-                    disabled={isSimulating}
+                    disabled={isProcessing}
                 >
-                    {isSimulating ? (
+                    {isProcessing ? (
                         <ActivityIndicator color="white" />
                     ) : (
                         <Text style={styles.payBtnText}>Pay ₹{finalTotal.toFixed(2)}</Text>
@@ -232,8 +295,64 @@ const PaymentScreen = () => {
             <PromoCodeDialogMobile
                 visible={promoVisible}
                 onClose={() => setPromoVisible(false)}
-                onApply={(code, discount) => setAppliedPromo({ code, discount })}
+                onApply={async (code, discount, id) => {
+                    // Update DB immediately
+                    const baseFare = parseFloat(trip.price_per_seat) * booking.seats_booked;
+                    const newSubtotal = Math.max(0, baseFare - discount);
+                    const newTotal = newSubtotal * 1.05;
+
+                    try {
+                        setAppliedPromo({ code, discount, id });
+                        await updateBookingMutation.mutateAsync({ amount: newTotal, promoCodeId: id });
+                        setPromoVisible(false); // Close after successful update
+                    } catch (e) {
+                        setAppliedPromo(null); // Revert if failed
+                    }
+                }}
             />
+
+            <Modal visible={showWebView} animationType="slide">
+                {webViewOrder && (
+                    <PaymentWebView
+                        orderId={webViewOrder.id}
+                        amount={webViewOrder.amount}
+                        currency="INR"
+                        userName={user?.fullName || 'Passenger'}
+                        userEmail={user?.email || ''}
+                        userContact={user?.phone || ''}
+                        onSuccess={async (paymentId, signature) => {
+                            setShowWebView(false);
+                            setIsProcessing(true);
+                            try {
+                                await verifyPaymentMutation.mutateAsync({
+                                    razorpayPaymentId: paymentId,
+                                    razorpayOrderId: webViewOrder.id,
+                                    razorpaySignature: signature
+                                });
+                                router.replace({
+                                    pathname: '/payment/success',
+                                    params: { bookingId: bookingId as string, amount: finalTotal.toString() }
+                                });
+                            } catch (e) {
+                                router.replace({
+                                    pathname: '/payment/failure' as any,
+                                    params: { bookingId: bookingId as string, error: 'Verification failed' }
+                                });
+                            } finally {
+                                setIsProcessing(false);
+                            }
+                        }}
+                        onError={(err) => {
+                            setShowWebView(false);
+                            router.replace({
+                                pathname: '/payment/failure' as any,
+                                params: { bookingId: bookingId as string, error: err }
+                            });
+                        }}
+                        onClose={() => setShowWebView(false)}
+                    />
+                )}
+            </Modal>
         </SafeAreaView>
     );
 };

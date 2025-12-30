@@ -19,6 +19,7 @@ export const TripStatus = {
 export const BookingStatus = {
   PENDING: "pending",
   CONFIRMED: "confirmed",
+  PAYMENT_PENDING: "payment_pending",
   REJECTED: "rejected",
   CANCELLED: "cancelled"
 } as const;
@@ -48,6 +49,15 @@ export interface User {
   role: string;
   bio?: string | null;
   verificationStatus?: string | null;
+  pushToken?: string | null;
+  organization?: string | null;
+  notificationPreferences?: {
+    messages: boolean;
+    trips: boolean;
+    bookings: boolean;
+    payments: boolean;
+    marketing: boolean;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -95,6 +105,8 @@ export interface Trip {
     music?: boolean;
     luggage?: boolean;
   };
+  basePrice?: string | null;
+  surgeMultiplier?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -108,6 +120,13 @@ export interface Booking {
   status: string;
   pickupLocation?: string | null;
   dropLocation?: string | null;
+  promoCodeId?: string | null;
+  preferences?: {
+    acPreferred: boolean;
+    musicAllowed: boolean;
+    petFriendly: boolean;
+    luggageCapacity: number;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -136,6 +155,16 @@ export interface Rating {
   createdAt: string;
 }
 
+export interface Message {
+  id: string;
+  tripId: string;
+  senderId: string;
+  receiverId: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
 export interface LiveLocation {
   id: string;
   tripId: string;
@@ -158,15 +187,26 @@ export interface Notification {
   createdAt: string;
 }
 
+export interface SupportTicket {
+  id: string;
+  userId?: string | null;
+  name: string;
+  email: string;
+  message: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PromoCode {
   id: string;
   code: string;
-  discount: number;
-  type: 'percentage' | 'fixed';
-  description?: string | null;
-  minAmount: number;
-  maxDiscount?: number | null;
-  expiresAt?: string | null;
+  discountType: 'percentage' | 'fixed';
+  discountValue: string;
+  maxUses?: number | null;
+  currentUses: number;
+  validFrom: string;
+  validUntil: string;
   isActive: boolean;
   createdAt: string;
 }
@@ -180,6 +220,15 @@ export const insertUserSchema = z.object({
   profilePhoto: z.string().url().nullable().optional(),
   role: z.string().default(UserRole.PASSENGER),
   bio: z.string().nullable().optional(),
+  pushToken: z.string().nullable().optional(),
+  organization: z.string().nullable().optional(),
+  notificationPreferences: z.object({
+    messages: z.boolean(),
+    trips: z.boolean(),
+    bookings: z.boolean(),
+    payments: z.boolean(),
+    marketing: z.boolean(),
+  }).nullable().optional(),
 });
 
 export const insertDriverSchema = z.object({
@@ -227,6 +276,13 @@ export const insertBookingSchema = z.object({
   status: z.string().default(BookingStatus.PENDING),
   pickupLocation: z.string().optional(),
   dropLocation: z.string().optional(),
+  promoCodeId: z.string().optional().nullable(),
+  preferences: z.object({
+    acPreferred: z.boolean(),
+    musicAllowed: z.boolean(),
+    petFriendly: z.boolean(),
+    luggageCapacity: z.number(),
+  }).optional().nullable(),
 });
 
 export const insertPaymentSchema = z.object({
@@ -248,6 +304,14 @@ export const insertRatingSchema = z.object({
   review: z.string().optional(),
 });
 
+export const insertMessageSchema = z.object({
+  tripId: z.string(),
+  senderId: z.string(),
+  receiverId: z.string(),
+  message: z.string(),
+  isRead: z.boolean().default(false),
+});
+
 export const insertLiveLocationSchema = z.object({
   tripId: z.string(),
   driverId: z.string(),
@@ -265,14 +329,22 @@ export const insertNotificationSchema = z.object({
   data: z.record(z.any()).optional(),
 });
 
+export const insertSupportTicketSchema = z.object({
+  userId: z.string().optional().nullable(),
+  name: z.string().min(1, "Name is required"),
+  email: z.string().email("Invalid email address"),
+  message: z.string().min(10, "Message must be at least 10 characters"),
+  status: z.string().default('open'),
+});
+
 export const insertPromoCodeSchema = z.object({
   code: z.string().min(1),
-  discount: z.number(),
-  type: z.enum(['percentage', 'fixed']),
-  description: z.string().optional(),
-  minAmount: z.number().default(0),
-  maxDiscount: z.number().optional(),
-  expiresAt: z.string().optional(),
+  discountType: z.enum(['percentage', 'fixed']),
+  discountValue: z.string(),
+  maxUses: z.number().nullable().optional(),
+  currentUses: z.number().default(0),
+  validFrom: z.string(),
+  validUntil: z.string(),
   isActive: z.boolean().default(true),
 });
 
@@ -283,8 +355,10 @@ export type InsertTrip = z.infer<typeof insertTripSchema>;
 export type InsertBooking = z.infer<typeof insertBookingSchema>;
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
 export type InsertRating = z.infer<typeof insertRatingSchema>;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type InsertLiveLocation = z.infer<typeof insertLiveLocationSchema>;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;
 export type InsertPromoCode = z.infer<typeof insertPromoCodeSchema>;
 
 // Extended types for application logic
@@ -296,10 +370,11 @@ export type BookingWithDetails = Booking & {
   trip: TripWithDriver;
   passenger: User;
   payment?: Payment;
+  promoCode?: PromoCode;
 };
 
-// SOS Alert Interface
-export interface SOSAlert {
+// Emergency Alert Interface
+export interface EmergencyAlert {
   id: string;
   tripId: string;
   userId: string;
@@ -308,9 +383,10 @@ export interface SOSAlert {
   status: string;
   createdAt: string;
   resolvedAt?: string | null;
+  user?: User;
 }
 
-export const insertSOSAlertSchema = z.object({
+export const insertEmergencyAlertSchema = z.object({
   tripId: z.string(),
   userId: z.string(),
   lat: z.string(),
@@ -318,4 +394,94 @@ export const insertSOSAlertSchema = z.object({
   status: z.string().default("triggered"),
 });
 
-export type InsertSOSAlert = z.infer<typeof insertSOSAlertSchema>;
+export type InsertEmergencyAlert = z.infer<typeof insertEmergencyAlertSchema>;
+
+// System Settings
+export interface SystemSettings {
+  id: string;
+  platformFeePercentage: string;
+  maintenanceMode: boolean;
+  supportEmail: string;
+  supportPhone: string;
+  updatedAt: string;
+}
+
+export const insertSystemSettingsSchema = z.object({
+  platformFeePercentage: z.string().default("10"),
+  maintenanceMode: z.boolean().default(false),
+  supportEmail: z.string().email().optional().or(z.literal('')),
+  supportPhone: z.string().optional().or(z.literal('')),
+});
+
+
+export interface SplitFareRequest {
+  id: string;
+  bookingId: string;
+  requesterId: string;
+  participantEmail: string;
+  amount: string;
+  status: 'pending' | 'paid' | 'declined';
+  createdAt: string;
+}
+
+export const insertSplitFareRequestSchema = z.object({
+  bookingId: z.string(),
+  requesterId: z.string(),
+  participantEmail: z.string().email(),
+  amount: z.string(),
+  status: z.enum(['pending', 'paid', 'declined']).default('pending'),
+});
+
+export type InsertSplitFareRequest = z.infer<typeof insertSplitFareRequestSchema>;
+
+// Ride Requests (for Instant Booking)
+export const RideRequestStatus = {
+  PENDING: "pending",   // Looking for driver
+  ACCEPTED: "accepted", // Driver accepted
+  REJECTED: "rejected", // Driver rejected (internal/specific) or System rejected
+  CANCELLED: "cancelled", // Passenger cancelled
+  TIMEOUT: "timeout"    // No driver found
+} as const;
+
+export interface RideRequest {
+  id: string;
+  passengerId: string;
+  pickupLocation: string;
+  pickupLat: string;
+  pickupLng: string;
+  dropLocation: string;
+  dropLat: string;
+  dropLng: string;
+  status: string;
+  fare: string;
+  distance: string;
+  duration: number;
+  vehicleType: string;
+  driverId?: string | null; // Set when accepted
+  tripId?: string | null;   // Created trip ID after acceptance
+  organization_only?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const insertRideRequestSchema = z.object({
+  passengerId: z.string(),
+  pickupLocation: z.string(),
+  pickupLat: z.string(),
+  pickupLng: z.string(),
+  dropLocation: z.string(),
+  dropLat: z.string(),
+  dropLng: z.string(),
+  status: z.string().default(RideRequestStatus.PENDING),
+  fare: z.string(),
+  distance: z.string(),
+  duration: z.number(),
+  vehicleType: z.string(),
+  driverId: z.string().nullable().optional(),
+  tripId: z.string().nullable().optional(),
+  organization_only: z.boolean().default(false),
+});
+
+export type InsertRideRequest = z.infer<typeof insertRideRequestSchema>;
+
+

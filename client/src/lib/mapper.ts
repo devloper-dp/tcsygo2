@@ -1,4 +1,5 @@
-import { Trip, TripWithDriver, Driver, User, Booking, BookingWithDetails, Notification, PromoCode } from '@shared/schema';
+
+import { Trip, TripWithDriver, Driver, User, Booking, BookingWithDetails, Notification, PromoCode, EmergencyAlert, SupportTicket } from '@shared/schema';
 
 export function mapUser(data: any): User {
     if (!data) return data;
@@ -11,6 +12,9 @@ export function mapUser(data: any): User {
         role: data.role,
         bio: data.bio,
         verificationStatus: data.verification_status,
+        pushToken: data.push_token,
+        organization: data.organization,
+        notificationPreferences: data.notification_preferences,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
     };
@@ -18,7 +22,7 @@ export function mapUser(data: any): User {
 
 export function mapDriver(data: any): Driver {
     if (!data) return data;
-    return {
+    const driver: any = {
         id: data.id,
         userId: data.user_id,
         licenseNumber: data.license_number,
@@ -37,6 +41,13 @@ export function mapDriver(data: any): Driver {
         createdAt: data.created_at,
         updatedAt: data.updated_at,
     };
+
+    // Attach user dictionary if it exists in the raw data (joined query)
+    if (data.user) {
+        (driver as any).user = mapUser(data.user);
+    }
+
+    return driver;
 }
 
 export function mapTrip(data: any): TripWithDriver {
@@ -60,6 +71,8 @@ export function mapTrip(data: any): TripWithDriver {
         status: data.status,
         route: data.route,
         preferences: data.preferences || {},
+        basePrice: data.base_price,
+        surgeMultiplier: data.surge_multiplier,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
     };
@@ -96,6 +109,14 @@ export function mapBooking(data: any): BookingWithDetails {
     if (data.passenger) {
         booking.passenger = mapUser(data.passenger);
     }
+    if (data.promoCode) {
+        booking.promoCode = mapPromoCode(data.promoCode);
+    }
+
+    // Map promo_code_id if available
+    if (data.promo_code_id) {
+        booking.promoCodeId = data.promo_code_id;
+    }
 
     return booking;
 }
@@ -117,7 +138,7 @@ export function mapPayment(data: any): any { // using any for return type tempor
     };
 }
 
-export function mapSOSAlert(data: any): any {
+export function mapEmergencyAlert(data: any): EmergencyAlert {
     if (!data) return data;
     const alert: any = {
         id: data.id,
@@ -154,13 +175,27 @@ export function mapPromoCode(data: any): PromoCode {
     return {
         id: data.id,
         code: data.code,
-        discount: parseFloat(data.discount),
-        type: data.type,
-        description: data.description,
-        minAmount: parseFloat(data.min_amount || '0'),
-        maxDiscount: data.max_discount ? parseFloat(data.max_discount) : null,
-        expiresAt: data.expires_at,
+        discountType: data.discount_type,
+        discountValue: data.discount_value,
+        maxUses: data.max_uses,
+        currentUses: data.current_uses || 0,
+        validFrom: data.valid_from,
+        validUntil: data.valid_until,
         isActive: data.is_active,
         createdAt: data.created_at,
+    };
+}
+
+export function mapSupportTicket(data: any): SupportTicket {
+    if (!data) return data;
+    return {
+        id: data.id,
+        userId: data.user_id,
+        name: data.name,
+        email: data.email,
+        message: data.message,
+        status: data.status,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
     };
 }

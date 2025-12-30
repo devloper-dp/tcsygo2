@@ -7,11 +7,13 @@ import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ArrowLeft, Calendar, MapPin, Users, Star, Plus } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, Users, Star, Plus, MessageCircle } from 'lucide-react';
 import { TripWithDriver, BookingWithDetails } from '@shared/schema';
 import { format } from 'date-fns';
 import { RatingModal } from '@/components/RatingModal';
-import { NotificationDropdown } from '@/components/NotificationDropdown';
+import { ChatDialog } from '@/components/ChatDialog';
+import { useUnreadMessagesForTrips } from '@/hooks/useUnreadMessages';
+import { Navbar } from '@/components/Navbar';
 import { supabase } from '@/lib/supabase';
 import { mapBooking, mapTrip } from '@/lib/mapper';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,6 +22,18 @@ export default function MyTrips() {
   const [, navigate] = useLocation();
   const [activeTab, setActiveTab] = useState('bookings');
   const [ratingBooking, setRatingBooking] = useState<BookingWithDetails | null>(null);
+  const [chatState, setChatState] = useState<{
+    isOpen: boolean;
+    tripId: string;
+    otherUserId: string;
+    otherUserName: string;
+    otherUserPhoto?: string;
+  }>({
+    isOpen: false,
+    tripId: '',
+    otherUserId: '',
+    otherUserName: '',
+  });
   const { user } = useAuth();
 
   const { data: bookings, isLoading: loadingBookings } = useQuery<BookingWithDetails[]>({
@@ -62,6 +76,19 @@ export default function MyTrips() {
     enabled: !!user,
   });
 
+  // Get unread message counts for all bookings
+  const bookingTrips = bookings?.map(b => ({
+    tripId: b.trip.id,
+    otherUserId: b.trip.driver.userId,
+  })) || [];
+
+  const myTripsList = myTrips?.map(t => ({
+    tripId: t.id,
+    otherUserId: '', // Will be populated per passenger
+  })) || [];
+
+  const unreadCounts = useUnreadMessagesForTrips(bookingTrips);
+
   const cancelBookingMutation = useMutation({
     mutationFn: async (bookingId: string) => {
       // 1. Update booking status
@@ -97,6 +124,7 @@ export default function MyTrips() {
       cancelled: 'bg-destructive/10 text-destructive',
       confirmed: 'bg-success/10 text-success',
       pending: 'bg-warning/10 text-warning',
+      payment_pending: 'bg-warning/10 text-warning',
       rejected: 'bg-destructive/10 text-destructive',
     };
     return colors[status] || 'bg-muted text-muted-foreground';
@@ -104,24 +132,7 @@ export default function MyTrips() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur">
-        <div className="container mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/')} data-testid="button-back">
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-            <h1 className="text-xl font-display font-bold">My Trips</h1>
-          </div>
-
-          <Button onClick={() => navigate('/create-trip')} data-testid="button-create-trip">
-            <Plus className="w-4 h-4 mr-2" />
-            Create Trip
-          </Button>
-          <div className="ml-4">
-            <NotificationDropdown />
-          </div>
-        </div>
-      </header>
+      <Navbar />
 
       <div className="container mx-auto px-6 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -184,15 +195,43 @@ export default function MyTrips() {
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
-                        className="w-full"
+                        size="icon"
+                        className="relative"
+                        onClick={() => setChatState({
+                          isOpen: true,
+                          tripId: booking.trip.id,
+                          otherUserId: booking.trip.driver.userId,
+                          otherUserName: booking.trip.driver.user.fullName,
+                          otherUserPhoto: booking.trip.driver.user.profilePhoto || undefined,
+                        })}
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        {unreadCounts[booking.trip.id] > 0 && (
+                          <Badge className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-[10px]">
+                            {unreadCounts[booking.trip.id]}
+                          </Badge>
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="flex-1"
                         onClick={() => navigate(`/trip/${booking.trip.id}`)}
                         data-testid={`button-view-trip-${booking.id}`}
                       >
                         View Trip
                       </Button>
+                      {booking.status === 'payment_pending' && (
+                        <Button
+                          className="flex-1"
+                          onClick={() => navigate(`/payment/${booking.id}`)}
+                          data-testid={`button-pay-now-${booking.id}`}
+                        >
+                          Pay Now
+                        </Button>
+                      )}
                       {booking.status === 'confirmed' && new Date(booking.trip.departureTime) < new Date() && (
                         <Button
-                          className="w-full"
+                          className="flex-1"
                           variant="secondary"
                           onClick={() => setRatingBooking(booking)}
                         >
@@ -201,7 +240,7 @@ export default function MyTrips() {
                       )}
                       {(booking.status === 'confirmed' || booking.status === 'pending') && new Date(booking.trip.departureTime) > new Date() && (
                         <Button
-                          className="w-full"
+                          className="flex-1"
                           variant="destructive"
                           onClick={() => cancelBookingMutation.mutate(booking.id)}
                           disabled={cancelBookingMutation.isPending}
@@ -314,6 +353,15 @@ export default function MyTrips() {
           driverName={ratingBooking.trip.driver.user.fullName}
         />
       )}
+
+      <ChatDialog
+        isOpen={chatState.isOpen}
+        onClose={() => setChatState(prev => ({ ...prev, isOpen: false }))}
+        tripId={chatState.tripId}
+        otherUserId={chatState.otherUserId}
+        otherUserName={chatState.otherUserName}
+        otherUserPhoto={chatState.otherUserPhoto}
+      />
     </div>
   );
 }

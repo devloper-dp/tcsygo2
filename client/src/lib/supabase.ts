@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
+
 // Environment variables for Supabase configuration
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -29,7 +30,7 @@ Get your credentials from: https://app.supabase.com/project/_/settings/api
 }
 
 // Create Supabase client with fallback for development
-export const supabase = createClient(
+const client = createClient(
   supabaseUrl || 'https://placeholder.supabase.co',
   supabaseAnonKey || 'placeholder-key',
   {
@@ -38,11 +39,6 @@ export const supabase = createClient(
       persistSession: true,
       detectSessionInUrl: true,
       storageKey: 'tcsygo-auth',
-    },
-    global: {
-      headers: {
-        'x-application-name': 'tcsygo-web',
-      },
     },
     db: {
       schema: 'public',
@@ -54,6 +50,9 @@ export const supabase = createClient(
     },
   }
 );
+
+// Export client directly
+export const supabase = client;
 
 // Export configuration status for use in components
 export const isSupabaseConfigured = isConfigured;

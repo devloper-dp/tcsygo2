@@ -1,6 +1,20 @@
-# TCSYGO - Carpooling Platform
+# TCSYGO - Indore Carpooling Platform
 
-A comprehensive BlaBlaCar + Rapido-style ride-sharing platform with React web app, React Native mobile app, and Supabase backend.
+A comprehensive BlaBlaCar + Rapido-style ride-sharing platform for Indore city, Madhya Pradesh. Built with React web app, React Native mobile app, and Supabase backend.
+
+## 📑 Table of Contents
+
+- [Features](#-features)
+- [Architecture](#-architecture)
+- [Quick Start](#-quick-start)
+- [Database Setup](#-database-setup)
+- [Supabase Setup](#-supabase-setup)
+- [Mobile App Setup](#-mobile-app-setup)
+- [Project Structure](#-project-structure)
+- [API Endpoints](#-api-endpoints)
+- [Security](#-security)
+- [Rapido Features](#-rapido-features)
+- [Troubleshooting](#-troubleshooting)
 
 ## 🌟 Features
 
@@ -10,6 +24,9 @@ A comprehensive BlaBlaCar + Rapido-style ride-sharing platform with React web ap
 - **Real-time Tracking**: Track your driver's location during the trip
 - **Rate Drivers**: Leave reviews and ratings after trips
 - **Profile Management**: Manage your account and trip history
+- **Ride Preferences**: Customize AC, music, pets, luggage preferences
+- **Split Fare**: Share ride costs with friends
+- **Safety Check-ins**: Periodic safety verification during rides
 
 ### For Drivers
 - **Create Trips**: Publish trips with custom pricing and preferences
@@ -17,6 +34,7 @@ A comprehensive BlaBlaCar + Rapido-style ride-sharing platform with React web ap
 - **Real-time Location**: Share live GPS location during trips
 - **Driver Verification**: Complete verification to start offering rides
 - **Earnings Dashboard**: Track your earnings and trip statistics
+- **Auto-Pay**: Automatic payment after ride completion
 
 ### For Admins
 - **Driver Verification**: Approve or reject driver applications
@@ -30,7 +48,7 @@ A comprehensive BlaBlaCar + Rapido-style ride-sharing platform with React web ap
 - **TanStack Query** for data fetching and caching
 - **Wouter** for client-side routing
 - **Shadcn UI** + **Tailwind CSS** for beautiful, accessible components
-- **Mapbox GL JS** for interactive maps and routing
+- **Leaflet** with **OpenStreetMap** for interactive maps and routing
 
 ### Frontend (Mobile)
 - **React Native** with **Expo** framework
@@ -41,7 +59,6 @@ A comprehensive BlaBlaCar + Rapido-style ride-sharing platform with React web ap
 - **Expo Notifications** for push notifications
 
 ### Backend
-- **Express.js** server with modular service architecture
 - **Supabase** for authentication, database, and realtime features
 - **Razorpay** for payment processing
 - **Event-driven** architecture with EventEmitter
@@ -55,13 +72,12 @@ A comprehensive BlaBlaCar + Rapido-style ride-sharing platform with React web ap
 6. **NotificationService**: Push notifications and in-app alerts
 7. **RatingService**: Driver and passenger rating system
 
-## 🚀 Getting Started
+## 🚀 Quick Start
 
 ### Prerequisites
 - Node.js 18+ installed
 - Supabase account (https://supabase.com)
 - Razorpay account (https://razorpay.com)
-- Mapbox account (https://mapbox.com)
 
 ### Web App Setup
 
@@ -72,219 +88,201 @@ npm install
 
 2. **Configure environment variables**:
 
-Create a `.env` file or add these to Replit Secrets:
-```
-VITE_SUPABASE_URL=your_supabase_project_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_key
-VITE_RAZORPAY_KEY_ID=your_razorpay_key_id
+Create a `.env` file in the project root:
+```env
+# Server Configuration
+PORT=5000
+NODE_ENV=development
+
+# Supabase Configuration
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key-here
+EXPO_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+
+# Razorpay Payment Gateway
+RAZORPAY_KEY_ID=rzp_test_your_key_id
 RAZORPAY_KEY_SECRET=your_razorpay_secret
-VITE_MAPBOX_ACCESS_TOKEN=your_mapbox_token
-SESSION_SECRET=your_session_secret
 ```
 
-3. **Set up Supabase database**:
-
-Run these SQL commands in your Supabase SQL editor:
-
-```sql
--- Create users table
-CREATE TABLE users (
-  id VARCHAR PRIMARY KEY,
-  email TEXT UNIQUE NOT NULL,
-  full_name TEXT NOT NULL,
-  phone TEXT,
-  profile_photo TEXT,
-  role TEXT NOT NULL DEFAULT 'passenger',
-  bio TEXT,
-  verification_status TEXT DEFAULT 'pending',
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- Create drivers table
-CREATE TABLE drivers (
-  id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id VARCHAR REFERENCES users(id) NOT NULL,
-  license_number TEXT NOT NULL,
-  license_photo TEXT,
-  vehicle_make TEXT NOT NULL,
-  vehicle_model TEXT NOT NULL,
-  vehicle_year INTEGER NOT NULL,
-  vehicle_color TEXT NOT NULL,
-  vehicle_plate TEXT NOT NULL,
-  vehicle_photos JSONB DEFAULT '[]',
-  is_available BOOLEAN DEFAULT FALSE,
-  rating DECIMAL(3,2) DEFAULT 0.00,
-  total_trips INTEGER DEFAULT 0,
-  verification_status TEXT DEFAULT 'pending',
-  documents JSONB DEFAULT '[]',
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- Create trips table
-CREATE TABLE trips (
-  id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
-  driver_id VARCHAR REFERENCES drivers(id) NOT NULL,
-  pickup_location TEXT NOT NULL,
-  pickup_lat DECIMAL(10,7) NOT NULL,
-  pickup_lng DECIMAL(10,7) NOT NULL,
-  drop_location TEXT NOT NULL,
-  drop_lat DECIMAL(10,7) NOT NULL,
-  drop_lng DECIMAL(10,7) NOT NULL,
-  departure_time TIMESTAMP NOT NULL,
-  distance DECIMAL(10,2) NOT NULL,
-  duration INTEGER NOT NULL,
-  price_per_seat DECIMAL(10,2) NOT NULL,
-  available_seats INTEGER NOT NULL,
-  total_seats INTEGER NOT NULL,
-  status TEXT NOT NULL DEFAULT 'upcoming',
-  route JSONB,
-  preferences JSONB DEFAULT '{}',
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- Create bookings table
-CREATE TABLE bookings (
-  id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
-  trip_id VARCHAR REFERENCES trips(id) NOT NULL,
-  passenger_id VARCHAR REFERENCES users(id) NOT NULL,
-  seats_booked INTEGER NOT NULL DEFAULT 1,
-  total_amount DECIMAL(10,2) NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
-  pickup_location TEXT,
-  drop_location TEXT,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- Create payments table
-CREATE TABLE payments (
-  id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
-  booking_id VARCHAR REFERENCES bookings(id) NOT NULL,
-  amount DECIMAL(10,2) NOT NULL,
-  platform_fee DECIMAL(10,2) NOT NULL,
-  driver_earnings DECIMAL(10,2) NOT NULL,
-  razorpay_order_id TEXT,
-  razorpay_payment_id TEXT,
-  status TEXT NOT NULL DEFAULT 'pending',
-  payment_method TEXT,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- Create ratings table
-CREATE TABLE ratings (
-  id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
-  trip_id VARCHAR REFERENCES trips(id) NOT NULL,
-  from_user_id VARCHAR REFERENCES users(id) NOT NULL,
-  to_user_id VARCHAR REFERENCES users(id) NOT NULL,
-  rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
-  review TEXT,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Create live_locations table
-CREATE TABLE live_locations (
-  id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
-  trip_id VARCHAR REFERENCES trips(id) NOT NULL,
-  driver_id VARCHAR REFERENCES drivers(id) NOT NULL,
-  lat DECIMAL(10,7) NOT NULL,
-  lng DECIMAL(10,7) NOT NULL,
-  heading DECIMAL(5,2),
-  speed DECIMAL(5,2),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- Create notifications table
-CREATE TABLE notifications (
-  id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id VARCHAR REFERENCES users(id) NOT NULL,
-  title TEXT NOT NULL,
-  message TEXT NOT NULL,
-  type TEXT NOT NULL,
-  is_read BOOLEAN DEFAULT FALSE,
-  data JSONB,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Create indexes
-CREATE INDEX idx_trips_status ON trips(status);
-CREATE INDEX idx_trips_departure ON trips(departure_time);
-CREATE INDEX idx_bookings_passenger ON bookings(passenger_id);
-CREATE INDEX idx_bookings_trip ON bookings(trip_id);
-CREATE INDEX idx_locations_trip ON live_locations(trip_id);
-```
-
-4. **Start the application**:
+3. **Start the application**:
 ```bash
 npm run dev
 ```
 
 The app will be available at http://localhost:5000
 
-### Mobile App Setup
+## 🗄️ Database Setup
 
-See `mobile/README.md` for detailed React Native setup instructions.
+### Step 1: Run Core Database Setup
 
-## 📱 Key Pages
+1. Go to your Supabase Dashboard → SQL Editor
+2. Run `supabase/COMPLETE_SETUP.sql` - This creates:
+   - All 15 core database tables
+   - Complete RLS policies for security
+   - Storage buckets (profile-photos, vehicles, licenses, documents)
+   - Core triggers and functions
+   - Performance indexes
 
-### Web Application
-- `/` - Landing page with trip search
-- `/search` - Search results with map view
-- `/create-trip` - Create a new trip (drivers)
-- `/trip/:id` - Trip details and booking
-- `/my-trips` - View your bookings and trips
-- `/profile` - User profile and settings
-- `/payment/:bookingId` - Payment checkout
-- `/admin` - Admin dashboard
+### Step 2: Run Rapido Features Setup
 
-### Mobile Application
-- Home (Map) - Find nearby trips
-- Search - Browse and filter trips
-- My Trips - Manage bookings and created trips
-- Profile - Account settings and driver info
+1. In Supabase SQL Editor
+2. Run `supabase/RAPIDO_FEATURES_COMPLETE.sql` - This adds:
+   - All 14 Rapido feature tables
+   - Ride preferences, auto-pay, split fare
+   - Safety check-ins, driver tips, wallets
+   - Saved places, emergency contacts
+   - Referral program, surge pricing
+   - Additional storage buckets
 
-## 🔐 Security Features
+### Core Tables
+- **users**: User profiles linked to Supabase Auth
+- **drivers**: Driver-specific information and verification
+- **trips**: Ride sharing trip listings
+- **bookings**: Trip booking records
+- **payments**: Payment transactions and payout tracking
+- **messages**: In-app chat between users
+- **notifications**: Push notification records
+- **live_locations**: Real-time driver location tracking
+- **ratings**: User and driver ratings/reviews
+- **emergency_alerts**: SOS emergency alerts
 
-- **Supabase Auth**: Secure authentication with email/password
-- **Role-based Access**: Passenger, Driver, and Admin roles
-- **Payment Security**: Razorpay with signature verification
-- **Environment Variables**: Sensitive keys stored securely
-- **Database RLS**: Row-level security on Supabase (recommended)
+### Rapido Feature Tables
+- **ride_preferences**: User ride customization
+- **auto_pay_settings**: Automatic payment configuration
+- **split_fare_requests**: Fare splitting between users
+- **safety_checkins**: Periodic safety verification
+- **driver_tips**: Tipping functionality
+- **wallets**: User wallet balances
+- **wallet_transactions**: Transaction history
+- **saved_places**: Home, work, favorites
+- **emergency_contacts**: Safety contacts
+- **referral_codes**: Referral program
+- **favorite_routes**: Frequently used routes
+- **ride_statistics**: User ride analytics
+- **surge_pricing_zones**: Dynamic pricing
+- **ride_recordings**: Trip replay data
 
-## 🎨 Design System
+## 🔧 Supabase Setup
 
-- **Colors**: Blue primary (#3b82f6), Green success, Red destructive
-- **Typography**: Inter for body text, Poppins for headings
-- **Components**: Shadcn UI with Radix primitives
-- **Responsive**: Mobile-first design with Tailwind breakpoints
-- **Dark Mode**: System preference detection (web)
+### Step 1: Create Supabase Project
 
-## 🛠️ Tech Stack
+1. Go to [https://supabase.com/dashboard](https://supabase.com/dashboard)
+2. Click **"New Project"**
+3. Fill in details:
+   - **Project Name**: `tcsygo-production`
+   - **Database Password**: Create a strong password (save securely!)
+   - **Region**: Choose closest to users (e.g., `ap-south-1` for India)
+4. Wait 2-3 minutes for provisioning
 
-**Frontend**:
-- React 18.2
-- TypeScript 5.1
-- Tailwind CSS 3.4
-- Shadcn UI Components
-- TanStack Query v5
-- Wouter Router
-- Mapbox GL JS
+### Step 2: Get Your Credentials
 
-**Backend**:
-- Node.js / Express
-- Supabase
-- Razorpay Payments
-- EventEmitter3
+1. Go to **Settings** → **API**
+2. Copy and save:
+   - **Project URL**: `https://your-project-ref.supabase.co`
+   - **anon/public key** (safe for client-side)
+   - **service_role key** (⚠️ **NEVER expose publicly!**)
 
-**Mobile**:
-- React Native 0.73
-- Expo SDK 50
-- React Native Maps
-- Expo Router
+### Step 3: Configure Authentication
+
+1. Go to **Authentication** → **Providers**
+2. Enable **Email** provider
+3. Configure settings:
+   - ✅ Enable email confirmations (recommended for production)
+   - ✅ Secure email change
+   - ✅ Secure password change
+
+4. Go to **Authentication** → **Settings**
+5. Configure:
+   - **Site URL**: `http://localhost:5173` (development) or production URL
+   - **Redirect URLs**: Add allowed URLs:
+     ```
+     http://localhost:5173/**
+     http://localhost:5000/**
+     https://your-production-domain.com/**
+     ```
+
+### Step 4: Set Up Database Schema
+
+1. Go to **SQL Editor** in Supabase dashboard
+2. Run `supabase/COMPLETE_SETUP.sql`
+3. Run `supabase/RAPIDO_FEATURES_COMPLETE.sql`
+4. Verify all tables exist in **Table Editor**
+
+### Step 5: Configure Storage Buckets
+
+Verify these buckets were created:
+- ✅ `profile-photos` (Public)
+- ✅ `vehicles` (Public)
+- ✅ `licenses` (Private)
+- ✅ `documents` (Private)
+- ✅ `receipts` (Private)
+- ✅ `safety-media` (Private)
+
+### Step 6: Deploy Edge Functions (Optional)
+
+```bash
+# Install Supabase CLI
+npm install -g supabase
+
+# Login
+supabase login
+
+# Link project
+supabase link --project-ref your-project-ref
+
+# Deploy functions
+supabase functions deploy create-payment-order
+supabase functions deploy verify-payment
+supabase functions deploy send-push-notification
+supabase functions deploy update-live-location
+supabase functions deploy safety-checkin
+```
+
+### Step 7: Configure Secrets
+
+```bash
+# Set Razorpay secrets
+supabase secrets set RAZORPAY_KEY_ID=rzp_test_your_key_id
+supabase secrets set RAZORPAY_KEY_SECRET=your_razorpay_secret
+
+# Set Expo push notification token (if using)
+supabase secrets set EXPO_PUSH_TOKEN=your_expo_push_token
+```
+
+## 📱 Mobile App Setup
+
+See detailed instructions in [`mobile/README.md`](mobile/README.md)
+
+### Quick Start
+
+1. Navigate to mobile directory:
+```bash
+cd mobile
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Configure environment variables in `mobile/.env`:
+```env
+EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+EXPO_PUBLIC_RAZORPAY_KEY_ID=your_razorpay_key_id
+```
+
+4. Start development server:
+```bash
+npm start
+```
+
+5. Choose platform:
+   - Press `i` for iOS simulator
+   - Press `a` for Android emulator
+   - Scan QR code with Expo Go app
 
 ## 📦 Project Structure
 
@@ -298,37 +296,20 @@ See `mobile/README.md` for detailed React Native setup instructions.
 │   │   ├── lib/           # Utilities and configs
 │   │   └── App.tsx        # Main app component
 │   └── index.html
-├── server/                # Express backend
-│   ├── services/          # Business logic services
-│   ├── routes.ts          # API routes
-│   └── index.ts           # Server entry
 ├── mobile/                # React Native app
 │   ├── app/               # Expo Router screens
 │   ├── components/        # Mobile components
+│   ├── services/          # Mobile services
 │   └── lib/               # Mobile utilities
 ├── shared/                # Shared types and schemas
 │   └── schema.ts          # Database schema and types
+├── supabase/              # Supabase configuration
+│   ├── COMPLETE_SETUP.sql
+│   ├── RAPIDO_FEATURES_COMPLETE.sql
+│   ├── SEED_DATA.sql
+│   └── functions/         # Edge Functions
 └── attached_assets/       # Generated images
-
 ```
-
-## 🔄 Real-time Features
-
-- **Live Location Tracking**: Supabase Realtime channels
-- **Booking Updates**: Real-time booking status changes
-- **Notifications**: Instant push notifications
-- **Trip Status**: Live trip status updates
-
-## 💳 Payment Flow
-
-1. Passenger selects trip and seats
-2. Booking created with "pending" status
-3. Payment order created via Razorpay
-4. User completes payment
-5. Payment verified with signature check
-6. Booking status updated to "confirmed"
-7. Platform fee and driver earnings calculated
-8. Notifications sent to driver and passenger
 
 ## 📝 API Endpoints
 
@@ -360,16 +341,145 @@ See `mobile/README.md` for detailed React Native setup instructions.
 - `POST /api/ratings` - Create rating
 - `GET /api/ratings/user/:userId` - Get user ratings
 
-## 🚧 Future Enhancements
+## 🔐 Security
 
-- SOS emergency button
+### Authentication
+- **Supabase Auth**: Secure authentication with email/password
+- **JWT Token Management**: Automatic token refresh
+- **Row-based Access**: Passenger, Driver, and Admin roles
+
+### Database Security
+- **Row Level Security (RLS)**: Enabled on all tables
+- **User-specific Access**: Users can only access their own data
+- **Encrypted Passwords**: bcrypt hashing
+
+### Payment Security
+- **Razorpay Integration**: PCI-compliant payment processing
+- **Signature Verification**: Server-side payment verification
+- **Secure Keys**: Service keys never exposed to client
+
+### Storage Security
+- **Private Buckets**: Sensitive documents (licenses, documents)
+- **Public Buckets**: Profile photos, vehicle images
+- **Access Policies**: User-specific file access
+
+## ✨ Rapido Features
+
+### Ride Preferences
+- AC preference toggle
+- Music preference
+- Pet-friendly option
+- Luggage capacity slider (0-5 bags)
+
+### Auto-Pay System
+- Enable/disable automatic payments
+- Default payment method selection
+- Daily spending limits
+- Secure encrypted transactions
+
+### Split Fare
+- Equal split or custom amounts
+- Email invitations to split participants
+- Payment tracking
+- Individual payment status
+
+### Geofencing Alerts
+- Pickup proximity alerts (500m, 50m)
+- Drop location alerts
+- Real-time distance calculation
+- Visual and haptic feedback
+
+### Safety Check-ins
+- Automated prompts every 10 minutes
+- "I'm Safe" or "I Need Help" buttons
+- Emergency escalation after 2 missed check-ins
+- GPS location recording
+- Emergency contact notifications
+
+### Trip Replay
+- Animated route playback
+- Playback controls (play, pause, speed)
+- Trip statistics (distance, duration, speed)
+- Route visualization on map
+- Timeline scrubbing
+
+### Driver Verification
+- Photo verification
+- Vehicle details confirmation
+- License plate display
+- Safety checklist
+- Report mismatch option
+
+### Enhanced Quick Actions
+- Repeat last ride
+- Saved places (home, work, favorites)
+- Recent destinations
+- Smart suggestions
+
+### Offline Mode Indicator
+- Real-time connection status
+- Visual alert banner
+- Auto-hide when online
+- User guidance for limited functionality
+
+### Multi-Language Support
+- English, Hindi (हिंदी), Marathi (मराठी)
+- Native script display
+- Persistent language preference
+- Easy language switching
+
+### Notification Center
+- Real-time notifications via Supabase
+- Categorization (bookings, arrivals, payments, offers)
+- Filter options (all/unread)
+- Mark as read/delete
+- Unread count badge
+
+## 🆘 Troubleshooting
+
+### "Invalid API key" Error
+- Verify correct API keys from Supabase dashboard
+- Use `anon` key for client-side code
+- Check `.env` file is in project root
+
+### "Permission denied" or RLS Errors
+- Verify RLS policies created correctly
+- Check user is authenticated
+- Ensure user has correct role
+- Review policies in Table Editor → Policies tab
+
+### Storage Upload Fails
+- Verify buckets exist and configured correctly
+- Check storage policies applied
+- Ensure file path follows: `{user_id}/{filename}`
+- Verify file size within limits
+
+### Edge Functions Not Working
+- Verify functions deployed: `supabase functions list`
+- Check logs: `supabase functions logs function-name`
+- Ensure secrets set correctly
+- Verify `--no-verify-jwt` flag if not using JWT
+
+### Database Connection Errors
+- Check internet connection
+- Verify Supabase project running (not paused)
+- Check database password correct
+- Ensure correct project URL
+
+### "Relation does not exist" Error
+- Verify SQL scripts ran successfully
+- Check SQL Editor for errors
+- Try running scripts again
+- Verify connected to correct project
+
+## 🎯 Future Enhancements
+
 - Multi-stop trip support
 - Automated payout scheduling
 - Advanced analytics dashboard
 - Trip sharing with deep links
-- Surge pricing algorithms
 - Dispute resolution workflow
-- In-app chat between drivers and passengers
+- In-app video chat
 
 ## 📄 License
 
@@ -382,3 +492,14 @@ This is a private project. Contact the team for contribution guidelines.
 ## 📞 Support
 
 For support, email support@tcsygo.com or open an issue in the repository.
+
+## 📚 Additional Documentation
+
+- [Mobile App Setup](mobile/README.md)
+- [Supabase Configuration](supabase/README.md)
+- [Supabase Documentation](https://supabase.com/docs)
+- [Razorpay Documentation](https://razorpay.com/docs)
+
+---
+
+**Last Updated:** 2025-12-28

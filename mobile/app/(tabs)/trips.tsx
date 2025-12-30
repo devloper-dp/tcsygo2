@@ -165,74 +165,46 @@ export default function MyTripsScreen() {
                             {loadingBookings ? (
                                 <ActivityIndicator size="large" className="mt-10" color="#3b82f6" />
                             ) : bookings && bookings.length > 0 ? (
-                                <View className="gap-4">
-                                    {bookings.map((booking: any) => (
-                                        <Card key={booking.id} className="p-4">
-                                            <View className="flex-row justify-between items-start mb-2">
-                                                <Badge variant={getStatusColor(booking.status)}>
-                                                    <Text>{booking.status}</Text>
-                                                </Badge>
-                                                <View className="items-end">
-                                                    <Text className="font-bold text-lg">₹{booking.totalAmount}</Text>
-                                                    <Text className="text-xs text-gray-500">{booking.seatsBooked} seats</Text>
-                                                </View>
+                                <View className="gap-6">
+                                    {/* Active Bookings */}
+                                    {bookings.filter((b: any) => ['upcoming', 'ongoing', 'confirmed', 'pending'].includes(b.status)).length > 0 && (
+                                        <View>
+                                            <Text className="text-lg font-bold mb-3 text-blue-600">Active Rides</Text>
+                                            <View className="gap-4">
+                                                {bookings
+                                                    .filter((b: any) => ['upcoming', 'ongoing', 'confirmed', 'pending'].includes(b.status))
+                                                    .map((booking: any) => (
+                                                        <BookingCard
+                                                            key={booking.id}
+                                                            booking={booking}
+                                                            onCancel={handleCancelBooking}
+                                                            onRate={(b) => setRatingBooking(b)}
+                                                            getStatusColor={getStatusColor}
+                                                        />
+                                                    ))}
                                             </View>
+                                        </View>
+                                    )}
 
-                                            <View className="flex-row items-center gap-3 mb-4">
-                                                <Avatar className="w-10 h-10">
-                                                    <AvatarImage src={booking.trip.driver.user.profilePhoto || undefined} />
-                                                    <AvatarFallback>{booking.trip.driver.user.fullName.charAt(0)}</AvatarFallback>
-                                                </Avatar>
-                                                <View>
-                                                    <Text className="font-semibold">{booking.trip.driver.user.fullName}</Text>
-                                                    <View className="flex-row items-center">
-                                                        <Ionicons name="star" size={12} color="#eab308" />
-                                                        <Text className="text-xs ml-1">{booking.trip.driver.rating}</Text>
-                                                    </View>
-                                                </View>
+                                    {/* Past Bookings */}
+                                    {bookings.filter((b: any) => ['completed', 'cancelled', 'rejected'].includes(b.status)).length > 0 && (
+                                        <View>
+                                            <Text className="text-lg font-bold mb-3 text-gray-600">Past Rides</Text>
+                                            <View className="gap-4">
+                                                {bookings
+                                                    .filter((b: any) => ['completed', 'cancelled', 'rejected'].includes(b.status))
+                                                    .map((booking: any) => (
+                                                        <BookingCard
+                                                            key={booking.id}
+                                                            booking={booking}
+                                                            onCancel={handleCancelBooking}
+                                                            onRate={(b) => setRatingBooking(b)}
+                                                            getStatusColor={getStatusColor}
+                                                        />
+                                                    ))}
                                             </View>
-
-                                            <View className="gap-2 mb-4">
-                                                <View className="flex-row gap-2 items-center">
-                                                    <Ionicons name="location" size={16} color="green" />
-                                                    <Text className="text-sm flex-1" numberOfLines={1}>{booking.trip.pickupLocation}</Text>
-                                                </View>
-                                                <View className="flex-row gap-2 items-center">
-                                                    <Ionicons name="location" size={16} color="red" />
-                                                    <Text className="text-sm flex-1" numberOfLines={1}>{booking.trip.dropLocation}</Text>
-                                                </View>
-                                                <View className="flex-row gap-2 items-center">
-                                                    <Ionicons name="calendar" size={16} color="gray" />
-                                                    <Text className="text-sm text-gray-500">{format(new Date(booking.trip.departureTime), 'MMM dd, hh:mm a')}</Text>
-                                                </View>
-                                            </View>
-
-                                            <View className="gap-2">
-                                                <Button onPress={() => router.push(`/trip/${booking.trip.id}`)} variant="outline">
-                                                    <Text>View Trip</Text>
-                                                </Button>
-
-                                                {/* Rate Driver button for completed trips */}
-                                                {booking.status === 'confirmed' && new Date(booking.trip.departureTime) < new Date() && (
-                                                    <Button onPress={() => setRatingBooking(booking)} variant="secondary">
-                                                        <Text>Rate Driver</Text>
-                                                    </Button>
-                                                )}
-
-                                                {/* Cancel button for pending/confirmed bookings */}
-                                                {(booking.status === 'confirmed' || booking.status === 'pending') &&
-                                                    new Date(booking.trip.departureTime) > new Date() && (
-                                                        <Button
-                                                            onPress={() => handleCancelBooking(booking.id)}
-                                                            variant="destructive"
-                                                            disabled={cancelBookingMutation.isPending}
-                                                        >
-                                                            <Text>Cancel Booking</Text>
-                                                        </Button>
-                                                    )}
-                                            </View>
-                                        </Card>
-                                    ))}
+                                        </View>
+                                    )}
                                 </View>
                             ) : (
                                 <View className="items-center py-10">
@@ -314,5 +286,75 @@ export default function MyTripsScreen() {
                 />
             )}
         </SafeAreaView>
+    );
+}
+
+function BookingCard({ booking, onCancel, onRate, getStatusColor }: any) {
+    const router = useRouter();
+    return (
+        <Card className="p-4">
+            <View className="flex-row justify-between items-start mb-2">
+                <Badge variant={getStatusColor(booking.status)}>
+                    <Text>{booking.status}</Text>
+                </Badge>
+                <View className="items-end">
+                    <Text className="font-bold text-lg">₹{booking.totalAmount}</Text>
+                    <Text className="text-xs text-gray-500">{booking.seatsBooked} seats</Text>
+                </View>
+            </View>
+
+            <View className="flex-row items-center gap-3 mb-4">
+                <Avatar className="w-10 h-10">
+                    <AvatarImage src={booking.trip.driver.user.profilePhoto || undefined} />
+                    <AvatarFallback>{booking.trip.driver.user.fullName.charAt(0)}</AvatarFallback>
+                </Avatar>
+                <View>
+                    <Text className="font-semibold">{booking.trip.driver.user.fullName}</Text>
+                    <View className="flex-row items-center">
+                        <Ionicons name="star" size={12} color="#eab308" />
+                        <Text className="text-xs ml-1">{booking.trip.driver.rating}</Text>
+                    </View>
+                </View>
+            </View>
+
+            <View className="gap-2 mb-4">
+                <View className="flex-row gap-2 items-center">
+                    <Ionicons name="location" size={16} color="green" />
+                    <Text className="text-sm flex-1" numberOfLines={1}>{booking.trip.pickupLocation}</Text>
+                </View>
+                <View className="flex-row gap-2 items-center">
+                    <Ionicons name="location" size={16} color="red" />
+                    <Text className="text-sm flex-1" numberOfLines={1}>{booking.trip.dropLocation}</Text>
+                </View>
+                <View className="flex-row gap-2 items-center">
+                    <Ionicons name="calendar" size={16} color="gray" />
+                    <Text className="text-sm text-gray-500">{format(new Date(booking.trip.departureTime), 'MMM dd, hh:mm a')}</Text>
+                </View>
+            </View>
+
+            <View className="gap-2">
+                <Button onPress={() => router.push(`/trip/${booking.trip.id}`)} variant="outline">
+                    <Text>View Trip</Text>
+                </Button>
+
+                {/* Rate Driver button for completed trips */}
+                {booking.status === 'confirmed' && new Date(booking.trip.departureTime) < new Date() && (
+                    <Button onPress={() => onRate(booking)} variant="secondary">
+                        <Text>Rate Driver</Text>
+                    </Button>
+                )}
+
+                {/* Cancel button for pending/confirmed bookings */}
+                {(booking.status === 'confirmed' || booking.status === 'pending') &&
+                    new Date(booking.trip.departureTime) > new Date() && (
+                        <Button
+                            onPress={() => onCancel(booking.id)}
+                            variant="destructive"
+                        >
+                            <Text>Cancel Booking</Text>
+                        </Button>
+                    )}
+            </View>
+        </Card>
     );
 }

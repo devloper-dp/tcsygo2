@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useRoute } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -7,24 +7,56 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { queryClient } from '@/lib/queryClient';
-import { ArrowLeft, CreditCard, Shield, CheckCircle } from 'lucide-react';
+import { ArrowLeft, CreditCard, Shield, CheckCircle, Tag } from 'lucide-react';
 import { BookingWithDetails } from '@shared/schema';
 import { supabase } from '@/lib/supabase';
 import { mapBooking } from '@/lib/mapper';
-
-declare global {
-  interface Window {
-    Razorpay: any;
-  }
-}
-
-const RAZORPAY_KEY = import.meta.env.VITE_RAZORPAY_KEY_ID;
+import { PromoCodeInput } from '@/components/PromoCodeInput';
+import { useAuth } from '@/contexts/AuthContext';
+import { MultiPaymentSelector } from '@/components/MultiPaymentSelector';
 
 export default function Payment() {
   const [, navigate] = useLocation();
   const [, params] = useRoute('/payment/:bookingId');
   const { toast } = useToast();
   const bookingId = params?.bookingId;
+  const { user } = useAuth();
+  const [showPromoDialog, setShowPromoDialog] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<{
+    type: 'upi' | 'card' | 'wallet' | 'cash';
+    id?: string;
+    details?: any;
+    isDefault?: boolean;
+  }>({ type: 'wallet', isDefault: false }); // Default to wallet or whatever logic
+
+  // Fetch wallet balance
+  const { data: walletBal } = useQuery({
+    queryKey: ['wallet-balance-payment', user?.id],
+    queryFn: async () => {
+      if (!user) return 0;
+      const { data } = await supabase.from('wallets').select('balance').eq('user_id', user.id).single();
+      return data?.balance || 0;
+    },
+    enabled: !!user
+  });
+
+  // Fetch AutoPay settings (keep this)
+  const { data: autoPaySettings } = useQuery({
+    queryKey: ['auto-pay-settings', user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data, error } = await supabase
+        .from('auto_pay_settings')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+      if (error && error.code !== 'PGRST116') console.error(error);
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  // ... (keep booking query)
 
   const { data: booking, isLoading } = useQuery<BookingWithDetails>({
     queryKey: ['booking-payment', bookingId],
@@ -32,7 +64,7 @@ export default function Payment() {
       if (!bookingId) throw new Error("Booking ID required");
       const { data, error } = await supabase
         .from('bookings')
-        .select('*, trip:trips(*, driver:drivers(*, user:users(*))), passenger:users(*)')
+        .select('*, trip:trips(*, driver:drivers(*, user:users(*))), passenger:users(*), promoCode:promo_codes(*)')
         .eq('id', bookingId)
         .single();
 
@@ -42,15 +74,72 @@ export default function Payment() {
     enabled: !!bookingId,
   });
 
+  // ... (keep updateBookingAmountMutation)
+
+  const updateBookingAmountMutation = useMutation({
+    mutationFn: async ({ amount, promoCodeId }: { amount: number, promoCodeId?: string }) => {
+      const { error } = await supabase
+        .from('bookings')
+        .update({
+          total_amount: amount.toString(),
+          promo_code_id: promoCodeId
+        })
+        .eq('id', bookingId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['booking-payment', bookingId] });
+      toast({ title: 'Promo code applied', description: 'Total amount updated.' });
+    },
+    onError: (e: any) => {
+      toast({ title: 'Update failed', description: e.message, variant: 'destructive' });
+    }
+  });
+
+  const handleApplyPromo = (promo: any) => {
+    if (!booking) return;
+    const fare = parseFloat(trip.pricePerSeat) * booking.seatsBooked;
+    const value = parseFloat(promo.discountValue);
+    let discount = 0;
+    if (promo.discountType === 'percentage') {
+      discount = (fare * value) / 100;
+    } else {
+      discount = value;
+    }
+    const newSubtotal = Math.max(0, fare - discount);
+    const newTotal = newSubtotal * 1.05;
+    updateBookingAmountMutation.mutate({
+      amount: newTotal,
+      promoCodeId: promo.id
+    });
+  };
+
+  const handleRemovePromo = () => {
+    if (!booking) return;
+    const fare = parseFloat(trip.pricePerSeat) * booking.seatsBooked;
+    const newTotal = fare * 1.05;
+    updateBookingAmountMutation.mutate({
+      amount: newTotal,
+      promoCodeId: undefined
+    });
+  };
+
+  // ... (keep mutations createPayment and verifyPayment)
+
   const createPaymentMutation = useMutation({
     mutationFn: async () => {
+      console.log('Payment: Initiating order creation for bookingId:', bookingId);
       const { data, error } = await supabase.functions.invoke('create-payment-order', {
         body: { bookingId }
       });
-      if (error) throw error;
+      if (error) {
+        console.error('Payment: Order creation function error', error);
+        throw error;
+      }
       return data;
     },
     onSuccess: (data) => {
+      console.log('Payment: Order created successfully', { razorpayOrderId: data.razorpayOrderId });
       handleRazorpayPayment(data);
     },
     onError: (error: any) => {
@@ -64,53 +153,56 @@ export default function Payment() {
 
   const verifyPaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
-      // Call Supabase Edge Function to verify payment
+      console.log('Payment: Starting verification for paymentData:', paymentData);
       const { data, error } = await supabase.functions.invoke('verify-payment', {
         body: paymentData
       });
-
-      if (error) throw error;
+      if (error) {
+        console.error('Payment: Verification function error', error);
+        throw error;
+      }
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log('Payment: Verification successful', data);
       queryClient.invalidateQueries({ queryKey: ['booking-payment', bookingId] });
-      // Also invalidate trip details to show updated seats?
       queryClient.invalidateQueries({ queryKey: ['trip-details'] });
-      navigate('/payment-success'); // Should create this page if it doesn't exist, or redirect to home/trip
-      // Actually navigate back to trip or home with success param? 
-      // The original code navigated to /payment-success. Let's assume it exists or I should check routes.
-      // If /payment-success path is not handled, 404.
-      // I'll check routes later. For now stick to existing logic.
+      navigate('/payment-success');
     },
-    onError: () => {
+    onError: (error: any) => {
+      console.error('Payment: Verification mutation error', error);
+      // ... (existing error handling)
       toast({
         title: 'Verification failed',
-        description: 'Payment verification failed. Please contact support.',
+        description: 'Payment verification failed.',
         variant: 'destructive',
       });
     },
   });
 
+  // Razorpay script loading
   useEffect(() => {
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.async = true;
     document.body.appendChild(script);
-
     return () => {
       document.body.removeChild(script);
     };
   }, []);
 
   const handleRazorpayPayment = (orderData: any) => {
+    // ... same logic
+    console.log('Payment: Opening Razorpay checkout modal with orderData:', orderData);
     const options = {
-      key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
+      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
       amount: orderData.amount, // from order creation response
       currency: orderData.currency,
       name: 'TCSYGO',
       description: 'Trip Booking Payment',
       order_id: orderData.razorpayOrderId,
       handler: function (response: any) {
+        console.log('Payment: Razorpay payment handler triggered', { paymentId: response.razorpay_payment_id });
         verifyPaymentMutation.mutate({
           bookingId,
           razorpayOrderId: orderData.razorpayOrderId,
@@ -128,6 +220,7 @@ export default function Payment() {
       },
       modal: {
         ondismiss: function () {
+          console.log('Payment: Razorpay modal dismissed/cancelled by user');
           toast({
             title: 'Payment cancelled',
             description: 'You can try again whenever you\'re ready',
@@ -141,6 +234,84 @@ export default function Payment() {
   };
 
 
+  const handlePayment = async () => {
+    if (!booking) return;
+    const currentTotal = parseFloat(booking.totalAmount);
+
+    if (paymentMethod.type === 'card' || paymentMethod.type === 'upi') {
+      // Use Razorpay for both card and UPI online payments
+      createPaymentMutation.mutate();
+    } else if (paymentMethod.type === 'wallet') {
+      if ((walletBal || 0) < currentTotal) {
+        toast({ title: "Insufficient Balance", description: "Please add money to wallet or choose another method", variant: "destructive" });
+        return;
+      }
+      try {
+        const { error } = await supabase.functions.invoke('deduct-wallet', {
+          body: { userId: user?.id, amount: currentTotal }
+        });
+
+        if (error) throw error;
+
+        await supabase.from('bookings').update({
+          status: 'confirmed',
+          payment_status: 'success',
+          payment_method: 'wallet'
+        }).eq('id', bookingId);
+
+        toast({ title: "Payment Successful", description: "Paid via Wallet" });
+        navigate('/payment-success');
+      } catch (e: any) {
+        console.error("Wallet payment error:", e);
+        toast({ title: "Payment Failed", description: e.message || "An error occurred", variant: "destructive" });
+      }
+    } else if (paymentMethod.type === 'cash') {
+      try {
+        await supabase.from('bookings').update({
+          payment_method: 'cash',
+          payment_status: 'pending'
+        }).eq('id', bookingId);
+        toast({ title: "Cash Payment Selected", description: "Please pay the driver" });
+        navigate('/payment-success');
+      } catch (e: any) {
+        toast({ title: "Error", description: e.message });
+      }
+    }
+  };
+
+
+  // AutoPay effect (keep it, but update setPaymentMethod logic)
+  useEffect(() => {
+    if (booking && booking.trip.status === 'completed' && booking.status === 'payment_pending' && autoPaySettings?.enabled) {
+
+      if (autoPaySettings.spending_limit && parseFloat(booking.totalAmount) > parseFloat(autoPaySettings.spending_limit)) {
+        toast({
+          title: "AutoPay Skipped",
+          description: `Trip amount (₹${booking.totalAmount}) exceeds your daily limit.`,
+          variant: "default"
+        });
+        return;
+      }
+
+      if (autoPaySettings.default_payment_method === 'wallet') {
+        if ((walletBal || 0) < parseFloat(booking.totalAmount)) {
+          toast({
+            title: "AutoPay Skipped",
+            description: "Insufficient wallet balance for AutoPay.",
+            variant: "destructive"
+          });
+          return;
+        }
+        setPaymentMethod({ type: 'wallet' }); // Update for auto selection
+        const timer = setTimeout(() => {
+          handlePayment();
+        }, 1500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [booking, autoPaySettings, walletBal]);
+
+
   if (isLoading || !booking) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -152,9 +323,42 @@ export default function Payment() {
     );
   }
 
+  if (booking.trip.status !== 'completed' && booking.status !== 'payment_pending') {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="p-8 max-w-md text-center">
+          <Shield className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+          <h2 className="text-xl font-bold mb-2">Payment Not Available Yet</h2>
+          <p className="text-muted-foreground mb-4">
+            Payment will be available after the driver completes the trip.
+          </p>
+          <Button onClick={() => navigate('/my-trips')}>
+            Go to My Trips
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
   const trip = booking.trip;
-  const platformFee = parseFloat(booking.totalAmount) * 0.05;
-  const total = parseFloat(booking.totalAmount);
+  const currentTotal = parseFloat(booking.totalAmount);
+  const subtotal = currentTotal / 1.05;
+  const platformFee = currentTotal - subtotal;
+  const baseFare = parseFloat(trip.pricePerSeat) * booking.seatsBooked;
+  const storedPromo = booking.promoCode;
+
+  let displayedDiscountAmount = 0;
+  if (storedPromo) {
+    const val = parseFloat(storedPromo.discountValue);
+    if (storedPromo.discountType === 'percentage') {
+      displayedDiscountAmount = (baseFare * val) / 100;
+    } else {
+      displayedDiscountAmount = val;
+    }
+  } else {
+    displayedDiscountAmount = Math.max(0, baseFare - subtotal);
+  }
+  const hasDiscount = displayedDiscountAmount > 0.1;
 
   return (
     <div className="min-h-screen bg-background">
@@ -174,8 +378,8 @@ export default function Payment() {
               <CheckCircle className="w-6 h-6 text-success" />
             </div>
             <div>
-              <h2 className="text-xl font-bold">Booking Confirmed!</h2>
-              <p className="text-sm text-muted-foreground">Complete payment to secure your seat</p>
+              <h2 className="text-xl font-bold">Trip Completed!</h2>
+              <p className="text-sm text-muted-foreground">Complete payment for your ride</p>
             </div>
           </div>
 
@@ -213,11 +417,31 @@ export default function Payment() {
                   <span className="text-muted-foreground">
                     Trip fare ({booking.seatsBooked} × ₹{trip.pricePerSeat})
                   </span>
-                  <span className="font-medium">₹{(parseFloat(trip.pricePerSeat) * booking.seatsBooked).toFixed(2)}</span>
+                  <span className="font-medium">₹{baseFare.toFixed(2)}</span>
                 </div>
+
+                {hasDiscount && (
+                  <div className="flex justify-between text-success">
+                    <span className="flex items-center gap-1">
+                      <Tag className="w-3 h-3" />
+                      Discount Applied {storedPromo ? `(${storedPromo.code})` : ''}
+                    </span>
+                    <span className="font-medium">-₹{displayedDiscountAmount.toFixed(2)}</span>
+                  </div>
+                )}
+
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Platform fee (5%)</span>
                   <span className="font-medium">₹{platformFee.toFixed(2)}</span>
+                </div>
+
+                {/* Promo Code Section */}
+                <div className="py-2">
+                  <PromoCodeInput
+                    onPromoApplied={handleApplyPromo}
+                    onPromoRemoved={handleRemovePromo}
+                    className="border-none p-0 shadow-none bg-transparent"
+                  />
                 </div>
 
                 <Separator className="my-2" />
@@ -225,11 +449,46 @@ export default function Payment() {
                 <div className="flex justify-between items-center text-lg">
                   <span className="font-semibold">Total Amount</span>
                   <span className="text-2xl font-bold text-primary" data-testid="text-total-amount">
-                    ₹{total.toFixed(2)}
+                    ₹{currentTotal.toFixed(2)}
                   </span>
                 </div>
               </div>
             </div>
+          </div>
+        </Card>
+
+
+
+        <Card className="p-6 mb-6">
+          <MultiPaymentSelector
+            amount={currentTotal}
+            onPaymentMethodSelect={(method) => setPaymentMethod(method as any)}
+            selectedMethod={paymentMethod as any}
+            showCashOption={true}
+          />
+        </Card>
+
+        {/* Tipping Section */}
+        <Card className="p-6 mb-6">
+          <h3 className="font-semibold mb-3">Tip your driver</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Thank the driver for a safe ride
+          </p>
+          <div className="grid grid-cols-4 gap-2 mb-4">
+            {[10, 20, 50, 100].map((amount) => (
+              <Button
+                key={amount}
+                variant="outline"
+                className="h-12 flex-col gap-0"
+                onClick={() => {
+                  const newTotal = parseFloat(booking.totalAmount) + amount;
+                  updateBookingAmountMutation.mutate({ amount: newTotal });
+                  toast({ title: `Added ₹${amount} tip` });
+                }}
+              >
+                <span className="font-bold">₹{amount}</span>
+              </Button>
+            ))}
           </div>
         </Card>
 
@@ -239,7 +498,7 @@ export default function Payment() {
             <div>
               <h3 className="font-semibold mb-1">Secure Payment</h3>
               <p className="text-sm text-muted-foreground">
-                Your payment information is encrypted and secure. We use Razorpay for safe transactions.
+                Your payment information is encrypted and secure.
               </p>
             </div>
           </div>
@@ -247,14 +506,16 @@ export default function Payment() {
           <Button
             size="lg"
             className="w-full"
-            onClick={() => createPaymentMutation.mutate()} // Logic is inside mutation now
+            onClick={handlePayment}
             disabled={createPaymentMutation.isPending || verifyPaymentMutation.isPending}
             data-testid="button-pay-now"
           >
-            <CreditCard className="w-5 h-5 mr-2" />
-            {createPaymentMutation.isPending || verifyPaymentMutation.isPending
+            {createPaymentMutation.isPending
               ? 'Processing...'
-              : `Pay ₹${total.toFixed(2)}`}
+              : paymentMethod.type === 'cash'
+                ? 'Confirm Cash Payment'
+                : `Pay ₹${currentTotal.toFixed(2)}`
+            }
           </Button>
         </Card>
 
@@ -265,3 +526,5 @@ export default function Payment() {
     </div>
   );
 }
+
+

@@ -197,14 +197,17 @@ interface LanguageSelectorProps {
     onSelect: (languageCode: string) => void;
 }
 
+// Supported languages configuration
+const SUPPORTED_LANGUAGES: LanguageOption[] = [
+    { code: 'en', name: 'English', nativeName: 'English' },
+    { code: 'hi', name: 'Hindi', nativeName: 'हिंदी' },
+    { code: 'kn', name: 'Kannada', nativeName: 'ಕನ್ನಡ' },
+    { code: 'ta', name: 'Tamil', nativeName: 'தமிழ்' },
+    { code: 'te', name: 'Telugu', nativeName: 'తెలుగు' },
+];
+
 export function LanguageSelector({ currentLanguage, onSelect }: LanguageSelectorProps) {
-    const languages: LanguageOption[] = [
-        { code: 'en', name: 'English', nativeName: 'English' },
-        { code: 'hi', name: 'Hindi', nativeName: 'हिंदी' },
-        { code: 'kn', name: 'Kannada', nativeName: 'ಕನ್ನಡ' },
-        { code: 'ta', name: 'Tamil', nativeName: 'தமிழ்' },
-        { code: 'te', name: 'Telugu', nativeName: 'తెలుగు' },
-    ];
+    const languages = SUPPORTED_LANGUAGES;
 
     return (
         <View style={settingsStyles.section}>

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/toast';
+import { mapUser } from '@/lib/mapper';
 
 // Replicating shared/schema types since we can't import directly
 export const UserRole = {
@@ -46,23 +47,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('Auth: Initial session check completed', session ? { user: session.user.id, email: session.user.email } : 'No active session');
       setSession(session);
       if (session?.user) {
+        console.log('Auth: Session found, fetching profile for', session.user.id);
         fetchUserProfile(session.user.id);
       } else {
+        console.log('Auth: No session found, setting loading to false');
         setLoading(false);
       }
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log(`Auth: state changed [Event: ${event}]`, session ? { user: session.user.id } : 'No session');
       setSession(session);
       if (session?.user) {
         if (!user || user.id !== session.user.id) {
+          console.log('Auth: New user or session, fetching profile...', session.user.id);
           fetchUserProfile(session.user.id);
         }
       } else {
+        console.log('Auth: No session, clearing user state');
         setUser(null);
         setLoading(false);
       }
@@ -72,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function fetchUserProfile(userId: string) {
+    console.log('Auth: Fetching profile for userId:', userId);
     try {
       const { data, error } = await supabase
         .from('users')
@@ -80,24 +88,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (error) {
-        console.error('Error fetching user profile:', error);
+        console.error('Auth: Error fetching user profile:', error);
         // Don't throw here, just let user be null or partial?
         // Maybe set user to minimal info from session?
       } else {
-        setUser(data);
+        console.log('Auth: User profile fetched successfully', data ? { id: data.id, role: data.role } : 'No data');
+        setUser(mapUser(data));
       }
     } catch (error) {
-      console.error('Error fetching user profile:', error);
+      console.error('Auth: Unexpected error fetching profile:', error);
     } finally {
       setLoading(false);
     }
   }
 
   async function signIn(email: string, password: string) {
+    console.log('Auth: Attempting signIn for', email);
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
+      if (error) {
+        console.error('Auth: signIn failed', error.message);
+        throw error;
+      }
 
+      console.log('Auth: signIn successful');
       toast({
         title: "Welcome back!",
         description: "You have successfully signed in.",
@@ -113,6 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signUp(email: string, password: string, fullName: string, phone?: string) {
+    console.log('Auth: Attempting signUp for', email, { fullName, phone });
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -125,41 +140,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Auth: signUp failed', error.message);
+        throw error;
+      }
 
+      console.log('Auth: signUp successful', { userId: data.user?.id });
       if (data.user) {
         // If session exists (no email confirmation required), create profile
         if (data.session) {
-          const newUser: User = {
-            id: data.user.id,
-            email: email,
-            fullName: fullName,
-            role: 'passenger',
-            phone: phone || null,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          };
-
-          const dbUser = {
-            id: newUser.id,
-            email: newUser.email,
-            full_name: newUser.fullName,
-            role: newUser.role,
-            phone: newUser.phone,
-            verification_status: 'pending',
-          };
-
-          const { error: profileError } = await supabase.from('users').upsert(dbUser);
-          if (profileError) {
-            console.error("Profile creation failed:", profileError);
-            toast({
-              title: "Profile setup incomplete",
-              description: "Account created, but profile setup failed. Please update in settings.",
-              variant: "destructive",
-            });
-          } else {
-            setUser(newUser);
-          }
+          console.log('Auth: signUp session found, fetching profile...');
+          // Profile is created by DB trigger
+          await fetchUserProfile(data.user.id);
         }
 
         toast({
@@ -178,12 +170,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
+    console.log('Auth: Attempting signOut');
     try {
       const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      if (error) {
+        console.error('Auth: signOut error', error);
+        throw error;
+      }
+      console.log('Auth: signOut successful');
       setUser(null);
     } catch (e) {
-      console.error(e);
+      console.error('Auth: signOut exception', e);
     }
   }
 
@@ -212,18 +209,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) throw error;
 
-      const updatedUser: User = {
-        ...user,
-        ...updates
-      };
-
-      if (data) {
-        // Update with actual returned data if specific fields changed
-        updatedUser.fullName = data.full_name;
-        updatedUser.profilePhoto = data.profile_photo;
-      }
-
-      setUser(updatedUser);
+      setUser(mapUser(data));
       toast({
         title: "Profile updated",
         description: "Your changes have been saved.",

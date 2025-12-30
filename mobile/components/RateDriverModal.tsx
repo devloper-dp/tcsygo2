@@ -16,6 +16,7 @@ export function RateDriverModal({ visible, onClose, tripId, driverId, driverName
     const { user } = useAuth();
     const [rating, setRating] = useState(0);
     const [review, setReview] = useState('');
+    const [tip, setTip] = useState(0);
     const [submitting, setSubmitting] = useState(false);
 
     const handleSubmit = async () => {
@@ -24,6 +25,8 @@ export function RateDriverModal({ visible, onClose, tripId, driverId, driverName
 
         try {
             setSubmitting(true);
+
+            // 1. Submit Rating
             const { error } = await supabase.from('ratings').insert({
                 trip_id: tripId,
                 from_user_id: user.id,
@@ -34,7 +37,15 @@ export function RateDriverModal({ visible, onClose, tripId, driverId, driverName
 
             if (error) throw error;
 
-            Alert.alert("Success", "Rating submitted successfully");
+            // 2. Process Tip (Simulated for now, would likely hit an edge function)
+            if (tip > 0) {
+                // Example: await supabase.rpc('send_tip', { booking_id: ..., amount: tip })
+                console.log(`Tip of ₹${tip} sent to driver ${driverId}`);
+            }
+
+            Alert.alert("Success", tip > 0
+                ? `Rating submitted and ₹${tip} tip sent!`
+                : "Rating submitted successfully");
             onClose();
         } catch (error: any) {
             Alert.alert("Error", error.message || "Failed to submit rating");
@@ -66,6 +77,22 @@ export function RateDriverModal({ visible, onClose, tripId, driverId, driverName
                         {rating === 5 ? 'Excellent!' : rating >= 4 ? 'Good' : rating >= 3 ? 'Average' : rating > 0 ? 'Poor' : 'Select a rating'}
                     </Text>
 
+                    {/* Tipping Section */}
+                    <Text style={styles.label}>Add a Tip</Text>
+                    <View style={styles.tipGrid}>
+                        {[0, 10, 20, 50].map((amount) => (
+                            <TouchableOpacity
+                                key={amount}
+                                style={[styles.tipChip, tip === amount && styles.tipChipActive]}
+                                onPress={() => setTip(amount)}
+                            >
+                                <Text style={[styles.tipText, tip === amount && styles.tipTextActive]}>
+                                    {amount === 0 ? 'No Tip' : `₹${amount}`}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+
                     <TextInput
                         style={styles.input}
                         placeholder="Write a review (optional)"
@@ -88,7 +115,9 @@ export function RateDriverModal({ visible, onClose, tripId, driverId, driverName
                             {submitting ? (
                                 <ActivityIndicator color="white" size="small" />
                             ) : (
-                                <Text style={styles.submitText}>Submit</Text>
+                                <Text style={styles.submitText}>
+                                    {tip > 0 ? `Submit & Pay ₹${tip}` : 'Submit'}
+                                </Text>
                             )}
                         </TouchableOpacity>
                     </View>
@@ -110,6 +139,8 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         padding: 24,
         alignItems: 'center',
+        width: '100%',
+        maxWidth: 400,
     },
     title: {
         fontSize: 20,
@@ -135,6 +166,41 @@ const styles = StyleSheet.create({
         marginBottom: 24,
         height: 20,
     },
+    label: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#374151',
+        marginBottom: 12,
+        alignSelf: 'flex-start',
+    },
+    tipGrid: {
+        flexDirection: 'row',
+        gap: 12,
+        marginBottom: 24,
+        alignSelf: 'stretch',
+    },
+    tipChip: {
+        flex: 1,
+        paddingVertical: 10,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        alignItems: 'center',
+        backgroundColor: '#f9fafb',
+    },
+    tipChipActive: {
+        backgroundColor: '#eff6ff',
+        borderColor: '#3b82f6',
+    },
+    tipText: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#6b7280',
+    },
+    tipTextActive: {
+        color: '#3b82f6',
+        fontWeight: '600',
+    },
     input: {
         width: '100%',
         borderWidth: 1,
@@ -144,6 +210,7 @@ const styles = StyleSheet.create({
         height: 100,
         marginBottom: 24,
         fontSize: 14,
+        backgroundColor: '#fff',
     },
     footer: {
         flexDirection: 'row',

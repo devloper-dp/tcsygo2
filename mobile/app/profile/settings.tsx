@@ -1,13 +1,15 @@
-import React from 'react';
+import { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
+import { LanguageSelector } from '@/components/LanguageSelector';
 
 export default function SettingsScreen() {
     const router = useRouter();
     const { signOut } = useAuth();
+    const [darkMode, setDarkMode] = useState(false);
 
     const handleSignOut = () => {
         Alert.alert(
@@ -56,25 +58,34 @@ export default function SettingsScreen() {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>App Settings</Text>
                     <View style={styles.card}>
-                        <TouchableOpacity style={styles.settingItem}>
+                        <View style={styles.settingItem}>
                             <View style={styles.settingLeft}>
                                 <Ionicons name="globe-outline" size={22} color="#4b5563" />
                                 <Text style={styles.settingLabel}>Language</Text>
                             </View>
                             <View style={styles.settingRight}>
-                                <Text style={styles.settingValue}>English</Text>
-                                <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                                <LanguageSelector />
                             </View>
-                        </TouchableOpacity>
+                        </View>
                         <View style={styles.separator} />
-                        <TouchableOpacity style={styles.settingItem}>
+                        <TouchableOpacity
+                            style={styles.settingItem}
+                            onPress={() => {
+                                setDarkMode(!darkMode);
+                                Alert.alert('Theme Changed', `Dark Mode is now ${!darkMode ? 'On' : 'Off'}`);
+                            }}
+                        >
                             <View style={styles.settingLeft}>
                                 <Ionicons name="moon-outline" size={22} color="#4b5563" />
                                 <Text style={styles.settingLabel}>Dark Mode</Text>
                             </View>
                             <View style={styles.settingRight}>
-                                <Text style={styles.settingValue}>Off</Text>
-                                <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                                <Text style={styles.settingValue}>{darkMode ? 'On' : 'Off'}</Text>
+                                <Ionicons
+                                    name={darkMode ? "toggle" : "toggle-outline"}
+                                    size={24}
+                                    color={darkMode ? "#3b82f6" : "#9ca3af"}
+                                />
                             </View>
                         </TouchableOpacity>
                     </View>

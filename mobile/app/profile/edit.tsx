@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 
 export default function EditProfileScreen() {
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, updateProfile } = useAuth();
 
     const [fullName, setFullName] = useState(user?.fullName || '');
     const [phone, setPhone] = useState(user?.phone || '');
@@ -31,16 +31,11 @@ export default function EditProfileScreen() {
 
         try {
             setLoading(true);
-            const { error } = await supabase
-                .from('users')
-                .update({
-                    fullName,
-                    phone,
-                    // bio, // Add if needed
-                })
-                .eq('id', user?.id);
-
-            if (error) throw error;
+            await updateProfile({
+                fullName,
+                phone,
+                bio,
+            });
 
             Alert.alert('Success', 'Profile updated successfully', [
                 { text: 'OK', onPress: () => router.back() }

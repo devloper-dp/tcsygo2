@@ -9,12 +9,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Send, Loader2, Check, CheckCheck } from 'lucide-react';
+import { Send, Loader2, Check, CheckCheck, AlertCircle, RefreshCw } from 'lucide-react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { queryClient } from '@/lib/queryClient';
-import { format } from 'date-fns';
+import { format, isToday, isYesterday, isSameDay } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
 
 interface ChatProps {
     isOpen: boolean;
@@ -33,15 +34,24 @@ interface Message {
     isRead: boolean;
 }
 
+const MAX_MESSAGE_LENGTH = 500;
+
+function getDateSeparator(date: Date): string {
+    if (isToday(date)) return 'Today';
+    if (isYesterday(date)) return 'Yesterday';
+    return format(date, 'MMMM dd, yyyy');
+}
+
 export function ChatDialog({ isOpen, onClose, tripId, otherUserId, otherUserName, otherUserPhoto }: ChatProps) {
     const { user } = useAuth();
+    const { toast } = useToast();
     const [newMessage, setNewMessage] = useState('');
     const [isTyping, setIsTyping] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
     const typingTimeoutRef = useRef<NodeJS.Timeout>();
 
     // Fetch messages
-    const { data: messages } = useQuery<Message[]>({
+    const { data: messages, isLoading, error, refetch } = useQuery<Message[]>({
         queryKey: ['chat-messages', tripId, user?.id, otherUserId],
         queryFn: async () => {
             const { data, error } = await supabase
@@ -61,6 +71,7 @@ export function ChatDialog({ isOpen, onClose, tripId, otherUserId, otherUserName
             }));
         },
         enabled: isOpen && !!user,
+        retry: 2,
     });
 
     // Real-time subscription for new messages
@@ -137,24 +148,45 @@ export function ChatDialog({ isOpen, onClose, tripId, otherUserId, otherUserName
             if (error) throw error;
 
             // Trigger push notification
-            await supabase.functions.invoke('send-push-notification', {
-                body: {
-                    userId: otherUserId,
-                    title: `New message from ${user?.fullName || 'User'}`, // Fallback name if missing
-                    body: message.substring(0, 50) + (message.length > 50 ? '...' : ''),
-                    data: { tripId, senderId: user?.id }
-                }
-            });
+            try {
+                await supabase.functions.invoke('send-push-notification', {
+                    body: {
+                        userId: otherUserId,
+                        title: `New message from ${user?.fullName || 'User'}`,
+                        body: message.substring(0, 50) + (message.length > 50 ? '...' : ''),
+                        data: { tripId, senderId: user?.id }
+                    }
+                });
+            } catch (notifError) {
+                // Don't fail the message send if notification fails
+                console.error('Push notification failed:', notifError);
+            }
         },
         onSuccess: () => {
             setNewMessage('');
             setIsTyping(false);
         },
+        onError: (error: any) => {
+            toast({
+                title: 'Failed to send message',
+                description: error.message || 'Please try again',
+                variant: 'destructive',
+            });
+        },
     });
 
     const handleSend = () => {
-        if (!newMessage.trim()) return;
-        sendMessageMutation.mutate(newMessage);
+        const trimmedMessage = newMessage.trim();
+        if (!trimmedMessage) return;
+        if (trimmedMessage.length > MAX_MESSAGE_LENGTH) {
+            toast({
+                title: 'Message too long',
+                description: `Please keep messages under ${MAX_MESSAGE_LENGTH} characters`,
+                variant: 'destructive',
+            });
+            return;
+        }
+        sendMessageMutation.mutate(trimmedMessage);
     };
 
     // Handle typing indicator
@@ -194,6 +226,21 @@ export function ChatDialog({ isOpen, onClose, tripId, otherUserId, otherUserName
         }
     }, [isOpen, messages, otherUserId]);
 
+    // Group messages by date
+    const groupedMessages = messages?.reduce((groups, message) => {
+        const date = new Date(message.createdAt);
+        const dateKey = format(date, 'yyyy-MM-dd');
+
+        if (!groups[dateKey]) {
+            groups[dateKey] = [];
+        }
+        groups[dateKey].push(message);
+        return groups;
+    }, {} as Record<string, Message[]>) || {};
+
+    const characterCount = newMessage.length;
+    const isNearLimit = characterCount > MAX_MESSAGE_LENGTH * 0.8;
+
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="max-w-md h-[600px] flex flex-col p-0">
@@ -211,51 +258,93 @@ export function ChatDialog({ isOpen, onClose, tripId, otherUserId, otherUserName
                 </DialogHeader>
 
                 <ScrollArea className="flex-1 p-6" ref={scrollRef}>
-                    <div className="space-y-4">
-                        {messages && messages.length > 0 ? (
-                            messages.map((msg) => {
-                                const isMe = msg.senderId === user?.id;
-                                return (
-                                    <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                        <div className={`max-w-[70%] ${isMe ? 'bg-primary text-primary-foreground' : 'bg-muted'} rounded-lg p-3`}>
-                                            <p className="text-sm">{msg.message}</p>
-                                            <div className={`flex items-center gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                                <p className={`text-[10px] ${isMe ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                                                    {format(new Date(msg.createdAt), 'hh:mm a')}
-                                                </p>
-                                                {isMe && (
-                                                    msg.isRead ? (
-                                                        <CheckCheck className="w-3 h-3 text-primary-foreground/70" />
-                                                    ) : (
-                                                        <Check className="w-3 h-3 text-primary-foreground/70" />
-                                                    )
-                                                )}
-                                            </div>
+                    {isLoading ? (
+                        <div className="flex flex-col items-center justify-center h-full gap-3">
+                            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                            <p className="text-sm text-muted-foreground">Loading messages...</p>
+                        </div>
+                    ) : error ? (
+                        <div className="flex flex-col items-center justify-center h-full gap-3">
+                            <AlertCircle className="w-8 h-8 text-destructive" />
+                            <p className="text-sm text-muted-foreground">Failed to load messages</p>
+                            <Button size="sm" variant="outline" onClick={() => refetch()}>
+                                <RefreshCw className="w-4 h-4 mr-2" />
+                                Retry
+                            </Button>
+                        </div>
+                    ) : Object.keys(groupedMessages).length > 0 ? (
+                        <div className="space-y-4">
+                            {Object.entries(groupedMessages).map(([dateKey, msgs]) => (
+                                <div key={dateKey}>
+                                    {/* Date separator */}
+                                    <div className="flex items-center justify-center my-4">
+                                        <div className="bg-muted px-3 py-1 rounded-full">
+                                            <p className="text-xs text-muted-foreground font-medium">
+                                                {getDateSeparator(new Date(msgs[0].createdAt))}
+                                            </p>
                                         </div>
                                     </div>
-                                );
-                            })
-                        ) : (
-                            <div className="text-center text-muted-foreground py-8">
-                                No messages yet. Start the conversation!
+
+                                    {/* Messages for this date */}
+                                    <div className="space-y-3">
+                                        {msgs.map((msg) => {
+                                            const isMe = msg.senderId === user?.id;
+                                            return (
+                                                <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                                                    <div className={`max-w-[70%] ${isMe ? 'bg-primary text-primary-foreground' : 'bg-muted'} rounded-lg p-3`}>
+                                                        <p className="text-sm break-words">{msg.message}</p>
+                                                        <div className={`flex items-center gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                                                            <p className={`text-[10px] ${isMe ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                                                                {format(new Date(msg.createdAt), 'hh:mm a')}
+                                                            </p>
+                                                            {isMe && (
+                                                                msg.isRead ? (
+                                                                    <CheckCheck className="w-3 h-3 text-primary-foreground/70" />
+                                                                ) : (
+                                                                    <Check className="w-3 h-3 text-primary-foreground/70" />
+                                                                )
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center h-full text-center px-6">
+                            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                                <Send className="w-8 h-8 text-muted-foreground" />
                             </div>
-                        )}
-                    </div>
+                            <h3 className="font-semibold mb-2">No messages yet</h3>
+                            <p className="text-sm text-muted-foreground">
+                                Start the conversation with {otherUserName}
+                            </p>
+                        </div>
+                    )}
                 </ScrollArea>
 
                 <div className="p-4 border-t">
+                    {isNearLimit && (
+                        <p className={`text-xs mb-2 ${characterCount > MAX_MESSAGE_LENGTH ? 'text-destructive' : 'text-muted-foreground'}`}>
+                            {characterCount}/{MAX_MESSAGE_LENGTH} characters
+                        </p>
+                    )}
                     <div className="flex gap-2">
                         <Input
                             placeholder="Type a message..."
                             value={newMessage}
                             onChange={(e) => handleTyping(e.target.value)}
-                            onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                            onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
                             disabled={sendMessageMutation.isPending}
+                            maxLength={MAX_MESSAGE_LENGTH}
                         />
                         <Button
                             size="icon"
                             onClick={handleSend}
-                            disabled={!newMessage.trim() || sendMessageMutation.isPending}
+                            disabled={!newMessage.trim() || sendMessageMutation.isPending || characterCount > MAX_MESSAGE_LENGTH}
                         >
                             {sendMessageMutation.isPending ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -269,4 +358,3 @@ export function ChatDialog({ isOpen, onClose, tripId, otherUserId, otherUserName
         </Dialog>
     );
 }
-

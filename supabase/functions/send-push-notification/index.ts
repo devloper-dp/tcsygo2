@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -13,67 +12,80 @@ serve(async (req) => {
     }
 
     try {
-        const supabase = createClient(
+        const { userId, title, message, data, pushTokens } = await req.json()
+
+        if (!userId || !title || !message) {
+            throw new Error('Missing required fields: userId, title, message')
+        }
+
+        // Initialize Supabase client
+        const supabaseClient = createClient(
             Deno.env.get('SUPABASE_URL') ?? '',
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
         )
 
-        const { userId, title, body, data } = await req.json()
-
-        if (!userId) {
-            throw new Error('User ID is required')
-        }
-
-        // Get user's push token
-        const { data: user, error: userError } = await supabase
-            .from('users')
-            .select('push_token')
-            .eq('id', userId)
+        // Create notification in database
+        const { data: notification, error: notificationError } = await supabaseClient
+            .from('notifications')
+            .insert({
+                user_id: userId,
+                title,
+                message,
+                type: data?.type || 'general',
+                data: data || {},
+            })
+            .select()
             .single()
 
-        if (userError || !user?.push_token) {
-            console.log(`No push token found for user ${userId}`)
-            // Return success even if no token, so we don't break the client flow
-            return new Response(
-                JSON.stringify({ message: 'No push token found, skipped' }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-            )
+        if (notificationError) {
+            throw new Error(`Failed to create notification: ${notificationError.message}`)
         }
 
-        const message = {
-            to: user.push_token,
-            sound: 'default',
-            title,
-            body,
-            data,
+        // Send push notification via Expo if push tokens provided
+        if (pushTokens && pushTokens.length > 0) {
+            const expoMessages = pushTokens.map((token: string) => ({
+                to: token,
+                sound: 'default',
+                title,
+                body: message,
+                data: data || {},
+            }))
+
+            const expoResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Accept-Encoding': 'gzip, deflate',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(expoMessages),
+            })
+
+            if (!expoResponse.ok) {
+                console.error('Failed to send push notification:', await expoResponse.text())
+            }
         }
-
-        const response = await fetch('https://exp.host/--/api/v2/push/send', {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Accept-Encoding': 'gzip, deflate',
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(message),
-        })
-
-        const result = await response.json()
 
         return new Response(
-            JSON.stringify(result),
+            JSON.stringify({
+                success: true,
+                notification,
+            }),
             {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
                 status: 200,
-            },
+            }
         )
     } catch (error) {
         return new Response(
-            JSON.stringify({ error: error.message }),
+            JSON.stringify({
+                success: false,
+                error: error.message,
+            }),
             {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
                 status: 400,
-            },
+            }
         )
     }
 })

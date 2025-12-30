@@ -1,13 +1,16 @@
+import { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
+import { SplitFareModal } from '@/components/SplitFareModal';
 
 const BookingDetailsScreen = () => {
     const router = useRouter();
     const { id } = useLocalSearchParams();
+    const [showSplitModal, setShowSplitModal] = useState(false);
 
     const { data: booking, isLoading, isError, error } = useQuery({
         queryKey: ['booking', id],
@@ -99,10 +102,18 @@ const BookingDetailsScreen = () => {
                                 <Text style={styles.detailValue}>{booking.seats_booked} seats</Text>
                             </View>
                             <View style={styles.detailRow}>
-                                <Text style={styles.detailLabel}>Amount Paid</Text>
+                                <Text style={styles.detailLabel}>Total Paid</Text>
                                 <Text style={styles.detailValue}>₹{booking.total_amount}</Text>
                             </View>
                         </View>
+
+                        <TouchableOpacity
+                            style={styles.splitBtn}
+                            onPress={() => setShowSplitModal(true)}
+                        >
+                            <Ionicons name="people-outline" size={20} color="#3b82f6" />
+                            <Text style={styles.splitBtnText}>Split Fare with Friends</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
 
@@ -133,6 +144,13 @@ const BookingDetailsScreen = () => {
                     <Text style={styles.homeBtnText}>Go to My Trips</Text>
                 </TouchableOpacity>
             </ScrollView>
+
+            <SplitFareModal
+                visible={showSplitModal}
+                onClose={() => setShowSplitModal(false)}
+                totalAmount={booking.total_amount}
+                bookingId={id as string}
+            />
         </SafeAreaView>
     );
 };
@@ -260,6 +278,23 @@ const styles = StyleSheet.create({
     },
     bookingDetails: {
         gap: 12,
+        marginBottom: 16,
+    },
+    splitBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 12,
+        backgroundColor: '#eff6ff',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#dbeafe',
+    },
+    splitBtnText: {
+        color: '#3b82f6',
+        fontWeight: 'bold',
+        fontSize: 14,
     },
     detailRow: {
         flexDirection: 'row',

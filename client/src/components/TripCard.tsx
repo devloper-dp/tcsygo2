@@ -41,7 +41,13 @@ export function TripCard({ trip, onBook, showActions = true }: TripCardProps) {
               </p>
             </div>
             <div className="text-right">
-              <div className="text-2xl font-bold text-primary" data-testid="trip-price">
+              <div className="text-2xl font-bold text-primary flex items-center justify-end gap-1" data-testid="trip-price">
+                {trip.surgeMultiplier && trip.surgeMultiplier > 1 && (
+                  <span className="text-xs font-normal text-warning bg-warning/10 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+                    Surge
+                  </span>
+                )}
                 ₹{trip.pricePerSeat}
               </div>
               <div className="text-xs text-muted-foreground">per seat</div>
@@ -94,9 +100,9 @@ export function TripCard({ trip, onBook, showActions = true }: TripCardProps) {
 
       {showActions && onBook && (
         <div className="mt-6 pt-4 border-t">
-          <Button 
-            onClick={onBook} 
-            className="w-full" 
+          <Button
+            onClick={onBook}
+            className="w-full"
             size="lg"
             data-testid="button-book-trip"
           >

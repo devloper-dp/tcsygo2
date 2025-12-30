@@ -1,0 +1,140 @@
+{
+    "common": {
+        "loading": "Loading...",
+        "error": "Something went wrong",
+        "success": "Success",
+        "save": "Save",
+        "cancel": "Cancel",
+        "back": "Back",
+        "next": "Next",
+        "done": "Done",
+        "pickup": "Pickup Location",
+        "drop": "Drop Location",
+        "search": "Search",
+        "date": "Date",
+        "departure": "Departure"
+    },
+    "search": {
+        "set_on_map": "Set on map",
+        "instant_booking": "Instant Booking",
+        "trips_found_one": "{{count}} trip found",
+        "trips_found_other": "{{count}} trips found"
+    },
+    "home": {
+        "title": "Share Your Journey, Save Your Cost",
+        "subtitle": "Join the community of travelers sharing rides for a greener, more affordable commute.",
+        "quickBook": "Desire to ride?"
+    },
+    "nav": {
+        "home": "Home",
+        "findRide": "Find a Ride",
+        "offerRide": "Offer a Ride",
+        "myTrips": "My Trips",
+        "wallet": "Wallet",
+        "profile": "Profile",
+        "logout": "Log Out",
+        "login": "Log In",
+        "signup": "Sign Up"
+    },
+    "booking": {
+        "scheduleForLater": "Schedule for later",
+        "quickBook": "Quick Book",
+        "whereTo": "Where to?",
+        "pickup": "Pickup Location",
+        "drop": "Drop Location",
+        "findRides": "Find Rides",
+        "calculating": "Calculating...",
+        "selectVehicle": "Select Vehicle",
+        "bike": "Bike",
+        "auto": "Auto",
+        "car": "Car",
+        "promoCode": "Promo Code",
+        "apply": "Apply",
+        "remove": "Remove",
+        "scheduleRide": "Schedule Ride",
+        "instantBooking": "Instant Booking"
+    },
+    "preferences": {
+        "title": "Ride Preferences",
+        "ac": "AC Preferred",
+        "music": "Music Allowed",
+        "pets": "Pet Friendly",
+        "luggage": "Luggage"
+    },
+    "status": {
+        "pending": "Finding Driver...",
+        "accepted": "Driver Assigned",
+        "arrived": "Driver Arrived",
+        "started": "Trip Started",
+        "completed": "Trip Completed",
+        "cancelled": "Trip Cancelled"
+    },
+    "wallet": {
+        "balance": "Wallet Balance",
+        "addMoney": "Add Money",
+        "thisMonth": "This Month",
+        "transactions": "Total Transactions",
+        "history": "Transaction History",
+        "quickAdd": "Quick Add",
+        "secure": "Your payment information is encrypted and secure.",
+        "success": "Money added successfully",
+        "failed": "Payment verification failed",
+        "autoPay": "Auto-Pay",
+        "enableAutoPay": "Enable Auto-Pay",
+        "defaultMethod": "Default Payment Method",
+        "spendingLimit": "Daily Spending Limit",
+        "paymentMethods": {
+            "wallet": "Wallet",
+            "upi": "UPI",
+            "card": "Credit/Debit Card",
+            "cash": "Cash"
+        }
+    },
+    "safety": {
+        "title": "Safety Features",
+        "sos": "SOS Emergency",
+        "shareRide": "Share Ride Details",
+        "checkIn": "Safety Check-in",
+        "trustedContacts": "Trusted Contacts",
+        "verifyDriver": "Verify Driver",
+        "tips": "Safety Tips",
+        "imSafe": "I'm Safe",
+        "needHelp": "I Need Help",
+        "callEmergency": "Call Emergency",
+        "missedCheckIns": "Missed check-ins",
+        "alertSent": "Emergency Alert Sent"
+    },
+    "ride": {
+        "driver": "Driver",
+        "vehicle": "Vehicle",
+        "seats": "Seats",
+        "eta": "Estimated Arrival",
+        "distance": "Distance",
+        "duration": "Duration",
+        "fare": "Fare Estimate",
+        "splitFare": "Split Fare",
+        "rateDriver": "Rate Driver"
+    },
+    "notifications": {
+        "title": "Notifications",
+        "markAllRead": "Mark all as read",
+        "empty": "No notifications yet",
+        "booking": "Booking Update",
+        "payment": "Payment Alert",
+        "promo": "New Offer"
+    },
+    "verification": {
+        "title": "Driver Verification",
+        "match": "Does the driver match the photo?",
+        "vehicleMatch": "Does the vehicle match?",
+        "plateMatch": "Is the license plate correct?",
+        "yes": "Yes, Verified",
+        "no": "No, Report Mismatch",
+        "verifiedDetails": "Driver verified",
+        "mismatchReported": "Mismatch reported",
+        "startRide": "Verify & Start Ride",
+        "reportMismatch": "Report Mismatch",
+        "callDriver": "Call Driver",
+        "checklist": "Verification Checklist"
+    }
+}

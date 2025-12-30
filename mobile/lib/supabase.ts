@@ -42,10 +42,12 @@ Get credentials from: https://app.supabase.com/project/_/settings/api
   `);
 }
 
+import { logProcess } from './error-logger';
+
 // Export configuration status
 export const isSupabaseConfigured = isConfigured;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+const client = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage,
     autoRefreshToken: true,
@@ -66,6 +68,22 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     },
   },
 });
+
+// Add logging proxy for development
+export const supabase = __DEV__ ? new Proxy(client, {
+  get(target, prop, receiver) {
+    const original = Reflect.get(target, prop, receiver);
+
+    // Log calls to from, auth, storage etc.
+    if (typeof original === 'function' && ['from', 'auth', 'storage', 'rpc'].includes(prop as string)) {
+      return (...args: any[]) => {
+        logProcess(`Supabase.${prop as string}`, 'start', { args });
+        return original.apply(target, args);
+      };
+    }
+    return original;
+  }
+}) : client;
 
 // Tells Supabase Auth to continuously refresh the session automatically if
 // the app is in the foreground. When this is added, you will continue to receive

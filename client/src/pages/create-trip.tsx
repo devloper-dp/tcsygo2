@@ -10,22 +10,27 @@ import { LocationAutocomplete } from '@/components/LocationAutocomplete';
 import { MapView } from '@/components/MapView';
 import { useToast } from '@/hooks/use-toast';
 import { queryClient } from '@/lib/queryClient';
-import { getRoute, Coordinates } from '@/lib/mapbox';
-import { ArrowLeft, MapPin, Calendar, Users, Route as RouteIcon } from 'lucide-react';
+import { getRoute, Coordinates, reverseGeocode } from '@/lib/maps';
+import { ArrowLeft, MapPin, Calendar, Users, Route as RouteIcon, Plus, X } from 'lucide-react';
 import { InsertTrip } from '@shared/schema';
 import { supabase } from '@/lib/supabase';
 import { mapDriver } from '@/lib/mapper';
 import { useAuth } from '@/contexts/AuthContext';
+import { Navbar } from '@/components/Navbar';
 
 export default function CreateTrip() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
 
+  const [isMobileMapOpen, setIsMobileMapOpen] = useState(false);
+
+  // ... (keep existing state)
   const [pickup, setPickup] = useState('');
   const [pickupCoords, setPickupCoords] = useState<Coordinates>();
   const [drop, setDrop] = useState('');
   const [dropCoords, setDropCoords] = useState<Coordinates>();
+  const [waypoints, setWaypoints] = useState<{ id: string; location: string; coords: Coordinates }[]>([]);
   const [departureDate, setDepartureDate] = useState('');
   const [departureTime, setDepartureTime] = useState('');
   const [seats, setSeats] = useState('4');
@@ -37,7 +42,29 @@ export default function CreateTrip() {
   });
 
   const [routeInfo, setRouteInfo] = useState<{ distance: number; duration: number; route: Coordinates[] }>();
+  const [selectionMode, setSelectionMode] = useState<'pickup' | 'drop' | null>(null);
 
+  const handleMapClick = async (coords: Coordinates) => {
+    if (!selectionMode) return;
+
+    try {
+      const address = await reverseGeocode(coords);
+
+      if (selectionMode === 'pickup') {
+        setPickup(address);
+        setPickupCoords(coords);
+      } else {
+        setDrop(address);
+        setDropCoords(coords);
+      }
+      setSelectionMode(null);
+      setIsMobileMapOpen(false); // Return to form after selection
+    } catch (error) {
+      console.error("Failed to reverse geocode", error);
+    }
+  };
+
+  // ... (keep driver profile query)
   const { data: driverProfile, isLoading: isLoadingDriver } = useQuery<any>({
     queryKey: ['my-driver-profile', user?.id],
     queryFn: async () => {
@@ -57,6 +84,7 @@ export default function CreateTrip() {
     enabled: !!user,
   });
 
+  // ... (keep redirect effect)
   // Redirect if not a driver or not verified
   useEffect(() => {
     if (!isLoadingDriver && !driverProfile) {
@@ -69,6 +97,7 @@ export default function CreateTrip() {
     }
   }, [isLoadingDriver, driverProfile, navigate, toast]);
 
+  // ... (keep mutation and calculation logic)
   const createTripMutation = useMutation({
     mutationFn: async (tripData: Partial<InsertTrip>) => {
       // Map to snake_case
@@ -116,19 +145,46 @@ export default function CreateTrip() {
     if (!pickupCoords || !dropCoords) return;
 
     try {
-      const route = await getRoute(pickupCoords, dropCoords);
+      const route = await getRoute(pickupCoords, dropCoords, waypoints.map(w => w.coords));
       setRouteInfo({
         distance: route.distance,
         duration: route.duration,
         route: route.geometry
       });
 
-      if (!pricePerSeat) {
-        const estimatedPrice = Math.round(route.distance * 8);
-        setPricePerSeat(estimatedPrice.toString());
+      // Calculate suggested price based on distance and demand
+      const distance = route.distance;
+      const basePrice = Math.round(distance * 3); // ₹3 per km base
+
+      // Check similar trips for dynamic pricing
+      // This is a simplified "demand" check
+      const { data: similarTrips } = await supabase
+        .from('trips')
+        .select('price_per_seat')
+        .ilike('pickup_location', `%${pickup}%`)
+        .ilike('drop_location', `%${drop}%`)
+        .eq('status', 'upcoming');
+
+      let suggestedPrice = basePrice;
+      if (similarTrips && similarTrips.length > 0) {
+        const avgPrice = similarTrips.reduce((acc, trip) => acc + parseFloat(trip.price_per_seat), 0) / similarTrips.length;
+        // If average market price is higher, suggest slightly lower to be competitive, or match it
+        suggestedPrice = Math.round((basePrice + avgPrice) / 2);
       }
-    } catch (error) {
+
+      setPricePerSeat(suggestedPrice.toString());
+
+      toast({
+        title: "Route Calculated",
+        description: `Distance: ${distance.toFixed(1)} km. Suggested price: ₹${suggestedPrice}`,
+      });
+    } catch (error: any) {
       console.error('Error calculating route:', error);
+      toast({
+        title: 'Error calculating route',
+        description: error.message || 'Could not calculate route or suggested price.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -136,7 +192,21 @@ export default function CreateTrip() {
     if (pickupCoords && dropCoords) {
       calculateRoute();
     }
-  }, [pickupCoords, dropCoords]);
+  }, [pickupCoords, dropCoords, waypoints]);
+
+  const addWaypoint = () => {
+    setWaypoints([...waypoints, { id: crypto.randomUUID(), location: '', coords: { lat: 0, lng: 0 } }]);
+  };
+
+  const removeWaypoint = (id: string) => {
+    setWaypoints(waypoints.filter(w => w.id !== id));
+  };
+
+  const updateWaypoint = (id: string, location: string, coords?: Coordinates) => {
+    setWaypoints(waypoints.map(w =>
+      w.id === id ? { ...w, location, coords: coords || w.coords } : w
+    ));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -176,30 +246,54 @@ export default function CreateTrip() {
       pricePerSeat: pricePerSeat,
       availableSeats: parseInt(seats),
       totalSeats: parseInt(seats),
-      route: routeInfo.route,
+      route: { geometry: routeInfo.route, waypoints: waypoints.map(w => ({ location: w.location, coords: w.coords })) },
       preferences,
+      base_price: pricePerSeat, // Initialize base_price
+      surge_multiplier: 1.0,
     } as any);
   };
 
   const markers = pickupCoords && dropCoords ? [
     { id: 'pickup', coordinates: pickupCoords, color: '#22c55e', popup: pickup },
+    ...waypoints.map((w, i) => ({
+      id: `waypoint-${i}`,
+      coordinates: w.coords,
+      color: '#3b82f6',
+      popup: `Stop ${i + 1}: ${w.location}`
+    })),
     { id: 'drop', coordinates: dropCoords, color: '#ef4444', popup: drop }
   ] : [];
 
+  const handleSetOnMap = (mode: 'pickup' | 'drop') => {
+    if (selectionMode === mode) {
+      setSelectionMode(null);
+    } else {
+      setSelectionMode(mode);
+      setIsMobileMapOpen(true);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur">
-        <div className="container mx-auto px-6 h-16 flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/')} data-testid="button-back">
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <h1 className="text-xl font-display font-bold">Create a Trip</h1>
-        </div>
-      </header>
+      <Navbar />
 
-      <div className="flex h-[calc(100vh-4rem)]">
-        <div className="w-full lg:w-1/2 overflow-y-auto">
+      <div className="flex h-[calc(100vh-4rem)] relative">
+        <div className={`w-full lg:w-1/2 overflow-y-auto ${isMobileMapOpen ? 'hidden lg:block' : 'block'}`}>
           <form onSubmit={handleSubmit} className="p-6 space-y-6 max-w-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <div></div> {/* Spacer */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsMobileMapOpen(!isMobileMapOpen)}
+                className="lg:hidden"
+              >
+                <MapPin className="w-4 h-4 mr-2" />
+                {isMobileMapOpen ? 'Show Form' : 'Show Map'}
+              </Button>
+            </div>
+
             <Card className="p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-primary" />
@@ -208,7 +302,19 @@ export default function CreateTrip() {
 
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="pickup">Pickup Location</Label>
+                  <div className="flex justify-between items-center">
+                    <Label htmlFor="pickup">Pickup Location</Label>
+                    <Button
+                      type="button"
+                      variant={selectionMode === 'pickup' ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => handleSetOnMap('pickup')}
+                      className="h-6 text-xs px-2"
+                    >
+                      <MapPin className="w-3 h-3 mr-1" />
+                      {selectionMode === 'pickup' ? 'Cancel' : 'Set on Map'}
+                    </Button>
+                  </div>
                   <LocationAutocomplete
                     value={pickup}
                     onChange={(val, coords) => {
@@ -220,8 +326,57 @@ export default function CreateTrip() {
                   />
                 </div>
 
+                {waypoints.map((waypoint, index) => (
+                  <div key={waypoint.id} className="relative">
+                    <Label>Stop {index + 1}</Label>
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <LocationAutocomplete
+                          value={waypoint.location}
+                          onChange={(val, coords) => updateWaypoint(waypoint.id, val, coords)}
+                          placeholder="Add a stop"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive"
+                        onClick={() => removeWaypoint(waypoint.id)}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+
+                <div className="flex justify-center">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addWaypoint}
+                    className="gap-2 text-muted-foreground"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Stop
+                  </Button>
+                </div>
+
                 <div>
-                  <Label htmlFor="drop">Drop Location</Label>
+                  <div className="flex justify-between items-center">
+                    <Label htmlFor="drop">Drop Location</Label>
+                    <Button
+                      type="button"
+                      variant={selectionMode === 'drop' ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => handleSetOnMap('drop')}
+                      className="h-6 text-xs px-2"
+                    >
+                      <MapPin className="w-3 h-3 mr-1" />
+                      {selectionMode === 'drop' ? 'Cancel' : 'Set on Map'}
+                    </Button>
+                  </div>
                   <LocationAutocomplete
                     value={drop}
                     onChange={(val, coords) => {
@@ -379,11 +534,28 @@ export default function CreateTrip() {
           </form>
         </div>
 
-        <div className="hidden lg:block lg:w-1/2 h-full border-l">
+        <div className={`w-full lg:w-1/2 h-full border-l relative ${isMobileMapOpen ? 'block h-full' : 'hidden lg:block'}`}>
           <MapView
+            key={isMobileMapOpen ? 'mobile-visible' : 'desktop-or-hidden'}
             markers={markers}
             route={routeInfo?.route}
+            onMapClick={handleMapClick}
+            className={`w-full h-full ${selectionMode ? 'cursor-crosshair' : ''}`}
           />
+          {selectionMode && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-black/75 text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg pointer-events-none">
+              Click map to set {selectionMode} location
+            </div>
+          )}
+          {/* Mobile close button */}
+          <Button
+            variant="secondary"
+            size="sm"
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 lg:hidden z-[1000] shadow-lg"
+            onClick={() => setIsMobileMapOpen(false)}
+          >
+            Back to Form
+          </Button>
         </div>
       </div>
     </div>

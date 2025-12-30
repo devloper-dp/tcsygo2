@@ -1,15 +1,59 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Switch, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Switch, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@/contexts/AuthContext';
+import { saveNotificationPreferences, getNotificationPreferences } from '@/lib/notifications';
 
 export default function NotificationsScreen() {
     const router = useRouter();
-    const [pushEnabled, setPushEnabled] = useState(true);
-    const [emailEnabled, setEmailEnabled] = useState(false);
-    const [tripUpdates, setTripUpdates] = useState(true);
-    const [promotions, setPromotions] = useState(false);
+    const { user } = useAuth();
+    const [loading, setLoading] = useState(false);
+    const [preferences, setPreferences] = useState({
+        messages: true,
+        trips: true,
+        bookings: true,
+        payments: true,
+        marketing: false,
+    });
+
+    useEffect(() => {
+        if (user) {
+            setLoading(true);
+            getNotificationPreferences(user.id).then(prefs => {
+                if (prefs) {
+                    setPreferences(prefs);
+                }
+                setLoading(false);
+            }).catch(() => setLoading(false));
+        }
+    }, [user]);
+
+    const togglePreference = async (key: keyof typeof preferences) => {
+        if (!user) return;
+
+        const newPrefs = { ...preferences, [key]: !preferences[key] };
+        setPreferences(newPrefs);
+
+        try {
+            await saveNotificationPreferences(user.id, newPrefs);
+        } catch (error) {
+            Alert.alert('Error', 'Failed to save preferences');
+            // Revert on error
+            setPreferences(preferences);
+        }
+    };
+
+    if (loading) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.loading}>
+                    <ActivityIndicator size="large" color="#3b82f6" />
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.container}>
@@ -23,62 +67,80 @@ export default function NotificationsScreen() {
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Main Settings</Text>
+                    <Text style={styles.sectionTitle}>Push Notifications</Text>
                     <View style={styles.card}>
                         <View style={styles.settingItem}>
                             <View style={styles.settingInfo}>
-                                <Text style={styles.settingLabel}>Push Notifications</Text>
-                                <Text style={styles.settingDesc}>Receive alerts on your device</Text>
+                                <Text style={styles.settingLabel}>Trip Updates</Text>
+                                <Text style={styles.settingDesc}>Receive alerts when your trip status changes</Text>
                             </View>
                             <Switch
-                                value={pushEnabled}
-                                onValueChange={setPushEnabled}
+                                value={preferences.trips}
+                                onValueChange={() => togglePreference('trips')}
                                 trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
-                                thumbColor={pushEnabled ? '#3b82f6' : '#f3f4f6'}
+                                thumbColor={preferences.trips ? '#3b82f6' : '#f3f4f6'}
                             />
                         </View>
                         <View style={styles.separator} />
                         <View style={styles.settingItem}>
                             <View style={styles.settingInfo}>
-                                <Text style={styles.settingLabel}>Email Notifications</Text>
-                                <Text style={styles.settingDesc}>Receive updates via email</Text>
+                                <Text style={styles.settingLabel}>Booking Requests</Text>
+                                <Text style={styles.settingDesc}>Get notified about new booking requests</Text>
                             </View>
                             <Switch
-                                value={emailEnabled}
-                                onValueChange={setEmailEnabled}
+                                value={preferences.bookings}
+                                onValueChange={() => togglePreference('bookings')}
                                 trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
-                                thumbColor={emailEnabled ? '#3b82f6' : '#f3f4f6'}
+                                thumbColor={preferences.bookings ? '#3b82f6' : '#f3f4f6'}
+                            />
+                        </View>
+                        <View style={styles.separator} />
+                        <View style={styles.settingItem}>
+                            <View style={styles.settingInfo}>
+                                <Text style={styles.settingLabel}>Messages</Text>
+                                <Text style={styles.settingDesc}>New message alerts from drivers or passengers</Text>
+                            </View>
+                            <Switch
+                                value={preferences.messages}
+                                onValueChange={() => togglePreference('messages')}
+                                trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
+                                thumbColor={preferences.messages ? '#3b82f6' : '#f3f4f6'}
                             />
                         </View>
                     </View>
                 </View>
 
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Notification Content</Text>
+                    <Text style={styles.sectionTitle}>Transactional</Text>
                     <View style={styles.card}>
                         <View style={styles.settingItem}>
                             <View style={styles.settingInfo}>
-                                <Text style={styles.settingLabel}>Trip Updates</Text>
-                                <Text style={styles.settingDesc}>Status changes and driver messages</Text>
+                                <Text style={styles.settingLabel}>Payments & Earnings</Text>
+                                <Text style={styles.settingDesc}>Confirmations for successful payments</Text>
                             </View>
                             <Switch
-                                value={tripUpdates}
-                                onValueChange={setTripUpdates}
+                                value={preferences.payments}
+                                onValueChange={() => togglePreference('payments')}
                                 trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
-                                thumbColor={tripUpdates ? '#3b82f6' : '#f3f4f6'}
+                                thumbColor={preferences.payments ? '#3b82f6' : '#f3f4f6'}
                             />
                         </View>
-                        <View style={styles.separator} />
+                    </View>
+                </View>
+
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Marketing</Text>
+                    <View style={styles.card}>
                         <View style={styles.settingItem}>
                             <View style={styles.settingInfo}>
                                 <Text style={styles.settingLabel}>Promotions & Offers</Text>
                                 <Text style={styles.settingDesc}>Updates on discounts and new features</Text>
                             </View>
                             <Switch
-                                value={promotions}
-                                onValueChange={setPromotions}
+                                value={preferences.marketing}
+                                onValueChange={() => togglePreference('marketing')}
                                 trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
-                                thumbColor={promotions ? '#3b82f6' : '#f3f4f6'}
+                                thumbColor={preferences.marketing ? '#3b82f6' : '#f3f4f6'}
                             />
                         </View>
                     </View>
@@ -88,10 +150,16 @@ export default function NotificationsScreen() {
     );
 }
 
+// Add loading style to existing styles
 const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#f9fafb',
+    },
+    loading: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     header: {
         flexDirection: 'row',

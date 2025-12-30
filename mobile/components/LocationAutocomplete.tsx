@@ -3,8 +3,7 @@ import { View, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { Input } from './ui/input';
 import { Text } from './ui/text';
 import { MapPin } from 'lucide-react-native';
-import { Coordinates } from '@/lib/mapbox';
-import { MAPBOX_TOKEN } from '@/lib/mapbox';
+import { Coordinates } from '@/lib/maps';
 
 interface LocationAutocompleteProps {
     value: string;
@@ -14,10 +13,14 @@ interface LocationAutocompleteProps {
 }
 
 interface Suggestion {
-    id: string;
-    place_name: string;
-    center: [number, number];
+    place_id: string;
+    display_name: string;
+    lat: string;
+    lon: string;
 }
+
+const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org';
+const USER_AGENT = 'TCSYGO-Carpooling-App';
 
 export function LocationAutocomplete({
     value,
@@ -35,18 +38,23 @@ export function LocationAutocomplete({
             return;
         }
 
-        // Only fetch if suggestions are not already shown to avoid loop when typing
-        // Actually, we want to fetch as we type. But if we selected, we might want to suppress.
-        // In this basic version, we'll fetch on every change > 3 chars. 
-        // Debounce should be handled, or we trust the user types slowly or we add it.
-
         const timer = setTimeout(async () => {
             try {
+                // Add "India" to improve results for Indian addresses
+                const searchQuery = value.includes('India') ? value : `${value}, India`;
+
                 const response = await fetch(
-                    `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(value)}.json?access_token=${MAPBOX_TOKEN}&limit=5`
+                    `${NOMINATIM_BASE}/search?` +
+                    `q=${encodeURIComponent(searchQuery)}` +
+                    `&format=json` +
+                    `&limit=5` +
+                    `&countrycodes=in`, // Restrict to India
+                    {
+                        headers: { 'User-Agent': USER_AGENT }
+                    }
                 );
                 const data = await response.json();
-                setSuggestions(data.features || []);
+                setSuggestions(data || []);
                 setShowSuggestions(true);
             } catch (error) {
                 console.error('Error fetching suggestions:', error);
@@ -57,12 +65,9 @@ export function LocationAutocomplete({
     }, [value]);
 
     const handleSelectSuggestion = (suggestion: Suggestion) => {
-        // When selecting, we update the value. 
-        // We should probably have a way to know "this update came from selection" to avoid re-fetching.
-        // For now, setting suggestions to empty accomplishes closing the list.
-        onChange(suggestion.place_name, {
-            lat: suggestion.center[1],
-            lng: suggestion.center[0]
+        onChange(suggestion.display_name, {
+            lat: parseFloat(suggestion.lat),
+            lng: parseFloat(suggestion.lon)
         });
         setSuggestions([]);
         setShowSuggestions(false);
@@ -87,12 +92,12 @@ export function LocationAutocomplete({
                     <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 200 }}>
                         {suggestions.map((suggestion) => (
                             <TouchableOpacity
-                                key={suggestion.id}
+                                key={suggestion.place_id}
                                 onPress={() => handleSelectSuggestion(suggestion)}
                                 className="flex-row items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-800 active:bg-gray-50 dark:active:bg-gray-900"
                             >
                                 <MapPin size={16} className="text-gray-400" color="gray" />
-                                <Text className="text-sm flex-1" numberOfLines={2}>{suggestion.place_name}</Text>
+                                <Text className="text-sm flex-1" numberOfLines={2}>{suggestion.display_name}</Text>
                             </TouchableOpacity>
                         ))}
                     </ScrollView>

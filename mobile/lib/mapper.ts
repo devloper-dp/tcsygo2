@@ -108,20 +108,20 @@ export function mapPayment(data: any): any {
     };
 }
 
-export function mapSOSAlert(data: any): any {
+export function mapEmergencyAlert(data: any): any {
     if (!data) return data;
     const alert: any = {
         id: data.id,
         tripId: data.trip_id,
-        reporterId: data.reporter_id,
+        userId: data.user_id,
         lat: data.lat,
         lng: data.lng,
         status: data.status,
         createdAt: data.created_at,
         resolvedAt: data.resolved_at
     };
-    if (data.reporter) {
-        alert.reporter = mapUser(data.reporter);
+    if (data.user) {
+        alert.user = mapUser(data.user);
     }
     return alert;
 }

@@ -1,8 +1,8 @@
-import { View, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Modal } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Modal, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
@@ -18,6 +18,9 @@ import { Slider } from '@/components/ui/slider';
 import { MobileFilters } from '@/components/MobileFilters';
 import { NotificationBanner } from '@/components/MobileNotifications';
 import { useSearchStore } from '@/lib/search-store';
+import { FareEstimation } from '@/components/FareEstimation';
+import { RideService } from '@/services/RideService';
+import { RidePreferences, RidePreference } from '@/components/RidePreferences';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -38,7 +41,18 @@ export default function SearchScreen() {
   const [sortBy, setSortBy] = useState<SortOption>('time-asc');
   const [showFilters, setShowFilters] = useState(false);
   const [showSort, setShowSort] = useState(false);
+  const [showPreferences, setShowPreferences] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  const [preferences, setPreferences] = useState<RidePreference>({
+    ac_preferred: true,
+    music_allowed: true,
+    pet_friendly: false,
+    luggage_capacity: 1
+  });
+
+  // Instant booking state
+  const [bookingLoading, setBookingLoading] = useState(false);
 
   const [filters, setFilters] = useState<Filters>({
     minPrice: 0,
@@ -150,6 +164,42 @@ export default function SearchScreen() {
     setRefreshing(false);
   };
 
+  const handleInstantBook = async (vehicleType: string, price: number) => {
+    setBookingLoading(true);
+    try {
+      // Create a pending trip/request
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        Alert.alert('Login Required', 'Please login to book a ride');
+        return;
+      }
+
+      const trip = await RideService.bookRide({
+        pickup_location: params.pickup as string,
+        drop_location: params.drop as string,
+        pickup_lat: params.pickupLat ? parseFloat(params.pickupLat as string) : 0,
+        pickup_lng: params.pickupLng ? parseFloat(params.pickupLng as string) : 0,
+        drop_lat: params.dropLat ? parseFloat(params.dropLat as string) : 0,
+        drop_lng: params.dropLng ? parseFloat(params.dropLng as string) : 0,
+        price_per_seat: price,
+        // Special fields for instant ride request
+        // Note: You might need to adjust your 'trips' table to support 'passenger_id' as creator or use a separate 'ride_requests' table
+        // For now assuming we insert and mark as 'request'
+        preferences: preferences // Pass preferences to service
+      });
+
+      if (trip) {
+        Alert.alert('Request Sent', `Finding you a ${vehicleType}...`);
+        // Navigate to a 'Finding Driver' screen or Trip Details in 'searching' state
+        router.push(`/trip/${trip.id}`);
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setBookingLoading(false);
+    }
+  };
+
   const totalPages = Math.ceil((trips?.length || 0) / ITEMS_PER_PAGE);
   const paginatedTrips = trips?.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
@@ -160,6 +210,8 @@ export default function SearchScreen() {
     (filters.minPrice > 0 || filters.maxPrice < 5000 ? 1 : 0) +
     filters.vehicleTypes.length +
     (filters.minRating > 0 ? 1 : 0);
+
+  const hasCoordinates = params.pickupLat && params.dropLat;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -180,6 +232,9 @@ export default function SearchScreen() {
                 <Text style={styles.badgeText}>{activeFilterCount}</Text>
               </View>
             )}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowPreferences(true)} style={styles.iconButton}>
+            <Ionicons name="settings-outline" size={24} color="#1f2937" />
           </TouchableOpacity>
         </View>
       </View>
@@ -239,6 +294,24 @@ export default function SearchScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
       >
+        {/* Instant Booking Section */}
+        {hasCoordinates && (
+          <FareEstimation
+            pickupCoords={{
+              lat: parseFloat(params.pickupLat as string),
+              lng: parseFloat(params.pickupLng as string)
+            }}
+            dropCoords={{
+              lat: parseFloat(params.dropLat as string),
+              lng: parseFloat(params.dropLng as string)
+            }}
+            onBook={handleInstantBook}
+          />
+        )}
+
+        {/* Scheduled Trips */}
+        <Text style={styles.sectionTitle}>Scheduled Pools</Text>
+
         {isLoading ? (
           // Loading Skeletons
           Array.from({ length: 3 }).map((_, i) => (
@@ -279,9 +352,9 @@ export default function SearchScreen() {
           // Empty State
           <View style={styles.emptyState}>
             <Ionicons name="car-outline" size={80} color="#d1d5db" />
-            <Text style={styles.emptyTitle}>No trips found</Text>
+            <Text style={styles.emptyTitle}>No scheduled trips found</Text>
             <Text style={styles.emptyDescription}>
-              Try adjusting your search criteria or filters
+              Instant booking is available above, or offer your own ride!
             </Text>
             <Button
               variant="outline"
@@ -387,6 +460,41 @@ export default function SearchScreen() {
           showNotification('Filters applied successfully', 'success');
         }}
       />
+
+      {/* Preferences Modal */}
+      <Modal
+        visible={showPreferences}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPreferences(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowPreferences(false)}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Ride Preferences</Text>
+              <TouchableOpacity onPress={() => setShowPreferences(false)}>
+                <Ionicons name="close" size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 400 }}>
+              <RidePreferences
+                preferences={preferences}
+                onPreferencesChange={setPreferences}
+                showSaveButton={false}
+                style={{ elevation: 0, shadowOpacity: 0 }}
+              />
+            </ScrollView>
+            <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6' }}>
+              <Button onPress={() => setShowPreferences(false)}>Apply Preferences</Button>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -609,5 +717,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1f2937',
     marginBottom: 12,
+    marginTop: 16,
   },
 });

@@ -1,7 +1,6 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import crypto from 'node:crypto';
+import { createHmac } from "https://deno.land/std@0.160.0/node/crypto.ts"
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -14,136 +13,134 @@ serve(async (req) => {
     }
 
     try {
-        const supabaseClient = createClient(
-            Deno.env.get('SUPABASE_URL') ?? '',
-            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '' // Need service role to update payments securely if RLS blocks
-        )
-
         const {
+            razorpay_order_id,
+            razorpay_payment_id,
+            razorpay_signature,
             bookingId,
-            razorpayOrderId,
-            razorpayPaymentId,
-            razorpaySignature
         } = await req.json()
 
-        // Verify Signature
-        const body = razorpayOrderId + "|" + razorpayPaymentId;
-        const expectedSignature = crypto
-            .createHmac('sha256', Deno.env.get('RAZORPAY_KEY_SECRET') ?? '')
-            .update(body.toString())
-            .digest('hex');
-
-        if (expectedSignature !== razorpaySignature) {
-            throw new Error('Invalid signature');
+        if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !bookingId) {
+            throw new Error('Missing required fields')
         }
 
-        // Get Booking Amount for calculations
-        const { data: booking } = await supabaseClient
-            .from('bookings')
-            .select('total_amount')
-            .eq('id', bookingId)
-            .single();
+        // Verify signature
+        const razorpayKeySecret = Deno.env.get('RAZORPAY_KEY_SECRET')
+        if (!razorpayKeySecret) {
+            throw new Error('Razorpay secret not configured')
+        }
 
-        if (!booking) throw new Error('Booking not found');
+        const text = `${razorpay_order_id}|${razorpay_payment_id}`
+        const generated_signature = createHmac('sha256', razorpayKeySecret)
+            .update(text)
+            .digest('hex')
 
-        const amount = parseFloat(booking.total_amount);
-        const platformFee = (amount * 0.05).toString();
-        const driverEarnings = (amount * 0.95).toString();
+        if (generated_signature !== razorpay_signature) {
+            throw new Error('Invalid payment signature')
+        }
 
-        // 1. Create Payment Record
-        const { error: paymentError } = await supabaseClient.from('payments').insert({
-            booking_id: bookingId,
-            amount: amount.toString(),
-            platform_fee: platformFee,
-            driver_earnings: driverEarnings,
-            razorpay_order_id: razorpayOrderId,
-            razorpay_payment_id: razorpayPaymentId,
-            status: 'success',
-            payment_method: 'upi' // Can get from razorpay API details if needed
-        });
+        // Initialize Supabase client
+        const supabaseClient = createClient(
+            Deno.env.get('SUPABASE_URL') ?? '',
+            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        )
 
-        if (paymentError) throw paymentError;
+        // Update payment status
+        const { data: payment, error: paymentError } = await supabaseClient
+            .from('payments')
+            .update({
+                razorpay_payment_id,
+                status: 'success',
+                updated_at: new Date().toISOString(),
+            })
+            .eq('razorpay_order_id', razorpay_order_id)
+            .select()
+            .single()
 
-        // 2. Update Booking Status
+        if (paymentError) {
+            throw new Error(`Failed to update payment: ${paymentError.message}`)
+        }
+
+        // Update booking status to confirmed
         const { error: bookingError } = await supabaseClient
             .from('bookings')
-            .update({ status: 'confirmed' })
-            .eq('id', bookingId);
+            .update({
+                status: 'confirmed',
+                updated_at: new Date().toISOString(),
+            })
+            .eq('id', bookingId)
 
-        if (bookingError) throw bookingError;
+        if (bookingError) {
+            throw new Error(`Failed to update booking: ${bookingError.message}`)
+        }
 
-        // 3. Send Push Notifications (Async - don't block response)
-        try {
-            const { data: details } = await supabaseClient
-                .from('bookings')
-                .select(`
-                    passenger_id,
-                    trip:trips (
-                        drop_location,
-                        driver:drivers (
-                            user:users (
-                                id,
-                                push_token
-                            )
-                        )
-                    ),
-                    passenger:users (
-                        full_name,
-                        push_token
-                    )
-                `)
-                .eq('id', bookingId)
-                .single();
+        // Get booking details for notification
+        const { data: booking } = await supabaseClient
+            .from('bookings')
+            .select('*, trip:trips(*, driver:drivers(user:users(*)))')
+            .eq('id', bookingId)
+            .single()
 
-            if (details) {
-                const passengerToken = details.passenger?.push_token;
-                const passengerName = details.passenger?.full_name || 'Passenger';
-                const driverToken = details.trip?.driver?.user?.push_token;
-                const driverId = details.trip?.driver?.user?.id;
+        // Create notifications
+        if (booking) {
+            // Notify passenger
+            await supabaseClient.from('notifications').insert({
+                user_id: booking.passenger_id,
+                title: 'Payment Successful',
+                message: `Your payment of ₹${payment.amount} was successful. Booking confirmed!`,
+                type: 'payment',
+                data: {
+                    booking_id: bookingId,
+                    payment_id: payment.id,
+                    amount: payment.amount,
+                },
+            })
 
-                // Notify Passenger
-                if (passengerToken) {
-                    await supabaseClient.functions.invoke('send-push-notification', {
-                        body: {
-                            userId: details.passenger_id,
-                            title: 'Booking Confirmed! ✅',
-                            body: `Your ride to ${details.trip?.drop_location} is confirmed. View details in the app.`,
-                            data: { bookingId, type: 'booking_confirmed' }
-                        }
-                    });
-                }
-
-                // Notify Driver
-                if (driverToken && driverId) {
-                    await supabaseClient.functions.invoke('send-push-notification', {
-                        body: {
-                            userId: driverId,
-                            title: 'New Booking! 🚗',
-                            body: `${passengerName} has booked a seat for your trip to ${details.trip?.drop_location}.`,
-                            data: { bookingId, type: 'new_booking' }
-                        }
-                    });
-                }
+            // Notify driver
+            if (booking.trip?.driver?.user?.id) {
+                await supabaseClient.from('notifications').insert({
+                    user_id: booking.trip.driver.user.id,
+                    title: 'New Booking',
+                    message: `You have a new booking for ${booking.seats_booked} seat(s)`,
+                    type: 'booking',
+                    data: {
+                        booking_id: bookingId,
+                        passenger_id: booking.passenger_id,
+                        seats: booking.seats_booked,
+                    },
+                })
             }
-        } catch (notifyError) {
-            console.error('Notification error:', notifyError);
-            // Continue execution, don't fail the payment
+        }
+
+        // Update promo code usage if used
+        if (payment.promo_code_id) {
+            await supabaseClient
+                .from('promo_codes')
+                .update({ current_uses: supabaseClient.raw('current_uses + 1') })
+                .eq('id', payment.promo_code_id)
         }
 
         return new Response(
-            JSON.stringify({ success: true }),
+            JSON.stringify({
+                success: true,
+                message: 'Payment verified successfully',
+                payment,
+            }),
             {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
                 status: 200,
-            },
+            }
         )
     } catch (error) {
         return new Response(
-            JSON.stringify({ error: error.message }),
+            JSON.stringify({
+                success: false,
+                error: error.message,
+            }),
             {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
                 status: 400,
-            },
+            }
         )
     }
 })

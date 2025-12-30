@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
-import { useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { queryClient } from '@/lib/queryClient';
 import { ArrowLeft, Car, FileText, CheckCircle, Upload, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { mapDriver } from '@/lib/mapper';
 
 export default function DriverOnboarding() {
     const [, navigate] = useLocation();
@@ -30,6 +31,37 @@ export default function DriverOnboarding() {
         vehiclePhotos: [] as string[]
     });
 
+    const { data: existingDriver, isLoading } = useQuery({
+        queryKey: ['driver-profile', user?.id],
+        queryFn: async () => {
+            if (!user) return null;
+            const { data, error } = await supabase
+                .from('drivers')
+                .select('*')
+                .eq('user_id', user.id)
+                .maybeSingle();
+
+            if (error) throw error;
+            return data ? mapDriver(data) : null;
+        },
+        enabled: !!user
+    });
+
+    useEffect(() => {
+        if (existingDriver) {
+            setFormData({
+                licenseNumber: existingDriver.licenseNumber,
+                licensePhoto: existingDriver.licensePhoto || '',
+                vehicleMake: existingDriver.vehicleMake,
+                vehicleModel: existingDriver.vehicleModel,
+                vehicleYear: existingDriver.vehicleYear.toString(),
+                vehicleColor: existingDriver.vehicleColor,
+                vehiclePlate: existingDriver.vehiclePlate,
+                vehiclePhotos: existingDriver.vehiclePhotos
+            });
+        }
+    }, [existingDriver]);
+
     const createDriverMutation = useMutation({
         mutationFn: async (data: any) => {
             if (!user) throw new Error("Must be logged in");
@@ -44,10 +76,10 @@ export default function DriverOnboarding() {
                 if (roleError) throw roleError;
             }
 
-            // Insert driver profile
+            // Insert or Update driver profile
             const { error: driverError } = await supabase
                 .from('drivers')
-                .insert({
+                .upsert({
                     user_id: user.id,
                     license_number: data.licenseNumber,
                     license_photo: data.licensePhoto,
@@ -57,11 +89,18 @@ export default function DriverOnboarding() {
                     vehicle_color: data.vehicleColor,
                     vehicle_plate: data.vehiclePlate,
                     vehicle_photos: data.vehiclePhotos,
-                    verification_status: 'pending',
+                    verification_status: 'pending', // Reset to pending on update
                     is_available: false,
-                    rating: 0,
-                    total_trips: 0
-                });
+                    // Preserve existing stats if updating
+                    ...(existingDriver ? {
+                        updated_at: new Date().toISOString(),
+                        rating: existingDriver.rating,
+                        total_trips: existingDriver.totalTrips
+                    } : {
+                        rating: 0,
+                        total_trips: 0
+                    })
+                }, { onConflict: 'user_id' });
 
             if (driverError) throw driverError;
             return true;
@@ -91,25 +130,29 @@ export default function DriverOnboarding() {
 
     const uploadFile = async (file: File, path: string): Promise<string | null> => {
         try {
-            const fileExt = file.name.split('.').pop();
-            const fileName = `${Math.random()}.${fileExt}`;
-            const filePath = `${path}/${fileName}`;
+            // Use the storage service helper functions
+            const { uploadLicensePhoto, uploadFile: uploadGeneric, BUCKETS } = await import('@/lib/storage-service');
 
-            const bucketName = path === 'licenses' ? 'licenses' : 'vehicles';
-            const { error: uploadError } = await supabase.storage
-                .from(bucketName)
-                .upload(filePath, file);
-
-            if (uploadError) {
-                console.error('Upload error:', uploadError);
-                throw uploadError;
+            let result;
+            if (path === 'licenses') {
+                result = await uploadLicensePhoto(user!.id, file);
+            } else {
+                // For vehicle photos
+                const fileExt = file.name.split('.').pop();
+                const fileName = `${user!.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+                result = await uploadGeneric(BUCKETS.VEHICLES, file, fileName);
             }
 
-            const { data } = supabase.storage
-                .from(bucketName)
-                .getPublicUrl(filePath);
+            if (!result.success) {
+                toast({
+                    title: "Upload Failed",
+                    description: result.error || "Failed to upload image. Please try again.",
+                    variant: "destructive"
+                });
+                return null;
+            }
 
-            return data.publicUrl;
+            return result.url || null;
         } catch (error: any) {
             console.error("Image upload failed:", error);
             toast({
@@ -258,7 +301,7 @@ export default function DriverOnboarding() {
             <div className="lg:col-span-8 bg-muted/30">
                 <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur lg:hidden">
                     <div className="container mx-auto px-6 h-16 flex items-center gap-4">
-                        <Button variant="ghost" size="icon" onClick={() => window.history.back()}>
+                        <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
                             <ArrowLeft className="w-5 h-5" />
                         </Button>
                         <h1 className="text-xl font-display font-bold">Become a Driver</h1>
@@ -267,7 +310,7 @@ export default function DriverOnboarding() {
 
                 <div className="min-h-screen flex flex-col items-center justify-center p-6 lg:p-12">
                     <div className="w-full max-w-2xl">
-                        <Button variant="ghost" className="hidden lg:flex mb-8 self-start pl-0 hover:bg-transparent" onClick={() => window.history.back()}>
+                        <Button variant="ghost" className="hidden lg:flex mb-8 self-start pl-0 hover:bg-transparent" onClick={() => navigate('/')}>
                             <ArrowLeft className="w-4 h-4 mr-2" />
                             Back to Dashboard
                         </Button>

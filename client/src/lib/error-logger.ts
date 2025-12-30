@@ -50,6 +50,25 @@ class ErrorLogger {
         };
     }
 
+    private formatLog(log: ErrorLog) {
+        const styles = {
+            error: 'background: #fee2e2; color: #991b1b; font-weight: bold; padding: 2px 4px; border-radius: 2px;',
+            warn: 'background: #fef3c7; color: #92400e; font-weight: bold; padding: 2px 4px; border-radius: 2px;',
+            info: 'background: #dcfce7; color: #166534; font-weight: bold; padding: 2px 4px; border-radius: 2px;',
+            process: 'background: #dbeafe; color: #1e40af; font-weight: bold; padding: 2px 4px; border-radius: 2px;'
+        };
+
+        const levelStyle = styles[log.level as keyof typeof styles] || styles.info;
+        const timeStyle = 'color: #6b7280; font-family: monospace;';
+
+        return [
+            `%c${log.level.toUpperCase()}%c [${new Date(log.context.timestamp).toLocaleTimeString()}] %c${log.message}`,
+            levelStyle,
+            timeStyle,
+            'color: inherit; font-weight: normal;'
+        ];
+    }
+
     public logError(error: Error | string, additionalContext?: any) {
         const errorMessage = typeof error === 'string' ? error : error.message;
         const stack = typeof error === 'object' && error.stack ? error.stack : undefined;
@@ -69,12 +88,14 @@ class ErrorLogger {
             this.logs.shift();
         }
 
-        // Log to console in development
         if (import.meta.env.DEV) {
-            console.error('Error logged:', log);
+            const [format, ...args] = this.formatLog(log);
+            console.groupCollapsed(format, ...args);
+            if (stack) console.error('Stack:', stack);
+            console.log('Context:', log.context);
+            console.groupEnd();
         }
 
-        // Send to error reporting service in production
         if (import.meta.env.PROD) {
             this.sendToErrorService(log);
         }
@@ -96,7 +117,10 @@ class ErrorLogger {
         }
 
         if (import.meta.env.DEV) {
-            console.warn('Warning logged:', log);
+            const [format, ...args] = this.formatLog(log);
+            console.groupCollapsed(format, ...args);
+            console.warn('Context:', log.context);
+            console.groupEnd();
         }
     }
 
@@ -116,7 +140,39 @@ class ErrorLogger {
         }
 
         if (import.meta.env.DEV) {
-            console.info('Info logged:', log);
+            const [format, ...args] = this.formatLog(log);
+            console.groupCollapsed(format, ...args);
+            console.info('Context:', log.context);
+            console.groupEnd();
+        }
+    }
+
+    public logProcess(name: string, stage: 'start' | 'end' | 'step', data?: any) {
+        const message = `[Process] ${name}: ${stage}`;
+        const log: ErrorLog & { stage: string } = {
+            message,
+            context: {
+                ...this.getContext(),
+                ...data,
+            },
+            level: 'info',
+            stage
+        };
+
+        if (import.meta.env.DEV) {
+            const styles = {
+                start: 'background: #dcfce7; color: #166534;',
+                end: 'background: #fee2e2; color: #991b1b;',
+                step: 'background: #fef3c7; color: #92400e;'
+            };
+            const stageStyle = `font-weight: bold; padding: 2px 4px; border-radius: 2px; ${styles[stage as keyof typeof styles] || ''}`;
+
+            console.log(
+                `%c${stage.toUpperCase()}%c ${name}`,
+                stageStyle,
+                'font-weight: bold; color: #2563eb;',
+                data || ''
+            );
         }
     }
 
@@ -181,6 +237,10 @@ export const logWarning = (message: string, context?: any) => {
 
 export const logInfo = (message: string, context?: any) => {
     errorLogger.logInfo(message, context);
+};
+
+export const logProcess = (name: string, stage: 'start' | 'end' | 'step', data?: any) => {
+    errorLogger.logProcess(name, stage, data);
 };
 
 // Export for use in async error handling

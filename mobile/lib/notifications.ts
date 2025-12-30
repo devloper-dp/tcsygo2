@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
@@ -10,6 +11,8 @@ Notifications.setNotificationHandler({
         shouldShowAlert: true,
         shouldPlaySound: true,
         shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
     }),
 });
 
@@ -19,6 +22,17 @@ export interface NotificationData {
     bookingId?: string;
     messageId?: string;
     [key: string]: any;
+}
+
+export interface SupabaseNotification {
+    id: string;
+    user_id: string;
+    title: string;
+    message: string;
+    type: string;
+    data?: NotificationData;
+    is_read: boolean;
+    created_at: string;
 }
 
 /**
@@ -141,8 +155,9 @@ export async function scheduleNotification(
             sound: true,
         },
         trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
             date: trigger,
-        },
+        } as Notifications.DateTriggerInput,
     });
 }
 
@@ -205,7 +220,7 @@ export function addNotificationResponseListener(
 export function removeNotificationSubscription(
     subscription: Notifications.Subscription
 ) {
-    Notifications.removeNotificationSubscription(subscription);
+    subscription.remove();
 }
 
 /**
@@ -213,37 +228,37 @@ export function removeNotificationSubscription(
  */
 export function handleNotificationTap(
     data: NotificationData,
-    navigation: any
+    router: any
 ) {
     switch (data.type) {
         case 'message':
             if (data.tripId) {
-                navigation.navigate('chat/[id]', { id: data.tripId });
+                router.push(`/chat/${data.tripId}`);
             }
             break;
         case 'trip':
             if (data.tripId) {
-                navigation.navigate('trip/[id]', { id: data.tripId });
+                router.push(`/trip/${data.tripId}`);
             }
             break;
         case 'booking':
             if (data.bookingId) {
-                navigation.navigate('booking/[id]', { id: data.bookingId });
+                router.push(`/booking/${data.bookingId}`);
             }
             break;
         case 'payment':
             if (data.bookingId) {
-                navigation.navigate('payment/[id]', { id: data.bookingId });
+                router.push(`/payment/${data.bookingId}`);
             }
             break;
         case 'emergency':
             if (data.tripId) {
-                navigation.navigate('track/[id]', { id: data.tripId });
+                router.push(`/track/${data.tripId}`);
             }
             break;
         default:
             // Navigate to home or notifications screen
-            navigation.navigate('(tabs)');
+            router.push('/(tabs)');
     }
 }
 
@@ -291,3 +306,121 @@ export async function getNotificationPreferences(
         return null;
     }
 }
+
+/**
+ * Get notification history for a user
+ */
+export async function getNotificationHistory(
+    userId: string,
+    limit = 20
+): Promise<SupabaseNotification[]> {
+    try {
+        const { data, error } = await supabase
+            .from('notifications')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(limit);
+
+        if (error) throw error;
+
+        return data || [];
+    } catch (error) {
+        console.error('Error getting notification history:', error);
+        return [];
+    }
+}
+
+/**
+ * Mark a notification as read
+ */
+export async function markNotificationAsRead(notificationId: string) {
+    try {
+        const { error } = await supabase
+            .from('notifications')
+            .update({ is_read: true })
+            .eq('id', notificationId);
+
+        if (error) throw error;
+    } catch (error) {
+        console.error('Error marking notification as read:', error);
+    }
+}
+
+/**
+ * Mark all notifications as read for a user
+ */
+export async function markAllNotificationsAsRead(userId: string) {
+    try {
+        const { error } = await supabase
+            .from('notifications')
+            .update({ is_read: true })
+            .eq('user_id', userId)
+            .eq('is_read', false);
+
+        if (error) throw error;
+    } catch (error) {
+        console.error('Error marking all notifications as read:', error);
+    }
+}
+
+/**
+ * Setup notification listeners with automatic cleanup
+ */
+export function setupNotificationListeners(
+    onNotificationReceived?: (notification: Notifications.Notification) => void,
+    onNotificationResponse?: (response: Notifications.NotificationResponse) => void
+) {
+    // Notification received while app is foregrounded
+    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
+        onNotificationReceived?.(notification);
+    });
+
+    // User tapped on notification
+    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+        onNotificationResponse?.(response);
+    });
+
+    return () => {
+        notificationListener.remove();
+        responseListener.remove();
+    };
+}
+
+/**
+ * Hook to manage push notifications
+ */
+export function usePushNotifications(userId?: string) {
+    const [expoPushToken, setExpoPushToken] = useState<string | undefined>();
+    const [notification, setNotification] = useState<Notifications.Notification | undefined>();
+    const notificationListener = useRef<Notifications.Subscription>();
+    const responseListener = useRef<Notifications.Subscription>();
+
+    useEffect(() => {
+        registerForPushNotificationsAsync().then(token => {
+            setExpoPushToken(token);
+            if (token && userId) {
+                savePushToken(userId, token);
+            }
+        });
+
+        notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+            setNotification(notification);
+        });
+
+        responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+            console.log('Notification response:', response);
+        });
+
+        return () => {
+            notificationListener.current?.remove();
+            responseListener.current?.remove();
+        };
+    }, [userId]);
+
+    return {
+        expoPushToken,
+        notification
+    };
+}
+

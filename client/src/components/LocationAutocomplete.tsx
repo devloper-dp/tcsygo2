@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { MapPin } from 'lucide-react';
-import { Coordinates } from '@/lib/mapbox';
-import { MAPBOX_TOKEN } from '@/lib/mapbox';
+import { Coordinates, searchLocations } from '@/lib/maps';
 
 interface LocationAutocompleteProps {
   value: string;
@@ -13,9 +12,8 @@ interface LocationAutocompleteProps {
 }
 
 interface Suggestion {
-  id: string;
-  place_name: string;
-  center: [number, number];
+  name: string;
+  coordinates: Coordinates;
 }
 
 export function LocationAutocomplete({
@@ -27,6 +25,7 @@ export function LocationAutocomplete({
 }: LocationAutocompleteProps) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [loading, setLoading] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,32 +40,34 @@ export function LocationAutocomplete({
   }, []);
 
   useEffect(() => {
-    if (!value || value.length < 3) {
+    if (!value || value.length < 2) {
       setSuggestions([]);
+      setShowSuggestions(false);
       return;
     }
 
+    setLoading(true);
     const timer = setTimeout(async () => {
       try {
-        const response = await fetch(
-          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(value)}.json?access_token=${MAPBOX_TOKEN}&limit=5`
-        );
-        const data = await response.json();
-        setSuggestions(data.features || []);
+        const results = await searchLocations(value);
+        setSuggestions(results);
         setShowSuggestions(true);
       } catch (error) {
         console.error('Error fetching suggestions:', error);
+        setSuggestions([]);
+      } finally {
+        setLoading(false);
       }
-    }, 300);
+    }, 500); // Increased debounce slightly to reduce API calls
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      setLoading(false);
+    };
   }, [value]);
 
   const handleSelectSuggestion = (suggestion: Suggestion) => {
-    onChange(suggestion.place_name, {
-      lat: suggestion.center[1],
-      lng: suggestion.center[0]
-    });
+    onChange(suggestion.name, suggestion.coordinates);
     setSuggestions([]);
     setShowSuggestions(false);
   };
@@ -79,24 +80,40 @@ export function LocationAutocomplete({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className={`pl-10 ${className}`}
+          className={`pl-10 pr-10 ${className}`} // Added pr-10 for loader space
           data-testid={testId}
+          onFocus={() => {
+            if (value.length >= 2 && suggestions.length > 0) setShowSuggestions(true);
+          }}
         />
+        {loading && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+            <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full" />
+          </div>
+        )}
       </div>
-      
-      {showSuggestions && suggestions.length > 0 && (
-        <div className="absolute z-50 w-full mt-1 bg-popover border border-popover-border rounded-lg shadow-lg overflow-hidden">
-          {suggestions.map((suggestion) => (
-            <button
-              key={suggestion.id}
-              onClick={() => handleSelectSuggestion(suggestion)}
-              className="w-full px-4 py-3 text-left hover-elevate active-elevate-2 flex items-start gap-2 border-b border-border last:border-b-0"
-              data-testid={`suggestion-${suggestion.id}`}
-            >
-              <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-              <span className="text-sm">{suggestion.place_name}</span>
-            </button>
-          ))}
+
+      {showSuggestions && value.length >= 2 && (
+        <div className="absolute z-[100] w-full mt-1 bg-popover border border-popover-border rounded-lg shadow-lg overflow-hidden">
+          {suggestions.length > 0 ? (
+            suggestions.map((suggestion, index) => (
+              <button
+                key={index}
+                onClick={() => handleSelectSuggestion(suggestion)}
+                className="w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors flex items-start gap-2 border-b border-border last:border-b-0"
+                data-testid={`suggestion-${index}`}
+              >
+                <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <span className="text-sm line-clamp-2">{suggestion.name}</span>
+              </button>
+            ))
+          ) : (
+            !loading && (
+              <div className="p-4 text-sm text-muted-foreground text-center">
+                No locations found
+              </div>
+            )
+          )}
         </div>
       )}
     </div>

@@ -30,6 +30,22 @@ export default function ProfileScreen() {
         enabled: !!user
     });
 
+    const { data: wallet } = useQuery({
+        queryKey: ['wallet-balance', user?.id],
+        queryFn: async () => {
+            if (!user) return null;
+            const { data, error } = await supabase
+                .from('wallets')
+                .select('balance')
+                .eq('user_id', user.id)
+                .single();
+            if (error) return { balance: 0 };
+            return data;
+        },
+        enabled: !!user,
+        refetchInterval: 30000, // Refresh every 30s
+    });
+
     const handlePhotoUpload = async () => {
         try {
             // Request permissions
@@ -106,13 +122,15 @@ export default function ProfileScreen() {
     };
 
     const menuItems = [
-        { icon: 'person-outline', label: 'Edit Profile', route: '/profile/edit' },
-        ...(driverProfile ? [{ icon: 'cash-outline', label: 'Earnings', route: '/profile/earnings' }] : []),
-        { icon: 'car-outline', label: 'My Vehicles', route: '/profile/vehicles' },
-        { icon: 'wallet-outline', label: 'Payment Methods', route: '/profile/payment' },
-        { icon: 'notifications-outline', label: 'Notifications', route: '/profile/notifications' },
-        { icon: 'help-circle-outline', label: 'Help & Support', route: '/profile/help' },
-        { icon: 'settings-outline', label: 'Settings', route: '/profile/settings' },
+        { icon: 'person-outline', label: 'Edit Profile', route: '/profile/edit' as any },
+        ...(driverProfile ? [{ icon: 'cash-outline', label: 'Earnings', route: '/profile/earnings' as any }] : []),
+        { icon: 'car-outline', label: 'My Vehicles', route: '/profile/vehicles' as any },
+        { icon: 'gift-outline', label: 'Refer & Earn', route: '/profile/referrals' as any },
+        { icon: 'wallet-outline', label: 'Wallet & Payments', route: '/profile/wallet' as any },
+        { icon: 'shield-checkmark-outline', label: 'Safety Center', route: '/safety-center' as any },
+        { icon: 'notifications-outline', label: 'Notifications', route: '/profile/notifications' as any },
+        { icon: 'help-circle-outline', label: 'Help & Support', route: '/profile/help' as any },
+        { icon: 'settings-outline', label: 'Settings', route: '/profile/settings' as any },
     ];
 
     if (!user) return null;
@@ -168,11 +186,14 @@ export default function ProfileScreen() {
                         <Text style={styles.statValue}>{driverProfile?.rating || '-'}</Text>
                         <Text style={styles.statLabel}>Rating</Text>
                     </View>
-                    <View style={styles.statCard}>
+                    <TouchableOpacity
+                        style={styles.statCard}
+                        onPress={() => router.push('/profile/wallet')}
+                    >
                         <Ionicons name="cash-outline" size={24} color="#22c55e" />
-                        <Text style={styles.statValue}>₹0</Text>
-                        <Text style={styles.statLabel}>Saved</Text>
-                    </View>
+                        <Text style={styles.statValue}>₹{wallet?.balance?.toFixed(0) || '0'}</Text>
+                        <Text style={styles.statLabel}>Wallet</Text>
+                    </TouchableOpacity>
                 </View>
 
                 <View style={styles.menuSection}>

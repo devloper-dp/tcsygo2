@@ -1,0 +1,23 @@
+{
+    "compilerOptions": {
+        "module": "esnext",
+        "target": "esnext",
+        "moduleResolution": "bundler",
+        "allowImportingTsExtensions": true,
+        "noEmit": true,
+        "checkJs": false,
+        "skipLibCheck": true,
+        "baseUrl": ".",
+        "paths": {
+            "*": [
+                "*",
+                "https://*",
+                "npm:*"
+            ]
+        }
+    },
+    "include": [
+        "**/*.ts",
+        "ambient.d.ts"
+    ]
+}

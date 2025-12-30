@@ -1,24 +1,89 @@
+import { useTranslation } from 'react-i18next';
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { LocationAutocomplete } from '@/components/LocationAutocomplete';
-import { NotificationDropdown } from '@/components/NotificationDropdown';
+import { Navbar } from '@/components/Navbar';
 import { RecentSearches, PopularRoutes } from '@/components/SearchSuggestions';
-import { Calendar, ArrowRight, Users, Shield, Leaf, DollarSign } from 'lucide-react';
-import { Coordinates } from '@/lib/mapbox';
+import { RepeatRideButton } from '@/components/RepeatRideButton';
+import { FavoriteRoutes } from '@/components/FavoriteRoutes';
+import { SafetyTips } from '@/components/SafetyTips';
+import { CarbonFootprint } from '@/components/CarbonFootprint';
+import { RidePreferences } from '@/components/RidePreferences';
+import { Calendar, ArrowRight, Users, Shield, Leaf, DollarSign, Settings } from 'lucide-react';
+import { Coordinates } from '@/lib/maps';
 import { useSearchStore } from '@/lib/search-store';
+import { QuickBookWidget } from '@/components/QuickBookWidget';
+import { QuickActions } from '@/components/QuickActions';
+import { OnboardingTutorial } from '@/components/OnboardingTutorial';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 import heroImage from '@assets/generated_images/Happy_carpooling_travelers_roadtrip_dc309ad7.png';
 
 export default function Home() {
+  const { t } = useTranslation();
   const [, navigate] = useLocation();
   const [pickup, setPickup] = useState('');
   const [pickupCoords, setPickupCoords] = useState<Coordinates>();
   const [drop, setDrop] = useState('');
   const [dropCoords, setDropCoords] = useState<Coordinates>();
   const [date, setDate] = useState('');
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showPreferences, setShowPreferences] = useState(false);
 
   const { addRecentSearch } = useSearchStore();
+  const { user } = useAuth();
+
+  // Fetch user statistics for carbon footprint
+  const { data: userStats } = useQuery({
+    queryKey: ['user-stats', user?.id],
+    queryFn: async () => {
+      if (!user) return { totalDistance: 0, totalRides: 0 };
+
+      const { data: bookings, error } = await supabase
+        .from('bookings')
+        .select('trip:trips(distance_covered)')
+        .eq('passenger_id', user.id)
+        .eq('status', 'completed');
+
+      if (error) throw error;
+
+      const totalDistance = bookings?.reduce((sum, b: any) => {
+        return sum + (parseFloat(b.trip?.distance_covered) || 0);
+      }, 0) || 0;
+
+      return {
+        totalDistance,
+        totalRides: bookings?.length || 0,
+      };
+    },
+    enabled: !!user,
+  });
+
+  // Check if user has completed onboarding
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      if (!user) return;
+
+      const { data } = await supabase
+        .from('users')
+        .select('onboarding_completed')
+        .eq('id', user.id)
+        .single();
+
+      if (!data?.onboarding_completed) {
+        setShowOnboarding(true);
+      }
+    };
+
+    checkOnboarding();
+  }, [user]);
+
+  const handleOnboardingComplete = () => {
+    setShowOnboarding(false);
+  };
 
   const handleSearch = () => {
     if (!pickup || !drop) return;
@@ -45,38 +110,10 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-lg">T</span>
-            </div>
-            <span className="font-display font-bold text-xl">TCSYGO</span>
-          </div>
+      <Navbar />
 
-          <nav className="hidden md:flex items-center gap-6">
-            <Button variant="ghost" onClick={() => navigate('/search')} data-testid="link-find-ride">
-              Find a Ride
-            </Button>
-            <Button variant="ghost" onClick={() => navigate('/create-trip')} data-testid="link-offer-ride">
-              Offer a Ride
-            </Button>
-            <Button variant="ghost" onClick={() => navigate('/my-trips')} data-testid="link-my-trips">
-              My Trips
-            </Button>
-          </nav>
-
-          <div className="flex items-center gap-3">
-            <NotificationDropdown />
-            <Button variant="ghost" onClick={() => navigate('/login')} data-testid="button-login">
-              Log In
-            </Button>
-            <Button onClick={() => navigate('/signup')} data-testid="button-signup">
-              Sign Up
-            </Button>
-          </div>
-        </div>
-      </header>
+      {/* Onboarding Tutorial for New Users */}
+      <OnboardingTutorial open={showOnboarding} onComplete={handleOnboardingComplete} />
 
       <section className="relative h-[70vh] flex items-center justify-center overflow-hidden">
         <div
@@ -88,11 +125,12 @@ export default function Home() {
         <div className="relative z-10 container mx-auto px-6">
           <div className="max-w-3xl mx-auto text-center mb-8">
             <h1 className="font-display font-bold text-5xl md:text-6xl text-white mb-4">
-              Share Your Journey
+              {t('home.title')}
             </h1>
             <p className="text-xl text-white/90 mb-8">
-              Connect with travelers, save money, and reduce your carbon footprint
+              {t('home.subtitle')}
             </p>
+            <QuickBookWidget className="mb-6" />
           </div>
 
           <Card className="max-w-4xl mx-auto p-6 bg-background/95 backdrop-blur">
@@ -103,7 +141,7 @@ export default function Home() {
                   setPickup(val);
                   if (coords) setPickupCoords(coords);
                 }}
-                placeholder="Pickup location"
+                placeholder={t('common.pickup')}
                 testId="input-pickup"
               />
 
@@ -113,7 +151,7 @@ export default function Home() {
                   setDrop(val);
                   if (coords) setDropCoords(coords);
                 }}
-                placeholder="Drop location"
+                placeholder={t('common.drop')}
                 testId="input-drop"
               />
 
@@ -135,7 +173,7 @@ export default function Home() {
                 className="whitespace-nowrap"
                 data-testid="button-search"
               >
-                Search
+                {t('common.search')}
                 <ArrowRight className="ml-2 w-4 h-4" />
               </Button>
             </div>
@@ -147,8 +185,65 @@ export default function Home() {
       <section className="py-16 bg-background">
         <div className="container mx-auto px-6">
           <div className="max-w-6xl mx-auto space-y-12">
+            {/* Promotional Banner */}
+            {user && (
+              <Card className="p-6 bg-gradient-to-r from-primary/10 via-primary/5 to-background border-primary/20">
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
+                      <DollarSign className="w-6 h-6 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-lg">Welcome Offer!</h3>
+                      <p className="text-sm text-muted-foreground">Get 20% off on your first 3 rides. Use code: WELCOME20</p>
+                    </div>
+                  </div>
+                  <Button onClick={() => navigate('/search')}>
+                    Book Now
+                  </Button>
+                </div>
+              </Card>
+            )}
+
+            {/* Quick Actions with Preferences */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <RepeatRideButton variant="card" />
+              <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/profile')}>
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Settings className="w-6 h-6 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">Ride Preferences</h3>
+                    <p className="text-sm text-muted-foreground">Set your AC, music, and other preferences</p>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Quick Actions Section */}
+      <section className="container mx-auto px-6 py-8">
+        <QuickActions className="mb-8" />
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="md:col-span-2 space-y-6">
             <RecentSearches />
             <PopularRoutes />
+          </div>
+
+          <div className="space-y-6">
+            <RepeatRideButton />
+            <FavoriteRoutes />
+            {userStats && (
+              <CarbonFootprint
+                totalDistance={userStats.totalDistance}
+                totalRides={userStats.totalRides}
+              />
+            )}
+            <SafetyTips />
           </div>
         </div>
       </section>
@@ -274,7 +369,7 @@ export default function Home() {
             </div>
 
             <p className="text-sm text-muted-foreground">
-              © 2024 TCSYGO. All rights reserved.
+              © 2024 TCSYGO - Indore's Carpooling Platform. All rights reserved.
             </p>
           </div>
         </div>
