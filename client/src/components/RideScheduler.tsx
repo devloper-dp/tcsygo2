@@ -147,7 +147,7 @@ export function RideScheduler({ onSchedule, className = '' }: RideSchedulerProps
                                 disabled={!isValidDateTime()}
                                 className="flex-1"
                             >
-                                Schedule Ride
+                                Set Time
                             </Button>
                         </div>
 

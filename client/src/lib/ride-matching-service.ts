@@ -16,6 +16,7 @@ export interface RideRequest {
     duration: number;
     status: 'pending' | 'searching' | 'matched' | 'accepted' | 'cancelled' | 'expired' | 'completed';
     matched_driver_id?: string;
+    trip_id?: string;
     preferences?: any;
     promo_code?: string;
     discount_amount?: number;
@@ -66,6 +67,19 @@ export async function createRideRequest(params: {
 }): Promise<RideRequest> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('User not authenticated');
+
+    // Check for existing active request to avoid duplicates
+    const activeRequest = await getActiveRideRequest();
+    if (activeRequest) {
+        // If the active request is functionally the same (same status), return it
+        // Otherwise, throw error telling user they have an ongoing request
+        console.log("Found existing active request:", activeRequest.id);
+
+        // If it's just 'searching' or 'pending', we can return it as "created" 
+        // effectively idempotent behavior, OR throw an error.
+        // Returning it is safer for UI idempotency.
+        return activeRequest;
+    }
 
     const timeoutMinutes = 5; // Request expires after 5 minutes
     const timeoutAt = new Date(Date.now() + timeoutMinutes * 60 * 1000).toISOString();
@@ -292,7 +306,7 @@ export async function getActiveRideRequest(): Promise<RideRequest | null> {
         .from('ride_requests')
         .select('*')
         .eq('passenger_id', user.id)
-        .in('status', ['searching', 'matched', 'accepted'])
+        .in('status', ['searching', 'matched', 'accepted', 'pending'])
         .order('created_at', { ascending: false })
         .limit(1)
         .single();

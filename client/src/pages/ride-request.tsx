@@ -8,7 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 
 export default function RideRequestPage() {
     const [, navigate] = useLocation();
-    const [match, params] = useRoute('/ride-request/:id');
+    const [, params] = useRoute('/ride-request/:id');
     const requestId = params?.id;
 
     // If no ID in URL, try to get active request
@@ -27,9 +27,7 @@ export default function RideRequestPage() {
         }
     }, [requestId, activeRequest, navigate]);
 
-    const handleComplete = () => {
-        navigate('/my-trips');
-    };
+
 
     const handleCancel = () => {
         navigate('/');
@@ -57,7 +55,6 @@ export default function RideRequestPage() {
                 <h1 className="text-2xl font-bold mb-6">Ride Request</h1>
                 <RideRequestStatus
                     requestId={finalRequestId}
-                    onComplete={handleComplete}
                     onCancel={handleCancel}
                 />
             </div>

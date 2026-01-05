@@ -62,19 +62,69 @@ export default function Home() {
     enabled: !!user,
   });
 
+  // Redirect admin users to admin dashboard
+  useEffect(() => {
+    if (user && user.role === 'admin') {
+      console.log('Home: Admin user detected, redirecting to /admin');
+      navigate('/admin');
+    }
+
+    // NEW: Check for active trip (for drivers) and auto-redirect
+    if (user && user.role === 'driver') {
+      const checkActiveTrip = async () => {
+        // Find driver profile first
+        const { data: driver } = await supabase.from('drivers').select('id').eq('user_id', user.id).single();
+
+        if (driver) {
+          const { data: activeTrip } = await supabase
+            .from('trips')
+            .select('id')
+            .eq('driver_id', driver.id)
+            .eq('status', 'ongoing')
+            .maybeSingle();
+
+          if (activeTrip) {
+            console.log('Home: Active trip found, redirecting to tracking:', activeTrip.id);
+            navigate(`/track/${activeTrip.id}`);
+          }
+        }
+      };
+      checkActiveTrip();
+    }
+  }, [user, navigate]);
+
   // Check if user has completed onboarding
   useEffect(() => {
     const checkOnboarding = async () => {
-      if (!user) return;
+      if (!user) {
+        console.log('Home: No user found, skipping onboarding check');
+        return;
+      }
 
-      const { data } = await supabase
-        .from('users')
-        .select('onboarding_completed')
-        .eq('id', user.id)
-        .single();
+      console.log('Home: Checking onboarding status for user:', user.id);
 
-      if (!data?.onboarding_completed) {
-        setShowOnboarding(true);
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('onboarding_completed')
+          .eq('id', user.id)
+          .single();
+
+        if (error) {
+          console.error('Home: Error fetching onboarding status:', error);
+          return;
+        }
+
+        console.log('Home: Onboarding status:', data?.onboarding_completed);
+
+        if (!data?.onboarding_completed) {
+          console.log('Home: Showing onboarding tutorial');
+          setShowOnboarding(true);
+        } else {
+          console.log('Home: Onboarding already completed, not showing tutorial');
+        }
+      } catch (error) {
+        console.error('Home: Exception while checking onboarding status:', error);
       }
     };
 

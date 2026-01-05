@@ -86,26 +86,37 @@ export function calculateSurgeMultiplier(
 /**
  * Get current demand level based on time and location
  */
+const TRAFFIC_PATTERNS = {
+    weekday: {
+        peak: [[8, 11], [17, 21]], // Hours [start, end)
+        moderate: [[7, 8], [11, 17], [21, 23]],
+        low: [[0, 7], [23, 24]]
+    },
+    weekend: {
+        peak: [[11, 17], [18, 22]],
+        moderate: [[9, 11], [17, 18], [22, 24]],
+        low: [[0, 9]]
+    }
+};
+
+/**
+ * Get current demand level based on time and location strategy
+ * Currently implements a static time-of-day model.
+ * Future: Integrate with real-time traffic data API.
+ */
 export function getCurrentDemand(hour: number): 'low' | 'medium' | 'high' | 'very_high' {
     const day = new Date().getDay();
     const isWeekend = day === 0 || day === 6;
+    const pattern = isWeekend ? TRAFFIC_PATTERNS.weekend : TRAFFIC_PATTERNS.weekday;
 
-    // Peak hours: 8-11 AM, 5-9 PM
-    if ((hour >= 8 && hour < 11) || (hour >= 17 && hour < 21)) {
+    const isInRange = (ranges: number[][], h: number) => ranges.some(([start, end]) => h >= start && h < end);
+
+    if (isInRange(pattern.peak, hour)) {
         return isWeekend ? 'high' : 'very_high';
     }
-
-    // Late night: 11 PM - 5 AM
-    if (hour >= 23 || hour <= 5) {
-        return 'medium'; // Higher base fare at night
+    if (isInRange(pattern.moderate, hour)) {
+        return 'medium';
     }
-
-    // Midday weekends high demand
-    if (isWeekend && hour >= 11 && hour < 17) {
-        return 'high';
-    }
-
-    // Normal hours
     return 'low';
 }
 

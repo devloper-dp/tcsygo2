@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
@@ -18,12 +17,15 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
 
-  // Redirect if already logged in
+  // Redirect if already logged in based on user role
   useEffect(() => {
     if (user) {
       if (user.role === 'admin') {
         navigate('/admin');
+      } else if (user.role === 'driver') {
+        navigate('/driver-requests');
       } else {
+        // passenger or any other role
         navigate('/');
       }
     }
@@ -36,30 +38,16 @@ export default function Login() {
       setLoading(true);
       await signIn(email, password);
 
-      // Fetch current user details after successful login
-      const { data: { user } } = await import('@/lib/supabase').then(m => m.supabase.auth.getUser());
+      // Get the current user after sign in to determine redirect
+      // The signIn function updates the user state, so we need to wait a bit
+      // or access it from the auth context after the state updates
 
-      if (user) {
-        // Fetch role from public.users table as it's the source of truth
-        const { data: profile } = await import('@/lib/supabase')
-          .then(m => m.supabase
-            .from('users')
-            .select('role')
-            .eq('id', user.id)
-            .single()
-          );
+      toast({
+        title: 'Welcome back!',
+        description: 'You have successfully logged in.',
+      });
 
-        toast({
-          title: 'Welcome back!',
-          description: 'You have successfully logged in.',
-        });
-
-        if (profile?.role === 'admin') {
-          navigate('/admin');
-        } else {
-          navigate('/');
-        }
-      }
+      // The useEffect will handle the redirect when user state updates
     } catch (error: any) {
       toast({
         title: 'Login failed',

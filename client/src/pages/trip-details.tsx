@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation, useRoute } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,7 +26,7 @@ import { LiveDriveStats } from '@/components/LiveDriveStats';
 import { locationTrackingService } from '@/lib/location-tracking'; // Added import
 import { useToast } from '@/hooks/use-toast';
 import { queryClient } from '@/lib/queryClient';
-import { ArrowLeft, Calendar, MapPin, Users, Star, Car, Check, X, Shield, Play, Square, ThumbsUp, Eye, Edit2, DollarSign, Share2, AlertTriangle, Phone, Navigation } from 'lucide-react';
+import { Calendar, MapPin, Users, Star, Car, Check, X, Shield, Play, Square, ThumbsUp, Eye, Edit2, AlertTriangle, Phone, Navigation } from 'lucide-react';
 import { RatingModal } from '@/components/RatingModal';
 import { ReviewsList } from '@/components/ReviewsList';
 import { EditTripModal } from '@/components/EditTripModal';
@@ -55,9 +55,15 @@ import { FareBreakdown } from '@/components/FareBreakdown';
 import { PaymentReceipt } from '@/components/PaymentReceipt';
 import { PromoCodeInput } from '@/components/PromoCodeInput';
 import { PromoCode } from '@/lib/promo-service';
-import { applyPromoCode, calculateFare, formatCurrency } from '@/lib/fareCalculator';
+import { calculateFare } from '@/lib/fareCalculator';
 import { processAutoPayments } from '@/lib/auto-pay';
 import { useTranslation } from 'react-i18next';
+
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
 
 export default function TripDetails() {
   const { t } = useTranslation();
@@ -69,13 +75,13 @@ export default function TripDetails() {
 
   const [seatsToBook, setSeatsToBook] = useState(1);
   const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingTargetUserId, setRatingTargetUserId] = useState<string | null>(null);
   const [showReviewsModal, setShowReviewsModal] = useState(false);
   const [showEditTripModal, setShowEditTripModal] = useState(false);
   const [showDriverVerification, setShowDriverVerification] = useState(false);
   const [showTripReplay, setShowTripReplay] = useState(false);
 
   const [paymentMethod, setPaymentMethod] = useState<any>({ type: 'cash' });
-  const [tipAmount, setTipAmount] = useState(0);
 
 
   const [customPickup, setCustomPickup] = useState('');
@@ -184,6 +190,7 @@ export default function TripDetails() {
 
   const bookingMutation = useMutation({
     mutationFn: async (data: { tripId: string; seatsBooked: number; paymentMethod: any }) => {
+      console.log('[TripDetails] Mutation started', data);
       if (!user) throw new Error("Must be logged in");
 
       // Calculate amount (Fare + 5% Platform Fee) - Discount
@@ -192,7 +199,7 @@ export default function TripDetails() {
       const finalAmount = Math.max(0, priceWithPlatform - discount);
 
       // Handle Wallet Payment
-      if (data.paymentMethod.id === 'wallet') {
+      if (data.paymentMethod.type === 'wallet') {
         const { data: wallet, error: walletError } = await supabase
           .from('wallets')
           .select('*')
@@ -231,10 +238,14 @@ export default function TripDetails() {
         seats_booked: data.seatsBooked,
         total_amount: finalAmount,
         status: 'confirmed',
-        payment_status: data.paymentMethod.id === 'wallet' ? 'paid' : 'pending',
-        payment_method: data.paymentMethod.id,
+        payment_status: data.paymentMethod.type === 'wallet' ? 'paid' : 'pending',
+        payment_method: data.paymentMethod.type,
         pickup_location: customPickup || trip?.pickupLocation,
         drop_location: customDrop || trip?.dropLocation,
+        pickup_lat: trip?.pickupLat,
+        pickup_lng: trip?.pickupLng,
+        drop_lat: trip?.dropLat,
+        drop_lng: trip?.dropLng,
         preferences: selectedPreferences, // Including preferences if table supports JSONB
       };
 
@@ -247,30 +258,38 @@ export default function TripDetails() {
       if (bookingError) throw bookingError;
 
       // Decrement available seats
-      const { error: tripError } = await supabase
-        .from('trips')
-        .update({ available_seats: (trip?.availableSeats || 0) - data.seatsBooked })
-        .eq('id', data.tripId);
+      // Manual seat update removed: Handled by database trigger 'on_booking_created'
 
-      if (tripError) throw tripError;
 
       return booking;
     },
     onSuccess: (_, variables) => {
       toast({
         title: 'Booking Confirmed!',
-        description: variables.paymentMethod.id === 'wallet'
+        description: variables.paymentMethod.type === 'wallet'
           ? 'Payment successful. Have a safe ride!'
           : 'Your seat is reserved. Payment will be collected after the ride.',
       });
       queryClient.invalidateQueries({ queryKey: ['trip-details', tripId] });
       queryClient.invalidateQueries({ queryKey: ['my-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['my-created-trips'] }); // Ensure driver view updates if testing on same device
       // Clear promo logic
       setAppliedPromo(null);
       setDiscount(0);
       navigate('/my-trips');
     },
     onError: (error: any) => {
+      console.error("Booking Mutation Failed:", error);
+      console.error("Booking Data Payload:", {
+        tripId: tripId,
+        passengerId: user?.id,
+        seatsBooked: seatsToBook, // Using state directly for logging
+        paymentMethod: paymentMethod,
+        customPickup: customPickup,
+        customDrop: customDrop,
+        lat: trip?.pickupLat,
+        lng: trip?.pickupLng
+      });
       toast({
         title: 'Booking failed',
         description: error.message || 'Please try again',
@@ -325,6 +344,131 @@ export default function TripDetails() {
     }
   });
 
+  const ratingMutation = useMutation({
+    mutationFn: async (data: { rating: number; feedback: string; tags: string[]; toUserId: string }) => {
+      if (!user) throw new Error("Must be logged in");
+      if (!trip) throw new Error("Trip details not loaded");
+
+      const { error } = await supabase.from('ratings').insert({
+        trip_id: trip.id,
+        from_user_id: user.id,
+        to_user_id: data.toUserId,
+        rating: data.rating,
+        review: data.feedback,
+      });
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Rating Submitted",
+        description: "Thank you for your feedback!",
+      });
+      setShowRatingModal(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Rating Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+
+  const processPaymentMutation = useMutation({
+    mutationFn: async (data: { bookingId: string; amount: number; paymentMethod: any }) => {
+      console.log('[TripDetails] Process Payment Mutation Started', data);
+
+      // Handle Wallet Payment
+      if (data.paymentMethod.type === 'wallet') {
+        const { data: wallet, error: walletError } = await supabase
+          .from('wallets')
+          .select('*')
+          .eq('user_id', user!.id)
+          .single();
+
+        if (walletError) throw new Error("Could not fetch wallet balance");
+
+        if (parseFloat(wallet.balance) < data.amount) {
+          throw new Error("Insufficient wallet balance. Please add money or choose another method.");
+        }
+
+        // Deduct from wallet
+        const { error: updateError } = await supabase
+          .from('wallets')
+          .update({ balance: parseFloat(wallet.balance) - data.amount })
+          .eq('id', wallet.id);
+
+        if (updateError) throw new Error("Wallet transaction failed");
+
+        // Record transaction
+        await supabase.from('wallet_transactions').insert({
+          wallet_id: wallet.id,
+          type: 'debit',
+          amount: data.amount,
+          description: `Payment for trip #${tripId!.slice(0, 8)}`,
+          status: 'completed',
+          reference_id: tripId
+        });
+      }
+
+      // Update Booking Status
+      const { data: updatedBooking, error: bookingError } = await supabase
+        .from('bookings')
+        .update({
+          payment_status: 'paid',
+          payment_method: data.paymentMethod.type,
+          status: 'completed' // Ensure it's completed
+        })
+        .eq('id', data.bookingId)
+        .select()
+        .single();
+
+      if (bookingError) throw bookingError;
+
+      return updatedBooking;
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Payment Successful!',
+        description: 'Your payment has been processed.',
+      });
+      queryClient.invalidateQueries({ queryKey: ['trip-details', tripId] });
+      queryClient.invalidateQueries({ queryKey: ['trip-bookings', tripId] });
+      queryClient.invalidateQueries({ queryKey: ['my-bookings'] });
+      // Clear local states
+      setPaymentMethod({ type: 'cash' });
+    },
+    onError: (error: any) => {
+      console.error("Payment Processing Failed:", error);
+      toast({
+        title: 'Payment Failed',
+        description: error.message || 'Please try again',
+        variant: 'destructive',
+      });
+    }
+  });
+
+  const handleProcessPayment = () => {
+    if (!myBooking) return;
+
+    // Validate Payment Method if needed (same as booking)
+    if (paymentMethod.type === 'upi' && !paymentMethod.details?.upiId && !paymentMethod.details?.upiApp) {
+      toast({
+        title: "Payment Details Missing",
+        description: "Please enter a valid UPI ID or select a UPI App.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    processPaymentMutation.mutate({
+      bookingId: myBooking.id,
+      amount: parseFloat(myBooking.total_amount),
+      paymentMethod
+    });
+  };
+
   // Redirect to tracking page if trip is ongoing
   const handleTrackRide = () => {
     navigate(`/track/${tripId}`);
@@ -348,6 +492,30 @@ export default function TripDetails() {
     }
   }, [isDriver, trip?.status, trip?.id]);
 
+
+  const baseTotalPrice = trip ? parseFloat(trip.pricePerSeat.toString()) * seatsToBook : 0;
+
+  // Update discount when seats or promo changes
+  useEffect(() => {
+    if (appliedPromo && trip) {
+      let newDiscount = 0;
+      const totalFare = baseTotalPrice * 1.05; // Base + platform fee
+
+      if (appliedPromo.discount_type === 'percentage') {
+        newDiscount = (totalFare * appliedPromo.discount_value) / 100;
+        if (appliedPromo.max_discount) {
+          newDiscount = Math.min(newDiscount, appliedPromo.max_discount);
+        }
+      } else {
+        newDiscount = appliedPromo.discount_value;
+      }
+      setDiscount(newDiscount);
+    } else {
+      setDiscount(0);
+    }
+  }, [seatsToBook, appliedPromo, trip, baseTotalPrice]);
+
+  const finalTotalPrice = Math.max(0, (baseTotalPrice * 1.05) - discount);
 
   if (isLoading || !trip) {
     return (
@@ -381,7 +549,85 @@ export default function TripDetails() {
 
   const route = routeGeometry;
 
+  const handleRazorpayPayment = async (amount: number, description: string, onSuccess: (transactionId: string) => void) => {
+    try {
+      // 1. Create Order
+      const { data: orderData, error: orderError } = await supabase.functions.invoke('create-booking-payment', {
+        body: { amount }
+      });
+
+      if (orderError) throw orderError;
+
+      // 2. Initialize Razorpay
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: 'TCSYGO Ride',
+        description: description,
+        order_id: orderData.razorpayOrderId,
+        handler: async function (response: any) {
+          try {
+            // 3. Verify Payment
+            const { error: verifyError } = await supabase.functions.invoke('verify-booking-payment', {
+              body: {
+                razorpayOrderId: orderData.razorpayOrderId,
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpaySignature: response.razorpay_signature,
+              }
+            });
+
+            if (verifyError) throw verifyError;
+
+            // 4. Proceed with Booking
+            onSuccess(response.razorpay_payment_id);
+
+          } catch (error: any) {
+            console.error('Payment Verification Failed:', error);
+            toast({
+              title: 'Payment Verification Failed',
+              description: 'Please contact support if money was deducted.',
+              variant: 'destructive',
+            });
+          }
+        },
+        prefill: {
+          name: user?.fullName,
+          email: user?.email,
+          contact: user?.phone,
+        },
+        theme: {
+          color: '#3b82f6',
+        },
+        modal: {
+          ondismiss: function () {
+            toast({
+              title: 'Payment Cancelled',
+              description: 'You can try again.',
+            });
+          },
+        },
+      };
+
+      const razorpay = new window.Razorpay(options);
+      razorpay.open();
+
+    } catch (error: any) {
+      console.error('Payment Initialization Failed:', error);
+      toast({
+        title: 'Payment Failed',
+        description: error.message || 'Could not initiate payment',
+        variant: 'destructive',
+      });
+    }
+  };
+
+
   const handleBookTrip = () => {
+    console.log('[TripDetails] Book Trip Clicked');
+    console.log('[TripDetails] Seats:', seatsToBook, 'Available:', trip?.availableSeats);
+    console.log('[TripDetails] Payment Method:', paymentMethod);
+
     if (seatsToBook < 1 || seatsToBook > trip.availableSeats) {
       toast({
         title: 'Invalid seats',
@@ -391,51 +637,58 @@ export default function TripDetails() {
       return;
     }
 
-    bookingMutation.mutate({
-      tripId: trip.id,
-      seatsBooked: seatsToBook,
-      paymentMethod,
-    });
-  };
+    // Validate Payment Method
+    if (paymentMethod.type === 'upi' && !paymentMethod.details?.upiId && !paymentMethod.details?.upiApp) {
+      toast({
+        title: "Payment Details Missing",
+        description: "Please enter a valid UPI ID or select a UPI App.",
+        variant: "destructive"
+      });
+      return;
+    }
 
-  const baseTotalPrice = parseFloat(trip.pricePerSeat) * seatsToBook;
+    const finalAmount = Math.max(0, parseFloat(trip.pricePerSeat.toString()) * seatsToBook * 1.05 - discount);
 
-  // Update discount when seats or promo changes
-  useEffect(() => {
-    if (appliedPromo) {
-      let newDiscount = 0;
-      const totalFare = baseTotalPrice * 1.05; // Base + platform fee
-
-      if (appliedPromo.discount_type === 'percentage') {
-        newDiscount = (totalFare * appliedPromo.discount_value) / 100;
-        if (appliedPromo.max_discount) {
-          newDiscount = Math.min(newDiscount, appliedPromo.max_discount);
+    if ((paymentMethod.type === 'upi' || paymentMethod.type === 'card') && finalAmount > 0) {
+      // Trigger Razorpay Flow
+      handleRazorpayPayment(
+        finalAmount * 100, // Amount in paise
+        `Booking for Trip #${trip.id.slice(0, 8)}`,
+        (transactionId) => {
+          // On Success, call mutation with transaction ID if needed, or just proceed
+          // Ideally we pass transactionId to booking, but existing mutation might not support it yet.
+          // We'll update mutation call below to include it if supported, or just proceed as 'paid'
+          bookingMutation.mutate({
+            tripId: trip.id,
+            seatsBooked: seatsToBook,
+            paymentMethod: { ...paymentMethod, transactionId }
+          });
         }
-      } else {
-        newDiscount = appliedPromo.discount_value;
-      }
-      setDiscount(newDiscount);
-    } else {
-      setDiscount(0);
+      );
+      return;
     }
-  }, [seatsToBook, appliedPromo, trip]);
 
-  const finalTotalPrice = Math.max(0, (baseTotalPrice * 1.05) - discount);
-
-  const handleShareTrip = () => {
-    if (!driver || !trip) return;
-    const text = `I'm on a ride with ${driver.user.fullName} in a ${driver.vehicleColor} ${driver.vehicleModel} (${driver.vehiclePlate}). Track my ride: ${window.location.href}`;
-    if (navigator.share) {
-      navigator.share({
-        title: 'My Ride Details',
-        text: text,
-        url: window.location.href
-      }).catch(console.error);
-    } else {
-      navigator.clipboard.writeText(text);
-      toast({ title: 'Ride details copied to clipboard' });
+    // Cash or Wallet (handled in mutation)
+    console.log('[TripDetails] Calling mutation...');
+    try {
+      bookingMutation.mutate({
+        tripId: trip.id,
+        seatsBooked: seatsToBook,
+        paymentMethod,
+      });
+    } catch (err) {
+      console.error('[TripDetails] Synchronous error in mutation call:', err);
+      toast({
+        title: 'Error',
+        description: 'Something went wrong while initiating the booking. Please check console.',
+        variant: 'destructive',
+      });
     }
   };
+
+
+
+
 
   const handleSOS = async () => {
     try {
@@ -464,6 +717,8 @@ export default function TripDetails() {
       });
     }
   };
+
+
 
   return (
     <div className="min-h-screen bg-background">
@@ -787,7 +1042,7 @@ export default function TripDetails() {
           </Dialog>
 
           {/* Fare Breakdown for Passengers */}
-          {/*!Fare Breakdown for Passengers!*/}
+          {/* Fare Breakdown for Passengers */}
           {!isDriver && (
             <FareBreakdown
               {...(() => {
@@ -914,6 +1169,17 @@ export default function TripDetails() {
                         >
                           <MessageCircle className="w-4 h-4 text-primary" />
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setRatingTargetUserId(booking.passenger_id);
+                            setShowRatingModal(true);
+                          }}
+                          title="Rate Passenger"
+                        >
+                          <Star className="w-4 h-4 text-yellow-500" />
+                        </Button>
                       </div>
                     ))}
                   </div>
@@ -921,130 +1187,210 @@ export default function TripDetails() {
               )}
             </>
           ) : (
-            <Card className="p-6">
-              <h3 className="font-semibold mb-4">Book Your Seats</h3>
+            // PASSENGER ACTIONS
+            <>
+              {myBooking ? (
+                // ALREADY BOOKED
+                <Card className="p-6 border-green-500/20 bg-green-500/5">
+                  <h3 className="font-semibold mb-4 text-green-700 flex items-center gap-2">
+                    <Check className="w-5 h-5" />
+                    Booking Confirmed
+                  </h3>
 
-              <div className="space-y-4">
-                {/* Custom Location Inputs */}
-                <div className="space-y-3">
-                  <div>
-                    <Label className="text-xs text-muted-foreground mb-1.5 block">Pickup Location</Label>
-                    <LocationAutocomplete
-                      value={customPickup}
-                      onChange={(val) => setCustomPickup(val)}
-                      placeholder="Enter pickup location"
-                      className="h-9 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground mb-1.5 block">Drop Location</Label>
-                    <LocationAutocomplete
-                      value={customDrop}
-                      onChange={(val) => setCustomDrop(val)}
-                      placeholder="Enter drop location"
-                      className="h-9 text-sm"
-                    />
-                  </div>
-                </div>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">Booking ID</span>
+                      <span className="font-mono">{myBooking.id.slice(0, 8)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">Status</span>
+                      <Badge variant="outline" className="capitalize">{myBooking.status}</Badge>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">Payment Status</span>
+                      <Badge variant={myBooking.payment_status === 'paid' ? 'default' : 'destructive'}>
+                        {myBooking.payment_status}
+                      </Badge>
+                    </div>
 
-                <Separator />
+                    {/* Rate Driver Button for Passenger */}
+                    {myBooking.status === 'completed' && (
+                      <div className="mt-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full gap-2"
+                          onClick={() => {
+                            setRatingTargetUserId(trip.driver.userId);
+                            setShowRatingModal(true);
+                          }}
+                        >
+                          <Star className="w-4 h-4 text-yellow-500" />
+                          Rate Driver
+                        </Button>
+                      </div>
+                    )}
 
-                <div>
-                  <Label htmlFor="seats">Number of Seats</Label>
-                  <div className="flex items-center gap-3 mt-2">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setSeatsToBook(Math.max(1, seatsToBook - 1))}
-                      disabled={seatsToBook <= 1}
-                      data-testid="button-decrease-seats"
-                    >
-                      -
-                    </Button>
-                    <Input
-                      id="seats"
-                      type="number"
-                      min="1"
-                      max={trip.availableSeats}
-                      value={seatsToBook}
-                      onChange={(e) => setSeatsToBook(parseInt(e.target.value) || 1)}
-                      className="w-20 text-center"
-                      data-testid="input-seats"
-                    />
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setSeatsToBook(Math.min(trip.availableSeats, seatsToBook + 1))}
-                      disabled={seatsToBook >= trip.availableSeats}
-                      data-testid="button-increase-seats"
-                    >
-                      +
-                    </Button>
-                  </div>
-                </div>
+                    {/* Pending Payment Section */}
+                    {(myBooking.payment_status === 'pending' || myBooking.status === 'payment_pending') && (
+                      <div className="mt-4 pt-4 border-t border-dashed border-green-200">
+                        <h4 className="font-medium mb-2 text-primary">Complete Your Payment</h4>
+                        <div className="mb-4">
+                          <div className="flex justify-between items-center text-lg font-bold mb-2">
+                            <span>Amount Due</span>
+                            <span>₹{myBooking.total_amount}</span>
+                          </div>
+                        </div>
 
-                <Separator />
+                        <div className="mb-4">
+                          <MultiPaymentSelector
+                            amount={parseFloat(myBooking.total_amount)}
+                            onPaymentMethodSelect={(method) => setPaymentMethod(method)}
+                            selectedMethod={paymentMethod}
+                          />
+                        </div>
 
-                {/* Ride Preferences for the Passenger to Set */}
-                <div className="py-2">
-                  <RidePreferences
-                    showSaveButton={false}
-                    className="border-0 shadow-none p-0"
-                    onPreferencesChange={(prefs) => setSelectedPreferences(prefs)}
-                  />
-                </div>
-
-                <Separator />
-
-                <div className="flex items-center justify-between text-lg">
-                  <div className="flex flex-col">
-                    <span className="font-medium">Total Amount</span>
-                    {discount > 0 && (
-                      <span className="text-sm text-success">
-                        (Includes ₹{discount.toFixed(2)} discount)
-                      </span>
+                        <Button
+                          size="lg"
+                          className="w-full font-bold"
+                          onClick={handleProcessPayment}
+                          disabled={processPaymentMutation.isPending}
+                        >
+                          {processPaymentMutation.isPending ? 'Processing...' : `Pay ₹${myBooking.total_amount}`}
+                        </Button>
+                      </div>
                     )}
                   </div>
-                  <span className="text-2xl font-bold text-primary" data-testid="text-total-price">
-                    ₹{finalTotalPrice.toFixed(2)}
-                  </span>
-                </div>
+                </Card>
+              ) : (
+                // NOT BOOKED YET (Standard View)
+                <Card className="p-6">
+                  <h3 className="font-semibold mb-4">Book Your Seats</h3>
 
+                  <div className="space-y-4">
+                    {/* Custom Location Inputs */}
+                    <div className="space-y-3">
+                      <div>
+                        <Label className="text-xs text-muted-foreground mb-1.5 block">Pickup Location</Label>
+                        <LocationAutocomplete
+                          value={customPickup}
+                          onChange={(val) => setCustomPickup(val)}
+                          placeholder="Enter pickup location"
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground mb-1.5 block">Drop Location</Label>
+                        <LocationAutocomplete
+                          value={customDrop}
+                          onChange={(val) => setCustomDrop(val)}
+                          placeholder="Enter drop location"
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                    </div>
 
+                    <Separator />
 
-                <Separator />
+                    <div>
+                      <Label htmlFor="seats">Number of Seats</Label>
+                      <div className="flex items-center gap-3 mt-2">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => setSeatsToBook(Math.max(1, seatsToBook - 1))}
+                          disabled={seatsToBook <= 1}
+                          data-testid="button-decrease-seats"
+                        >
+                          -
+                        </Button>
+                        <Input
+                          id="seats"
+                          type="number"
+                          min="1"
+                          max={trip.availableSeats}
+                          value={seatsToBook}
+                          onChange={(e) => setSeatsToBook(parseInt(e.target.value) || 1)}
+                          className="w-20 text-center"
+                          data-testid="input-seats"
+                        />
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => setSeatsToBook(Math.min(trip.availableSeats, seatsToBook + 1))}
+                          disabled={seatsToBook >= trip.availableSeats}
+                          data-testid="button-increase-seats"
+                        >
+                          +
+                        </Button>
+                      </div>
+                    </div>
 
-                <PromoCodeInput
-                  onPromoApplied={(promo) => setAppliedPromo(promo)}
-                  onPromoRemoved={() => {
-                    setAppliedPromo(null);
-                    setDiscount(0);
-                  }}
-                  defaultCode={promoFromUrl}
-                  className="border-0 shadow-none p-0"
-                />
+                    <Separator />
 
-                <Separator />
+                    {/* Ride Preferences for the Passenger to Set */}
+                    <div className="py-2">
+                      <RidePreferences
+                        showSaveButton={false}
+                        className="border-0 shadow-none p-0"
+                        onPreferencesChange={(prefs) => setSelectedPreferences(prefs)}
+                      />
+                    </div>
 
-                <div className="py-2">
-                  <MultiPaymentSelector
-                    amount={finalTotalPrice}
-                    onPaymentMethodSelect={(method) => setPaymentMethod(method)}
-                    selectedMethod={paymentMethod}
-                  />
-                </div>
+                    <Separator />
 
-                <Button
-                  size="lg"
-                  className="w-full"
-                  onClick={handleBookTrip}
-                  disabled={bookingMutation.isPending || trip.availableSeats === 0 || (trip.status !== 'upcoming' && trip.status !== 'confirmed')}
-                  data-testid="button-confirm-booking"
-                >
-                  {bookingMutation.isPending ? 'Booking...' : trip.availableSeats === 0 ? 'Sold Out' : 'Confirm & Pay'}
-                </Button>
-              </div>
-            </Card>
+                    <div className="flex items-center justify-between text-lg">
+                      <div className="flex flex-col">
+                        <span className="font-medium">Total Amount</span>
+                        {discount > 0 && (
+                          <span className="text-sm text-success">
+                            (Includes ₹{discount.toFixed(2)} discount)
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-2xl font-bold text-primary" data-testid="text-total-price">
+                        ₹{finalTotalPrice.toFixed(2)}
+                      </span>
+                    </div>
+
+                    <Separator />
+
+                    <PromoCodeInput
+                      onPromoApplied={(promo) => setAppliedPromo(promo)}
+                      onPromoRemoved={() => {
+                        setAppliedPromo(null);
+                        setDiscount(0);
+                      }}
+                      defaultCode={promoFromUrl}
+                      className="border-0 shadow-none p-0"
+                    />
+
+                    <Separator />
+
+                    <div className="py-2">
+                      <MultiPaymentSelector
+                        amount={finalTotalPrice}
+                        onPaymentMethodSelect={(method) => setPaymentMethod(method)}
+                        selectedMethod={paymentMethod}
+                      />
+                    </div>
+
+                    <div className="relative z-[50]">
+                      <Button
+                        type="button"
+                        size="lg"
+                        className="w-full cursor-pointer"
+                        onClick={handleBookTrip}
+                        disabled={bookingMutation.isPending || trip.availableSeats === 0 || (trip.status !== 'upcoming' && trip.status !== 'confirmed' && trip.status !== 'ongoing')}
+                        data-testid="button-confirm-booking"
+                      >
+                        {bookingMutation.isPending ? 'Booking...' : trip.availableSeats === 0 ? 'Sold Out' : 'Confirm & Pay'}
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              )}
+            </>
           )}
 
           {/* Ride Sharing Invite Section */}
@@ -1063,9 +1409,26 @@ export default function TripDetails() {
               <RatingModal
                 isOpen={showRatingModal}
                 onClose={() => setShowRatingModal(false)}
-                tripId={trip.id}
-                driverId={trip.driver.userId}
-                driverName={driver.user.fullName}
+                onSubmit={(rating, feedback, tags) => {
+                  const fullReview = `${feedback}\n\nTags: ${tags.join(', ')}`;
+                  // If ratingTargetUserId is set (e.g. driver rating passenger), use it. 
+                  // Otherwise default to rating the driver (passenger flow).
+                  const targetId = ratingTargetUserId || trip.driver.userId;
+
+                  ratingMutation.mutate({
+                    rating,
+                    feedback: fullReview,
+                    tags,
+                    toUserId: targetId
+                  });
+                }}
+                tripDetails={{
+                  driverName: driver.user.fullName,
+                  driverPhoto: driver.user.profilePhoto || undefined,
+                  amount: parseFloat(trip.pricePerSeat.toString()),
+                  pickup: trip.pickupLocation,
+                  drop: trip.dropLocation
+                }}
               />
               <ReviewsList
                 isOpen={showReviewsModal}
@@ -1125,7 +1488,6 @@ export default function TripDetails() {
                 <TipDriver
                   driverName={driver.user.fullName}
                   onTipSelected={async (amount) => {
-                    setTipAmount(amount);
                     try {
                       // Check wallet balance
                       const { data: wallet, error: walletError } = await supabase
@@ -1280,6 +1642,7 @@ export default function TripDetails() {
             <RealDriverTracker
               tripId={trip.id}
               driverId={trip.driverId}
+              driverUserId={trip.driver.userId}
               isDriver={true}
               pickupLocation={{ lat: parseFloat(trip.pickupLat), lng: parseFloat(trip.pickupLng) }}
               dropLocation={{ lat: parseFloat(trip.dropLat), lng: parseFloat(trip.dropLng) }}
@@ -1295,5 +1658,3 @@ export default function TripDetails() {
     </div>
   );
 }
-
-

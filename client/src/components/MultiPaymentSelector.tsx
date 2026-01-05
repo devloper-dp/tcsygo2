@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -18,18 +18,9 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { PaymentMethod } from '@shared/schema';
 
-interface PaymentMethod {
-    id: string;
-    type: 'upi' | 'card' | 'wallet' | 'cash';
-    details: {
-        upiId?: string;
-        cardLast4?: string;
-        cardBrand?: string;
-        walletProvider?: string;
-    };
-    isDefault: boolean;
-}
+// interface PaymentMethod removed - using shared
 
 interface MultiPaymentSelectorProps {
     amount: number;
@@ -55,6 +46,14 @@ export function MultiPaymentSelector({
     const [paymentType, setPaymentType] = useState<'upi' | 'card' | 'wallet' | 'cash'>('wallet');
     const [upiId, setUpiId] = useState('');
     const [selectedUpiApp, setSelectedUpiApp] = useState('');
+
+    // Sync selectedMethod prop to local state
+    useEffect(() => {
+        if (selectedMethod && selectedMethod.type !== paymentType) {
+            setPaymentType(selectedMethod.type as any);
+        }
+    }, [selectedMethod]);
+    // Intentionally omit paymentType from deps to avoid loop if parent updates selectedMethod based on our callback
 
     // Fetch wallet balance
     const { data: wallet } = useQuery({
@@ -84,10 +83,23 @@ export function MultiPaymentSelector({
                 .from('payment_methods')
                 .select('*')
                 .eq('user_id', user.id)
-                .eq('is_active', true);
+                .order('is_default', { ascending: false }); // order by default
 
             if (error) return [];
-            return data || [];
+
+            return (data || []).map((pm: any) => ({
+                id: pm.id,
+                userId: pm.user_id,
+                type: pm.type,
+                lastFour: pm.last_four,
+                cardBrand: pm.card_brand,
+                upiId: pm.upi_id,
+                walletType: pm.wallet_type,
+                provider: pm.provider,
+                isDefault: pm.is_default,
+                createdAt: pm.created_at,
+                updatedAt: pm.updated_at
+            }));
         },
         enabled: !!user?.id,
     });
@@ -102,10 +114,81 @@ export function MultiPaymentSelector({
 
     const handlePaymentTypeChange = (type: 'upi' | 'card' | 'wallet' | 'cash') => {
         setPaymentType(type);
-        if (type === 'wallet' && wallet) {
-            onPaymentMethodSelect({ type: 'wallet', id: wallet.id, details: {}, isDefault: true });
+        // Propagate change immediately
+        if (type === 'wallet') {
+            // Mock wallet method as before but adapted to shape if needed, 
+            // but selectedMethod prop is PaymentMethod | {type: 'cash'}
+            // We can construct a partial object or just pass ID if parent handles it.
+            // For now matching the previous complexity but flat.
+            onPaymentMethodSelect({
+                id: wallet?.id || 'wallet',
+                userId: user?.id || '',
+                type: 'wallet',
+                isDefault: true,
+                createdAt: '', updatedAt: '' // dummy
+            } as PaymentMethod);
         } else if (type === 'cash') {
             onPaymentMethodSelect({ type: 'cash' });
+        } else if (type === 'upi') {
+            // New entry creation logic might be needed here? 
+            // The original code passed `details`.
+            // We should stick to what the parent expects.
+            // If parent expects `PaymentMethod`, it expects the shared shape.
+            // But here we are creating a TEMPORARY method from input?
+            // The props say: onPaymentMethodSelect: (method: PaymentMethod | { type: 'cash' }) => void;
+            // `PaymentMethod` is now the SHARED one.
+            // So we must match that shape.
+            onPaymentMethodSelect({
+                id: 'upi_temp',
+                userId: user?.id || '',
+                type: 'upi',
+                upiId: upiId,
+                // upiApp is not in shared schema?
+                // Shared schema has `provider`? `walletType`?
+                // Let's use `provider` for upiApp if needed? Or just ignore it if not in schema.
+                // Schema has `upiId`.
+                isDefault: false,
+                createdAt: '', updatedAt: ''
+            } as PaymentMethod);
+        } else if (type === 'card') {
+            onPaymentMethodSelect({
+                id: 'card_temp',
+                userId: user?.id || '',
+                type: 'card',
+                isDefault: false,
+                createdAt: '', updatedAt: ''
+            } as PaymentMethod);
+        }
+    };
+
+    const handleUpiIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value;
+        setUpiId(val);
+        if (paymentType === 'upi') {
+            onPaymentMethodSelect({
+                id: 'upi_temp',
+                userId: user?.id || '',
+                type: 'upi',
+                upiId: val,
+                isDefault: false,
+                createdAt: '', updatedAt: ''
+            } as PaymentMethod);
+        }
+    };
+
+    const handleUpiAppSelect = (appId: string) => {
+        setSelectedUpiApp(appId);
+        if (paymentType === 'upi') {
+            onPaymentMethodSelect({
+                id: 'upi_temp',
+                userId: user?.id || '',
+                type: 'upi',
+                upiId: upiId,
+                // Store appId in provider or ignore
+                provider: appId,
+                isDefault: false,
+                createdAt: '', updatedAt: ''
+            } as PaymentMethod);
         }
     };
 
@@ -183,7 +266,7 @@ export function MultiPaymentSelector({
                                                 type="button"
                                                 variant={selectedUpiApp === app.id ? 'default' : 'outline'}
                                                 size="sm"
-                                                onClick={() => setSelectedUpiApp(app.id)}
+                                                onClick={() => handleUpiAppSelect(app.id)}
                                                 className="justify-start"
                                             >
                                                 <span className="mr-2">{app.icon}</span>
@@ -200,7 +283,7 @@ export function MultiPaymentSelector({
                                             id="upi-id"
                                             placeholder="yourname@upi"
                                             value={upiId}
-                                            onChange={(e) => setUpiId(e.target.value)}
+                                            onChange={handleUpiIdChange}
                                         />
                                     </div>
                                 </div>
@@ -241,7 +324,7 @@ export function MultiPaymentSelector({
                                                 onClick={() => onPaymentMethodSelect(method)}
                                             >
                                                 <CreditCard className="h-4 w-4 mr-2" />
-                                                {method.details.cardBrand} •••• {method.details.cardLast4}
+                                                {method.cardBrand} •••• {method.lastFour}
                                             </Button>
                                         ))}
                                     <Button

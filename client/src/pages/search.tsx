@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -8,10 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Navbar } from '@/components/Navbar';
 import { TripListSkeleton } from '@/components/SkeletonLoaders';
 import { NoTripsFound } from '@/components/EmptyStates';
+import { useToast } from '@/hooks/use-toast';
 import { LocationAutocomplete } from '@/components/LocationAutocomplete';
 import { TripCard } from '@/components/TripCard';
 import { MapView } from '@/components/MapView';
-import { AdvancedFilters } from '@/components/AdvancedFilters';
 import { SurgePricingIndicator } from '@/components/SurgePricingIndicator';
 import { PromoCodeInput } from '@/components/PromoCodeInput';
 import { FareEstimator } from '@/components/FareEstimator';
@@ -28,6 +28,7 @@ import { useSearchStore } from '@/lib/search-store';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
+import { calculateFare } from '@/lib/fareCalculator';
 
 export default function Search() {
   const { t } = useTranslation();
@@ -77,6 +78,8 @@ export default function Search() {
   const [surgeMultiplier, setSurgeMultiplier] = useState(1.0);
   const [promoCode, setPromoCode] = useState(searchParams.get('promoCode') || '');
   const [promoDiscount, setPromoDiscount] = useState(0);
+  const [instantBookingSeats, setInstantBookingSeats] = useState(1);
+  const { toast } = useToast();
 
   // Sync state with URL when it changes
   useEffect(() => {
@@ -104,14 +107,22 @@ export default function Search() {
     }
   }, [window.location.search]);
 
+  // Clear filters on mount to prevent old state from hiding trips
+  useEffect(() => {
+    if (!window.location.search) {
+      useSearchStore.getState().resetFilters();
+    }
+  }, []);
+
   const { data: allTrips, isLoading } = useQuery<TripWithDriver[]>({
     queryKey: ['trips-search', pickup, drop, date],
     queryFn: async () => {
       let query = supabase
         .from('trips')
-        .select('*, driver:drivers(*, user:users(*))')
+        .select('*, driver:drivers!inner(*, user:users(*))')
         .eq('status', 'upcoming')
-        .gt('available_seats', 0);
+        .gt('available_seats', 0) // Ensure we only show trips with seats
+        .eq('driver.verification_status', 'verified'); // Only show verified drivers
 
       if (pickup) {
         query = query.ilike('pickup_location', `%${pickup}%`);
@@ -131,8 +142,12 @@ export default function Search() {
 
       const { data, error } = await query.order('departure_time', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Search query error:', error);
+        throw error;
+      }
 
+      console.log('Search results raw:', data);
       return (data || []).map(mapTrip);
     },
     // Query should be enabled by default so users see trips immediately
@@ -154,7 +169,6 @@ export default function Search() {
           // This is just a rough estimate for users
 
           // Use shared fare calculator
-          const { calculateFare } = await import('@/lib/fareCalculator');
           // Default to car for search estimation
           const fareBreakdown = calculateFare('car', routeData.distance, routeData.duration);
 
@@ -193,6 +207,28 @@ export default function Search() {
     }
   };
 
+  const handleFareCalculated = useCallback((fare: any) => {
+    const baseMin = Math.floor(fare.totalFare * 0.8);
+    const baseMax = fare.totalFare;
+    // Apply promo discount if available
+    const discountedMin = promoDiscount > 0 ? baseMin - promoDiscount : baseMin;
+    const discountedMax = promoDiscount > 0 ? baseMax - promoDiscount : baseMax;
+
+    // Use functional updates to verify if state actually needs changing to strictly avoid loops
+    setEstimatedPrice(prev => {
+      const newMin = Math.max(0, discountedMin);
+      // Deep comparison for object
+      if (prev && prev.min === newMin && prev.max === discountedMax) return prev;
+      return { min: newMin, max: discountedMax };
+    });
+
+    setSurgeMultiplier(prev => {
+      const newMult = fare.surgeMultiplier || 1.0;
+      if (prev === newMult) return prev;
+      return newMult;
+    });
+  }, [promoDiscount]);
+
   // Apply client-side filters
   const trips = useMemo(() => {
     if (!allTrips) return allTrips;
@@ -218,6 +254,13 @@ export default function Search() {
         // we might need to rely on 'available_seats' or add it.
         // For this implementation, I'll filter by seat count as a proxy if vehicle_type is missing, or strictly if present.
         // Let's check the partial mapTrip.
+        // Check preferences first (new logic)
+        const prefVehicleType = (trip.preferences as any)?.vehicleType;
+        if (prefVehicleType) {
+          return prefVehicleType === vehicleType;
+        }
+
+        // Fallback to driver vehicle inference or seat count (legacy/fallback)
         const vType = (trip.driver as any)?.vehicleType?.toLowerCase() ||
           (parseInt(trip.totalSeats.toString()) <= 2 ? 'bike' : parseInt(trip.totalSeats.toString()) <= 4 ? 'auto' : 'car');
 
@@ -477,10 +520,10 @@ export default function Search() {
                       </div>
                     )}
 
-                    {/* Advanced Filters */}
-                    <div className="space-y-2 flex items-end">
+                    {/* Advanced Filters - Removed as per user request for instant booking focus */}
+                    {/* <div className="space-y-2 flex items-end">
                       <AdvancedFilters />
-                    </div>
+                    </div> */}
                   </div>
 
                   {/* Scheduled Time Display */}
@@ -523,15 +566,7 @@ export default function Search() {
                           vehicleType="car"
                           distanceKm={routeInfo.distance}
                           durationMinutes={routeInfo.duration}
-                          onFareCalculated={(fare) => {
-                            const baseMin = Math.floor(fare.totalFare * 0.8);
-                            const baseMax = fare.totalFare;
-                            // Apply promo discount if available
-                            const discountedMin = promoDiscount > 0 ? baseMin - promoDiscount : baseMin;
-                            const discountedMax = promoDiscount > 0 ? baseMax - promoDiscount : baseMax;
-                            setEstimatedPrice({ min: Math.max(0, discountedMin), max: discountedMax });
-                            setSurgeMultiplier(fare.surgeMultiplier || 1.0);
-                          }}
+                          onFareCalculated={handleFareCalculated}
                         />
 
                         {surgeMultiplier > 1.0 && (
@@ -573,7 +608,15 @@ export default function Search() {
                 </div>
               </div>
               <div className="p-4">
-                <QuickBookWidget className="shadow-none border-0 p-0 bg-transparent" />
+                <QuickBookWidget
+                  className="shadow-none border-0 p-0 bg-transparent"
+                  defaultPickup={pickup !== '' ? pickup : undefined}
+                  defaultDrop={drop !== '' ? drop : undefined}
+                  defaultPickupCoords={pickupCoords}
+                  defaultDropCoords={dropCoords}
+                  defaultBookingType={bookingType}
+                  defaultDate={scheduledDateTime}
+                />
               </div>
             </Card>
 
@@ -599,9 +642,136 @@ export default function Search() {
               </Button>
             </div>
 
+
             {/* Results */}
             {isLoading ? (
               <TripListSkeleton count={5} />
+            ) : bookingType === 'instant' && pickup && drop && routeInfo ? (
+              /* Instant Booking - Vehicle Selection */
+              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <h3 className="font-semibold text-lg px-1">Choose a Vehicle</h3>
+                {['bike', 'auto', 'car'].map((vType) => {
+                  // Calculate fare for each vehicle type
+                  // Use centralized fare calculator
+                  const estimatedFare = Math.round(calculateFare(vType as any, routeInfo.distance, routeInfo.duration).totalFare);
+
+                  // Seats available (mock for selection)
+                  const seats = vType === 'bike' ? 1 : vType === 'auto' ? 3 : 4;
+
+                  return (
+                    <Card
+                      key={vType}
+                      className={`p-4 cursor-pointer transition-all border-2 hover:border-primary/50 hover:shadow-md ${vehicleType === vType ? 'border-primary bg-primary/5' : 'border-transparent'}`}
+                      onClick={() => {
+                        setVehicleType(vType as any);
+                        setInstantBookingSeats(1);
+                      }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center text-2xl">
+                            {vType === 'bike' ? '🏍️' : vType === 'auto' ? '🛺' : '🚗'}
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-lg capitalize">{vType}</h4>
+                            <p className="text-sm text-muted-foreground">{routeInfo.duration} mins • {seats} seats</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold text-xl">₹{estimatedFare}</div>
+                          {vehicleType === vType && (
+                            <div className="mt-2 space-y-2">
+                              <div className="flex items-center justify-end gap-2 bg-muted/50 rounded-md p-1">
+                                <span className="text-xs font-medium mr-1">Seats:</span>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setInstantBookingSeats(Math.max(1, instantBookingSeats - 1));
+                                  }}
+                                  disabled={instantBookingSeats <= 1}
+                                >
+                                  -
+                                </Button>
+                                <span className="text-sm w-4 text-center font-bold">{instantBookingSeats}</span>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setInstantBookingSeats(Math.min(seats, instantBookingSeats + 1));
+                                  }}
+                                  disabled={instantBookingSeats >= seats}
+                                >
+                                  +
+                                </Button>
+                              </div>
+                              <Button
+                                size="sm"
+                                className="w-full"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  try {
+                                    if (!user) {
+                                      toast({
+                                        title: "Authentication Required",
+                                        description: "Please login to book a ride",
+                                        variant: "destructive"
+                                      });
+                                      // Redirect to login with return path
+                                      navigate(`/login?returnUrl=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+                                      return;
+                                    }
+
+                                    const { data: request, error } = await supabase
+                                      .from('ride_requests')
+                                      .insert({
+                                        passenger_id: user.id,
+                                        pickup_location: pickup,
+                                        pickup_lat: pickupCoords?.lat.toString(),
+                                        pickup_lng: pickupCoords?.lng.toString(),
+                                        drop_location: drop,
+                                        drop_lat: dropCoords?.lat.toString(),
+                                        drop_lng: dropCoords?.lng.toString(),
+                                        status: 'pending',
+                                        fare: estimatedFare.toString(),
+                                        distance: routeInfo.distance.toString(),
+                                        duration: routeInfo.duration,
+                                        vehicle_type: vType,
+                                        seats: instantBookingSeats,
+                                        organization_only: false
+                                      })
+                                      .select()
+                                      .single();
+
+                                    if (error) throw error;
+                                    if (request) {
+                                      toast({ title: "Request Sent", description: "Looking for nearby drivers..." });
+                                      navigate(`/ride-request/${request.id}`);
+                                    }
+                                  } catch (err: any) {
+                                    console.error("Booking failed", err);
+                                    toast({
+                                      title: "Booking Failed",
+                                      description: err.message || "Could not create ride request. Please try again.",
+                                      variant: "destructive"
+                                    });
+                                  }
+                                }}
+                              >
+                                Book {vType}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
             ) : trips && trips.length > 0 ? (
               <>
                 <Card className="p-4 bg-success/5 border-success/20 shadow-md">
@@ -652,7 +822,49 @@ export default function Search() {
                 )}
               </>
             ) : pickup && drop ? (
-              <NoTripsFound onAdjustFilters={() => { }} />
+              <NoTripsFound
+                onAdjustFilters={() => {
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                onRequestRide={() => {
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              />
+            ) : (trips && trips.length > 0) ? (
+              /* Show trips even if no location selected - "Explore" mode */
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-lg">Upcoming Trips</h3>
+                  {!pickup && !drop && (
+                    <span className="text-xs text-muted-foreground bg-secondary px-2 py-1 rounded">
+                      Showing all upcoming rides
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  {trips.map((trip) => (
+                    <div
+                      key={trip.id}
+                      className="transform transition-all duration-200 hover:scale-[1.02] hover:shadow-lg"
+                    >
+                      <TripCard
+                        trip={trip}
+                        onBook={() => {
+                          const params = new URLSearchParams();
+                          if (promoCode) params.set('promoCode', promoCode);
+                          if (vehicleType !== 'all') params.set('vehiclePreference', vehicleType);
+
+                          const prefs = useSearchStore.getState().filters.preferences;
+                          if (prefs) params.set('preferences', JSON.stringify(prefs));
+
+                          navigate(`/trip/${trip.id}?${params.toString()}`);
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </>
             ) : (
               <Card className="p-12 text-center shadow-lg">
                 <SearchIcon className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
@@ -667,6 +879,13 @@ export default function Search() {
                 )}
               </Card>
             )}
+            {/* Debug Info */}
+            <div className="mt-8 p-4 bg-muted/50 rounded text-xs font-mono text-muted-foreground">
+              <p>Debug Info:</p>
+              <p>All Trips Fetched: {allTrips?.length || 0}</p>
+              <p>Filtered Trips: {trips?.length || 0}</p>
+              <p>Filters: {JSON.stringify(filters)}</p>
+            </div>
           </div>
         </div>
 

@@ -4,10 +4,9 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { queryClient } from '@/lib/queryClient';
-import { ArrowLeft, CreditCard, Shield, CheckCircle, Tag } from 'lucide-react';
+import { ArrowLeft, Shield, CheckCircle, Tag } from 'lucide-react';
 import { BookingWithDetails } from '@shared/schema';
 import { supabase } from '@/lib/supabase';
 import { mapBooking } from '@/lib/mapper';
@@ -21,7 +20,6 @@ export default function Payment() {
   const { toast } = useToast();
   const bookingId = params?.bookingId;
   const { user } = useAuth();
-  const [showPromoDialog, setShowPromoDialog] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<{
     type: 'upi' | 'card' | 'wallet' | 'cash';
     id?: string;
@@ -246,7 +244,14 @@ export default function Payment() {
         toast({ title: "Insufficient Balance", description: "Please add money to wallet or choose another method", variant: "destructive" });
         return;
       }
+      if ((walletBal || 0) < currentTotal) {
+        toast({ title: "Insufficient Balance", description: "Please add money to wallet or choose another method", variant: "destructive" });
+        return;
+      }
       try {
+        // SECURITY NOTE: This invokes a Supabase Edge Function 'deduct-wallet'. 
+        // Ensure the Edge Function validates the userId matches the authenticated user 
+        // and checks balance atomically to prevent race conditions or fraud.
         const { error } = await supabase.functions.invoke('deduct-wallet', {
           body: { userId: user?.id, amount: currentTotal }
         });
@@ -254,7 +259,7 @@ export default function Payment() {
         if (error) throw error;
 
         await supabase.from('bookings').update({
-          status: 'confirmed',
+          status: 'completed',
           payment_status: 'success',
           payment_method: 'wallet'
         }).eq('id', bookingId);

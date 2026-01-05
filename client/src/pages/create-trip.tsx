@@ -11,7 +11,8 @@ import { MapView } from '@/components/MapView';
 import { useToast } from '@/hooks/use-toast';
 import { queryClient } from '@/lib/queryClient';
 import { getRoute, Coordinates, reverseGeocode } from '@/lib/maps';
-import { ArrowLeft, MapPin, Calendar, Users, Route as RouteIcon, Plus, X } from 'lucide-react';
+import { calculateFare } from '@/lib/fareCalculator';
+import { MapPin, Calendar, Users, Route as RouteIcon, Plus, X } from 'lucide-react';
 import { InsertTrip } from '@shared/schema';
 import { supabase } from '@/lib/supabase';
 import { mapDriver } from '@/lib/mapper';
@@ -36,9 +37,8 @@ export default function CreateTrip() {
   const [seats, setSeats] = useState('4');
   const [pricePerSeat, setPricePerSeat] = useState('');
   const [preferences, setPreferences] = useState({
-    smoking: false,
-    pets: false,
-    music: true
+    music: true,
+    vehicleType: 'car' as 'car' | 'auto' | 'bike' // Default to car
   });
 
   const [routeInfo, setRouteInfo] = useState<{ distance: number; duration: number; route: Coordinates[] }>();
@@ -86,12 +86,20 @@ export default function CreateTrip() {
 
   // ... (keep redirect effect)
   // Redirect if not a driver or not verified
+  // Redirect if not a driver or not verified
   useEffect(() => {
     if (!isLoadingDriver && !driverProfile) {
       toast({
         title: "Driver Profile Required",
         description: "You need to complete driver onboarding before posting trips.",
         variant: "destructive"
+      });
+      navigate('/driver-onboarding');
+    } else if (!isLoadingDriver && driverProfile && driverProfile.verificationStatus !== 'verified') {
+      toast({
+        title: "Verification Pending",
+        description: "Your driver profile is currently under review. You can generate trips once verified.",
+        variant: "default" // Or warning
       });
       navigate('/driver-onboarding');
     }
@@ -154,15 +162,28 @@ export default function CreateTrip() {
 
       // Calculate suggested price based on distance and demand
       const distance = route.distance;
-      const basePrice = Math.round(distance * 3); // ₹3 per km base
+      // Use centralized fare calculator for selected vehicle type
+      // const distance = route.distance; // Already declared above
+      const fareBreakdown = calculateFare(preferences.vehicleType, distance, route.duration);
+      // For car, we can suggest splitting by 4. For auto/bike, maybe different logic?
+      // Keeping it simple: Base Suggestion = Total Fare / Typical Capacity
+      const typicalCapacity = preferences.vehicleType === 'bike' ? 1 : preferences.vehicleType === 'auto' ? 3 : 4;
+      const basePrice = Math.round(fareBreakdown.totalFare / typicalCapacity);
 
       // Check similar trips for dynamic pricing
       // This is a simplified "demand" check
+      // Geospatial search: Find trips within ~5km (approx +/- 0.05 degrees)
+      const latBuffer = 0.05;
+      const lngBuffer = 0.05;
+
       const { data: similarTrips } = await supabase
         .from('trips')
         .select('price_per_seat')
-        .ilike('pickup_location', `%${pickup}%`)
-        .ilike('drop_location', `%${drop}%`)
+        .gte('pickup_lat', parseFloat(pickupCoords.lat.toString()) - latBuffer)
+        .lte('pickup_lat', parseFloat(pickupCoords.lat.toString()) + latBuffer)
+        .gte('pickup_lng', parseFloat(pickupCoords.lng.toString()) - lngBuffer)
+        .lte('pickup_lng', parseFloat(pickupCoords.lng.toString()) + lngBuffer)
+        // Optionally filter by matching drop location proximity too, but pickup is usually sufficient for simplistic demand
         .eq('status', 'upcoming');
 
       let suggestedPrice = basePrice;
@@ -235,22 +256,23 @@ export default function CreateTrip() {
     createTripMutation.mutate({
       driverId: driverProfile.id,
       pickupLocation: pickup,
-      pickupLat: pickupCoords.lat.toString(),
-      pickupLng: pickupCoords.lng.toString(),
+      pickupLat: parseFloat(pickupCoords.lat.toString()), // Ensure numeric
+      pickupLng: parseFloat(pickupCoords.lng.toString()),
       dropLocation: drop,
-      dropLat: dropCoords.lat.toString(),
-      dropLng: dropCoords.lng.toString(),
+      dropLat: parseFloat(dropCoords.lat.toString()),
+      dropLng: parseFloat(dropCoords.lng.toString()),
       departureTime: departureDateTime,
       distance: routeInfo.distance.toString(),
       duration: routeInfo.duration,
-      pricePerSeat: pricePerSeat,
+      pricePerSeat: parseFloat(pricePerSeat), // Ensure numeric
       availableSeats: parseInt(seats),
       totalSeats: parseInt(seats),
-      route: { geometry: routeInfo.route, waypoints: waypoints.map(w => ({ location: w.location, coords: w.coords })) },
+      route: routeInfo.route, // Send geometry array directly to match schema/mobile (was object with waypoints)
       preferences,
-      base_price: pricePerSeat, // Initialize base_price
+      base_price: parseFloat(pricePerSeat),
       surge_multiplier: 1.0,
-    } as any);
+    } as any); // 'vehicleType' is inside preferences, which is passed as-is
+
   };
 
   const markers = pickupCoords && dropCoords ? [
@@ -442,6 +464,22 @@ export default function CreateTrip() {
               </h2>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <Label className="text-base mb-2 block">Vehicle Type</Label>
+                  <div className="flex gap-4">
+                    {(['car', 'auto', 'bike'] as const).map((type) => (
+                      <div key={type} className="flex items-center space-x-2 border p-3 rounded-md flex-1 hover:bg-muted cursor-pointer" onClick={() => setPreferences({ ...preferences, vehicleType: type })}>
+                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${preferences.vehicleType === type ? 'border-primary' : 'border-muted-foreground'}`}>
+                          {preferences.vehicleType === type && <div className="w-2 h-2 rounded-full bg-primary" />}
+                        </div>
+                        <span className="capitalize font-medium">{type}</span>
+                        <span className="text-xs text-muted-foreground ml-auto">
+                          {type === 'car' ? '4 Seat' : type === 'auto' ? '3 Seat' : '1 Seat'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
                 <div>
                   <Label htmlFor="seats">Available Seats</Label>
                   <Input

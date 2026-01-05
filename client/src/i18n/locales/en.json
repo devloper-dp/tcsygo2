@@ -136,5 +136,13 @@
         "reportMismatch": "Report Mismatch",
         "callDriver": "Call Driver",
         "checklist": "Verification Checklist"
+    },
+    "trip": {
+        "start_trip": "Start Trip",
+        "end_trip": "End Trip",
+        "cancel_trip": "Cancel Trip",
+        "edit_trip": "Edit Trip",
+        "chat": "Chat",
+        "sos": "SOS"
     }
 }

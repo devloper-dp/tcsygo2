@@ -11,7 +11,7 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ path, component: Component, allowedRoles }: ProtectedRouteProps) {
     const { user, loading } = useAuth();
-    const [, setLocation] = useLocation();
+    // const [, setLocation] = useLocation(); // Unused
 
     return (
         <Route path={path}>
@@ -29,7 +29,9 @@ export function ProtectedRoute({ path, component: Component, allowedRoles }: Pro
                 }
 
                 if (allowedRoles && !allowedRoles.includes(user.role)) {
-                    // Redirect to home if user role is not allowed
+                    // Redirect based on user role to avoid infinite loops
+                    if (user.role === 'admin') return <Redirect to="/admin" />;
+                    if (user.role === 'driver') return <Redirect to="/driver-requests" />;
                     return <Redirect to="/" />;
                 }
 

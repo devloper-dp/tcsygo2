@@ -32,5 +32,15 @@ export default defineConfig({
       origin: '*',
       credentials: true,
     },
+    proxy: {
+      '/api/nominatim': {
+        target: 'https://nominatim.openstreetmap.org',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/nominatim/, ''),
+        headers: {
+          'User-Agent': 'TCSYGO-Carpooling-App/1.0',
+        },
+      },
+    }
   },
 });

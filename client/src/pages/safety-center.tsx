@@ -23,6 +23,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { Navbar } from '@/components/Navbar';
+import { useToast } from '@/hooks/use-toast';
 
 export default function SafetyCenter() {
     const [, navigate] = useLocation();
@@ -47,6 +48,82 @@ export default function SafetyCenter() {
         enabled: !!user
     });
 
+    const { toast } = useToast(); // Ensure hook is used
+
+    const handleSOS = async () => {
+        try {
+            // Get location if possible
+            let lat = '0', lng = '0';
+            if (navigator.geolocation) {
+                try {
+                    const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+                        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 })
+                    );
+                    lat = pos.coords.latitude.toString();
+                    lng = pos.coords.longitude.toString();
+                } catch (e) {
+                    console.error("Location access failed during SOS", e);
+                }
+            }
+
+            const { error } = await supabase.from('emergency_alerts').insert({
+                user_id: user?.id,
+                trip_id: activeTrip?.id || null, // Optional if no active trip
+                lat,
+                lng,
+                status: 'triggered'
+            });
+
+            if (error) throw error;
+
+            toast({
+                title: "Emergency Alert Sent",
+                description: "Emergency services and contacts have been notified.",
+                variant: "destructive",
+                duration: 5000
+            });
+
+            // Fallback to phone dialer
+            window.location.href = 'tel:100';
+
+        } catch (error: any) {
+            console.error("SOS Failed:", error);
+            toast({
+                title: "Alert Failed",
+                description: "Could not send system alert. Please dial 100 directly.",
+                variant: "destructive"
+            });
+            window.location.href = 'tel:100';
+        }
+    };
+
+    const handleNotifySafetyTeam = async () => {
+        try {
+            const { error } = await supabase.from('support_tickets').insert({
+                user_id: user?.id,
+                name: user?.fullName || 'User',
+                email: user?.email || 'user@example.com',
+                subject: 'Safety Concern Reported',
+                message: 'User reported a safety concern via Safety Center.',
+                status: 'open',
+                priority: 'high'
+            });
+
+            if (error) throw error;
+
+            toast({
+                title: "Safety Team Notified",
+                description: "Our team will contact you shortly.",
+            });
+        } catch (error: any) {
+            toast({
+                title: "Notification Failed",
+                description: "Please try again or call support.",
+                variant: "destructive"
+            });
+        }
+    };
+
     const safetyFeatures = [
         {
             title: 'Trusted Contacts',
@@ -59,7 +136,7 @@ export default function SafetyCenter() {
             title: 'Emergency SOS',
             description: 'Quickly alert our safety team and local authorities in an emergency.',
             icon: AlertTriangle,
-            action: () => { },
+            action: handleSOS,
             critical: true
         },
         {
@@ -131,7 +208,7 @@ export default function SafetyCenter() {
                             <Button
                                 variant="destructive"
                                 className="w-full h-16 text-lg font-bold gap-2 animate-pulse"
-                                onClick={() => window.open('tel:100')}
+                                onClick={handleSOS}
                             >
                                 <Phone className="w-6 h-6" />
                                 CALL 100
@@ -139,7 +216,11 @@ export default function SafetyCenter() {
                             <p className="text-xs text-center text-muted-foreground">
                                 Only use in case of real emergency. Our team will be notified immediately.
                             </p>
-                            <Button variant="outline" className="w-full border-destructive/20 hover:bg-destructive/5">
+                            <Button
+                                variant="outline"
+                                className="w-full border-destructive/20 hover:bg-destructive/5"
+                                onClick={handleNotifySafetyTeam}
+                            >
                                 Notify Safety Team
                             </Button>
                         </CardContent>

@@ -1,5 +1,5 @@
 
-import { Trip, TripWithDriver, Driver, User, Booking, BookingWithDetails, Notification, PromoCode, EmergencyAlert, SupportTicket } from '@shared/schema';
+import { Trip, TripWithDriver, Driver, User, Booking, BookingWithDetails, Notification, PromoCode, EmergencyAlert, SupportTicket, RideRequest } from '@shared/schema';
 
 export function mapUser(data: any): User {
     if (!data) return data;
@@ -97,6 +97,7 @@ export function mapBooking(data: any): BookingWithDetails {
         seatsBooked: data.seats_booked,
         totalAmount: data.total_amount,
         status: data.status,
+        paymentStatus: data.payment_status,
         pickupLocation: data.pickup_location,
         dropLocation: data.drop_location,
         createdAt: data.created_at,
@@ -199,3 +200,30 @@ export function mapSupportTicket(data: any): SupportTicket {
         updatedAt: data.updated_at,
     };
 }
+
+export function mapRideRequest(data: any): RideRequest {
+    if (!data) return data;
+    return {
+        id: data.id,
+        passengerId: data.passenger_id,
+        pickupLocation: data.pickup_location,
+        pickupLat: data.pickup_lat,
+        pickupLng: data.pickup_lng,
+        dropLocation: data.drop_location,
+        dropLat: data.drop_lat,
+        dropLng: data.drop_lng,
+        status: data.status,
+        fare: data.fare,
+        distance: data.distance,
+        duration: data.duration,
+        vehicleType: data.vehicle_type,
+        driverId: data.driver_id,
+        tripId: data.trip_id,
+        organization_only: data.organization_only,
+        scheduled_time: data.scheduled_time,
+        seats: data.seats || 1,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+    };
+}
+

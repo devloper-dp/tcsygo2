@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { queryClient } from '@/lib/queryClient';
-import { Wallet as WalletIcon, Plus, ArrowUpRight, ArrowDownLeft, CreditCard, TrendingUp } from 'lucide-react';
+import { Wallet as WalletIcon, Plus, ArrowUpRight, ArrowDownLeft, CreditCard, TrendingUp, Settings } from 'lucide-react';
 import { AutoPaySetup } from '@/components/AutoPaySetup';
 import { format } from 'date-fns';
 
@@ -52,6 +52,9 @@ export default function Wallet() {
     const { toast } = useToast();
     const [showAddMoney, setShowAddMoney] = useState(false);
     const [amount, setAmount] = useState('');
+    const [showTestResults, setShowTestResults] = useState(false);
+    const [testResults, setTestResults] = useState<any>(null);
+
 
     // Fetch wallet data
     const { data: wallet, isLoading: loadingWallet } = useQuery<WalletData>({
@@ -131,25 +134,46 @@ export default function Wallet() {
     // Add money mutation
     const addMoneyMutation = useMutation({
         mutationFn: async (amountToAdd: number) => {
+            console.log('Adding money to wallet:', amountToAdd);
             const { data, error } = await supabase.functions.invoke('add-money-to-wallet', {
                 body: { amount: amountToAdd }
             });
 
             if (error) {
+                console.error('Edge function error:', error);
                 let errorMessage = error.message;
+
+                // Try to extract the actual error message from the response
                 try {
-                    // Start: Attempt to read the actual error body from the function
-                    if (error && typeof (error as any).context?.json === 'function') {
-                        const body = await (error as any).context.json();
-                        if (body && body.error) {
-                            errorMessage = body.error;
+                    // For FunctionsHttpError, the error details are in the context
+                    if ((error as any).context) {
+                        const context = (error as any).context;
+                        console.log('Error context:', context);
+
+                        // Try to parse the response body
+                        if (typeof context.json === 'function') {
+                            const body = await context.json();
+                            console.log('Error response body:', body);
+                            if (body && body.error) {
+                                errorMessage = body.error;
+                            }
+                        } else if (context.body) {
+                            // Sometimes the body is already parsed
+                            console.log('Error body:', context.body);
+                            if (context.body.error) {
+                                errorMessage = context.body.error;
+                            }
                         }
                     }
                 } catch (e) {
                     console.error('Failed to parse error body:', e);
                 }
+
+                console.error('Final error message:', errorMessage);
                 throw new Error(errorMessage);
             }
+
+            console.log('Edge function response:', data);
             return data;
         },
         onSuccess: (data) => {
@@ -163,6 +187,34 @@ export default function Wallet() {
             });
         },
     });
+
+    // Test Razorpay configuration mutation
+    const testConfigMutation = useMutation({
+        mutationFn: async () => {
+            console.log('Testing Razorpay configuration...');
+            const { data, error } = await supabase.functions.invoke('test-razorpay-config');
+
+            if (error) {
+                console.error('Test config error:', error);
+                throw new Error(error.message);
+            }
+
+            console.log('Test config response:', data);
+            return data;
+        },
+        onSuccess: (data) => {
+            setTestResults(data);
+            setShowTestResults(true);
+        },
+        onError: (error: any) => {
+            toast({
+                title: 'Test failed',
+                description: error.message || 'Could not test configuration',
+                variant: 'destructive',
+            });
+        },
+    });
+
 
     const handleRazorpayPayment = (orderData: any) => {
         const options = {
@@ -276,15 +328,27 @@ export default function Wallet() {
                                 <h2 className="text-4xl font-bold">₹{wallet?.balance.toFixed(2) || '0.00'}</h2>
                             </div>
                         </div>
-                        <Button
-                            size="lg"
-                            variant="secondary"
-                            className="gap-2"
-                            onClick={() => setShowAddMoney(true)}
-                        >
-                            <Plus className="w-5 h-5" />
-                            {t('wallet.addMoney')}
-                        </Button>
+                        <div className="flex gap-2">
+                            <Button
+                                size="lg"
+                                variant="outline"
+                                className="gap-2 bg-white/10 border-white/20 hover:bg-white/20"
+                                onClick={() => testConfigMutation.mutate()}
+                                disabled={testConfigMutation.isPending}
+                            >
+                                <Settings className="w-5 h-5" />
+                                Test Config
+                            </Button>
+                            <Button
+                                size="lg"
+                                variant="secondary"
+                                className="gap-2"
+                                onClick={() => setShowAddMoney(true)}
+                            >
+                                <Plus className="w-5 h-5" />
+                                {t('wallet.addMoney')}
+                            </Button>
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4 mt-6">
@@ -441,6 +505,96 @@ export default function Wallet() {
                             {addMoneyMutation.isPending ? 'Processing...' : `Add ₹${amount || '0'}`}
                         </Button>
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Test Results Dialog */}
+            <Dialog open={showTestResults} onOpenChange={setShowTestResults}>
+                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Configuration Test Results</DialogTitle>
+                        <DialogDescription>
+                            Diagnostic results for Razorpay payment gateway setup
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {testResults && (
+                        <div className="space-y-4 py-4">
+                            {/* Summary */}
+                            <Card className={`p-4 ${testResults.overallStatus === 'passed' ? 'bg-green-50 border-green-200' :
+                                    testResults.overallStatus === 'warning' ? 'bg-yellow-50 border-yellow-200' :
+                                        'bg-red-50 border-red-200'
+                                }`}>
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h3 className="font-semibold text-lg">
+                                            Overall Status: {testResults.overallStatus.toUpperCase()}
+                                        </h3>
+                                        <p className="text-sm text-muted-foreground mt-1">
+                                            {testResults.summary.passed} passed • {testResults.summary.failed} failed • {testResults.summary.warnings} warnings
+                                        </p>
+                                    </div>
+                                    <Badge variant={testResults.overallStatus === 'passed' ? 'default' : 'destructive'}>
+                                        {testResults.overallStatus}
+                                    </Badge>
+                                </div>
+                            </Card>
+
+                            {/* Individual Checks */}
+                            <div className="space-y-3">
+                                <h4 className="font-semibold">Detailed Checks</h4>
+                                {Object.entries(testResults.checks).map(([key, check]: [string, any]) => (
+                                    <Card key={key} className="p-4">
+                                        <div className="flex items-start gap-3">
+                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${check.status === 'passed' ? 'bg-green-100 text-green-600' :
+                                                    check.status === 'warning' ? 'bg-yellow-100 text-yellow-600' :
+                                                        check.status === 'failed' ? 'bg-red-100 text-red-600' :
+                                                            'bg-gray-100 text-gray-600'
+                                                }`}>
+                                                {check.status === 'passed' ? '✓' :
+                                                    check.status === 'warning' ? '⚠' :
+                                                        check.status === 'failed' ? '✗' : '○'}
+                                            </div>
+                                            <div className="flex-1">
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <h5 className="font-medium capitalize">
+                                                        {key.replace(/([A-Z])/g, ' $1').trim()}
+                                                    </h5>
+                                                    <Badge variant="outline" className="text-xs">
+                                                        {check.status}
+                                                    </Badge>
+                                                </div>
+                                                <p className="text-sm text-muted-foreground">{check.message}</p>
+                                                {check.value && (
+                                                    <p className="text-xs text-muted-foreground mt-1 font-mono">
+                                                        {check.value}
+                                                    </p>
+                                                )}
+                                                {check.fix && (
+                                                    <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-sm">
+                                                        <p className="font-medium text-blue-900">How to fix:</p>
+                                                        <p className="text-blue-800 mt-1">{check.fix}</p>
+                                                    </div>
+                                                )}
+                                                {check.error && (
+                                                    <p className="text-xs text-red-600 mt-1 font-mono">
+                                                        Error: {check.error}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </Card>
+                                ))}
+                            </div>
+
+                            <Separator />
+
+                            <div className="flex justify-between items-center text-xs text-muted-foreground">
+                                <span>User ID: {testResults.userId}</span>
+                                <span>Tested at: {new Date(testResults.timestamp).toLocaleString()}</span>
+                            </div>
+                        </div>
+                    )}
                 </DialogContent>
             </Dialog>
         </div>

@@ -404,15 +404,15 @@ class LocationTrackingService {
                 .eq('trip_id', tripId)
                 .order('updated_at', { ascending: false })
                 .limit(1)
-                .single();
+                .maybeSingle();
 
             if (error) {
-                if (error.code === 'PGRST116') {
-                    // No location found
-                    logProcess('LocationTracking.getCurrentLocation', 'end', { status: 'not found' });
-                    return null;
-                }
                 throw error;
+            }
+
+            if (!data) {
+                logProcess('LocationTracking.getCurrentLocation', 'end', { status: 'not found' });
+                return null;
             }
 
             const result = {

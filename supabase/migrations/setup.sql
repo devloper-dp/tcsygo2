@@ -610,7 +610,7 @@ BEGIN
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
     NEW.raw_user_meta_data->>'phone',
-    'passenger'
+    COALESCE(NEW.raw_user_meta_data->>'role', 'passenger')
   );
   INSERT INTO public.wallets (user_id, balance) VALUES (NEW.id, 0.00) ON CONFLICT DO NOTHING;
   INSERT INTO public.ride_preferences (user_id) VALUES (NEW.id) ON CONFLICT DO NOTHING;

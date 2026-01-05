@@ -1,19 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Calendar } from '@/components/ui/calendar';
 import { LocationAutocomplete } from '@/components/LocationAutocomplete';
 import { FareEstimator } from '@/components/FareEstimator';
 import { PromoCodeInput } from '@/components/PromoCodeInput';
 import { SurgePricingIndicator } from '@/components/SurgePricingIndicator';
-import { RideScheduler } from '@/components/RideScheduler';
 import { useAuth } from '@/contexts/AuthContext';
-import { Zap, MapPin, Car, Bike, Users, Building2 } from 'lucide-react';
+import { Zap, MapPin, Car, Bike, Users, Building2, Clock } from 'lucide-react';
 import { Coordinates } from '@/lib/maps';
 import { getRoute } from '@/lib/maps';
 import {
@@ -29,32 +27,93 @@ import { useToast } from '@/hooks/use-toast';
 
 interface QuickBookWidgetProps {
     className?: string;
+    defaultPickup?: string;
+    defaultDrop?: string;
+    defaultPickupCoords?: Coordinates | null;
+    defaultDropCoords?: Coordinates | null;
+    defaultDate?: Date;
+    defaultBookingType?: 'instant' | 'scheduled';
 }
 
-export function QuickBookWidget({ className = '' }: QuickBookWidgetProps) {
+export function QuickBookWidget({
+    className = '',
+    defaultPickup,
+    defaultDrop,
+    defaultPickupCoords,
+    defaultDropCoords,
+    defaultDate,
+    defaultBookingType
+}: QuickBookWidgetProps) {
     const [, navigate] = useLocation();
     const { user } = useAuth();
     const { toast } = useToast();
     const [showDialog, setShowDialog] = useState(false);
-    const [currentLocation, setCurrentLocation] = useState<Coordinates | null>(null);
-    const [destination, setDestination] = useState('');
-    const [destinationCoords, setDestinationCoords] = useState<Coordinates | null>(null);
+    const [currentLocation, setCurrentLocation] = useState<Coordinates | null>(defaultPickupCoords || null);
+    const [destination, setDestination] = useState(defaultDrop || '');
+    const [destinationCoords, setDestinationCoords] = useState<Coordinates | null>(defaultDropCoords || null);
     const [vehicleType, setVehicleType] = useState<'bike' | 'auto' | 'car'>('auto');
     const [fareEstimate, setFareEstimate] = useState<NewFareBreakdown | null>(null);
     const [loading, setLoading] = useState(false);
-    const [bookingType, setBookingType] = useState<'instant' | 'scheduled'>('instant');
-    const [scheduledDateTime, setScheduledDateTime] = useState<Date | null>(null);
+    const [bookingType, setBookingType] = useState<'instant' | 'scheduled'>(defaultBookingType || 'instant');
+    const [scheduledDateTime, setScheduledDateTime] = useState<Date | null>(defaultDate || null);
+
     const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(null);
     const [distanceKm, setDistanceKm] = useState(0);
     const [durationMinutes, setDurationMinutes] = useState(0);
     const [demand, setDemand] = useState<'low' | 'medium' | 'high' | 'very_high'>('low');
     const [preferences, setPreferences] = useState<RidePreference | null>(null);
     const [organizationOnly, setOrganizationOnly] = useState(false);
+    const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+    const [selectedTime, setSelectedTime] = useState('');
 
-    const [pickupAddress, setPickupAddress] = useState('Current Location');
+    const [pickupAddress, setPickupAddress] = useState(defaultPickup || 'Current Location');
+
+    // Sync props when they change (optional, but good if parent updates)
+    useEffect(() => {
+        if (defaultPickup !== undefined) setPickupAddress(defaultPickup);
+        if (defaultDrop !== undefined) setDestination(defaultDrop);
+        if (defaultPickupCoords !== undefined) setCurrentLocation(defaultPickupCoords);
+        if (defaultDropCoords !== undefined) setDestinationCoords(defaultDropCoords);
+        if (defaultDate !== undefined) setScheduledDateTime(defaultDate);
+        if (defaultBookingType !== undefined) setBookingType(defaultBookingType);
+    }, [defaultPickup, defaultDrop, defaultPickupCoords, defaultDropCoords, defaultDate, defaultBookingType]);
 
     // Get current location on mount
+    // Get current location on mount
     useEffect(() => {
+        const fetchLocationFromIP = async () => {
+            console.log('Falling back to IP-based geolocation...');
+            try {
+                const response = await fetch('https://ipapi.co/json/');
+                if (!response.ok) throw new Error('IP Geolocation failed');
+                const data = await response.json();
+
+                const coords = {
+                    lat: data.latitude,
+                    lng: data.longitude
+                };
+
+                console.log('Location fetched from IP:', coords);
+                setCurrentLocation(coords);
+
+                // Reverse geocode
+                try {
+                    const { reverseGeocode } = await import('@/lib/maps');
+                    const address = await reverseGeocode(coords);
+                    setPickupAddress(address);
+                } catch (err) {
+                    console.error('Error reverse geocoding IP location:', err);
+                }
+            } catch (error) {
+                console.error('Error fetching location from IP:', error);
+                toast({
+                    title: "Location Error",
+                    description: "Could not detect location. Please search for pickup address manually.",
+                    variant: "destructive"
+                });
+            }
+        };
+
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 async (position) => {
@@ -74,9 +133,19 @@ export function QuickBookWidget({ className = '' }: QuickBookWidgetProps) {
                     }
                 },
                 (error) => {
-                    console.error('Error getting location:', error);
+                    console.error('Error getting location from browser:', error);
+                    // Fallback to IP geolocation
+                    fetchLocationFromIP();
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 5000,
+                    maximumAge: 0
                 }
             );
+        } else {
+            // Browser doesn't support geolocation, use IP
+            fetchLocationFromIP();
         }
     }, []);
 
@@ -146,10 +215,31 @@ export function QuickBookWidget({ className = '' }: QuickBookWidgetProps) {
         calculateFareEstimate();
     };
 
-    const handleSchedule = (date: Date) => {
-        setScheduledDateTime(date);
-        setBookingType('scheduled');
+    // Generate time slots (every 30 minutes)
+    const generateTimeSlots = () => {
+        const slots: string[] = [];
+        for (let hour = 0; hour < 24; hour++) {
+            for (let minute = 0; minute < 60; minute += 30) {
+                const timeString = `${hour.toString().padStart(2, '0')}:${minute
+                    .toString()
+                    .padStart(2, '0')}`;
+                slots.push(timeString);
+            }
+        }
+        return slots;
     };
+
+    // Update scheduledDateTime when date or time changes
+    useEffect(() => {
+        if (selectedDate && selectedTime) {
+            const [hours, minutes] = selectedTime.split(':');
+            const scheduledDateTime = new Date(selectedDate);
+            scheduledDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+            setScheduledDateTime(scheduledDateTime);
+        } else {
+            setScheduledDateTime(null);
+        }
+    }, [selectedDate, selectedTime]);
 
     const handleConfirmBooking = async () => {
         if (!currentLocation || !destinationCoords) {
@@ -205,13 +295,21 @@ export function QuickBookWidget({ className = '' }: QuickBookWidgetProps) {
 
             // Start auto-matching in background for instant rides only
             if (!isScheduled) {
+                console.log('Instant ride created, starting auto-match sequence...');
                 setTimeout(async () => {
                     try {
-                        await autoMatchRideRequest(request.id);
+                        const matched = await autoMatchRideRequest(request.id);
+                        if (matched) {
+                            console.log('Auto-match successful for request:', request.id);
+                        } else {
+                            console.log('Auto-match still searching for request:', request.id);
+                        }
                     } catch (error) {
-                        console.error('Auto-match error:', error);
+                        console.error('Auto-match fatal error:', error);
                     }
                 }, 1000);
+            } else {
+                console.log('Scheduled ride created successfully:', request.id);
             }
 
         } catch (error: any) {
@@ -238,32 +336,33 @@ export function QuickBookWidget({ className = '' }: QuickBookWidgetProps) {
             </Button>
 
             <Dialog open={showDialog} onOpenChange={setShowDialog}>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
+                {/* Responsive Width: 95% of viewport width on mobile, max-xl on tablet+ */}
+                <DialogContent className="w-[90vw] sm:max-w-xl max-h-[90vh] p-4 sm:p-6 rounded-xl flex flex-col">
+                    <DialogHeader className="pb-1 shrink-0">
+                        <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
                             <Zap className="w-5 h-5 text-primary" />
                             Quick Book a Ride
                         </DialogTitle>
-                        <DialogDescription>
+                        <DialogDescription className="text-xs sm:text-sm">
                             Book an instant ride or schedule for later
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="space-y-4 py-4">
+                    <div className="flex-1 min-h-0 flex flex-col">
                         {/* Booking Type Tabs */}
-                        <Tabs value={bookingType} onValueChange={(v) => setBookingType(v as 'instant' | 'scheduled')}>
-                            <TabsList className="grid w-full grid-cols-2">
-                                <TabsTrigger value="instant">Instant Booking</TabsTrigger>
-                                <TabsTrigger value="scheduled">Schedule Ride</TabsTrigger>
+                        <Tabs value={bookingType} onValueChange={(v) => setBookingType(v as 'instant' | 'scheduled')} className="flex flex-col flex-1 min-h-0">
+                            <TabsList className="grid w-full grid-cols-2 h-9 sm:h-10 shrink-0">
+                                <TabsTrigger value="instant" className="text-xs sm:text-sm">Instant Booking</TabsTrigger>
+                                <TabsTrigger value="scheduled" className="text-xs sm:text-sm">Schedule Ride</TabsTrigger>
                             </TabsList>
 
-                            <TabsContent value="instant" className="space-y-4 mt-4">
+                            <TabsContent value="instant" className="space-y-2 mt-2 overflow-y-auto flex-1 min-h-0 pr-1">
                                 {/* Current Location */}
-                                <div className="flex items-center gap-3 p-3 bg-success/10 rounded-lg border border-success/20">
-                                    <MapPin className="w-5 h-5 text-success" />
-                                    <div className="flex-1">
-                                        <p className="text-xs text-muted-foreground">Pickup</p>
-                                        <p className="font-medium truncate">{pickupAddress}</p>
+                                <div className="flex items-center gap-2 p-2 bg-success/10 rounded-lg border border-success/20">
+                                    <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-success shrink-0" />
+                                    <div className="flex-1 min-w-0"> {/* min-w-0 required for truncate to work in flex */}
+                                        <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wide">Pickup</p>
+                                        <p className="font-medium text-sm truncate">{pickupAddress}</p>
                                     </div>
                                 </div>
 
@@ -276,37 +375,37 @@ export function QuickBookWidget({ className = '' }: QuickBookWidgetProps) {
                                             setDestinationCoords(coords || null);
                                         }}
                                         placeholder="Where to?"
-                                        className="h-12"
+                                        className="h-10 sm:h-12 text-sm"
                                     />
                                 </div>
 
                                 {/* Vehicle Type Selection */}
                                 <div>
-                                    <p className="text-sm font-medium mb-3">Select Vehicle</p>
+                                    <p className="text-xs sm:text-sm font-medium mb-2">Select Vehicle</p>
                                     <div className="grid grid-cols-3 gap-2">
                                         <Button
                                             variant={vehicleType === 'bike' ? 'default' : 'outline'}
-                                            className="flex-col h-auto py-3"
+                                            className="flex-col h-auto py-2 sm:py-3 px-1"
                                             onClick={() => setVehicleType('bike')}
                                         >
-                                            <Bike className="w-5 h-5 mb-1" />
-                                            <span className="text-xs">Bike</span>
+                                            <Bike className="w-4 h-4 sm:w-5 sm:h-5 mb-1" />
+                                            <span className="text-[10px] sm:text-xs">Bike</span>
                                         </Button>
                                         <Button
                                             variant={vehicleType === 'auto' ? 'default' : 'outline'}
-                                            className="flex-col h-auto py-3"
+                                            className="flex-col h-auto py-2 sm:py-3 px-1"
                                             onClick={() => setVehicleType('auto')}
                                         >
-                                            <Users className="w-5 h-5 mb-1" />
-                                            <span className="text-xs">Auto</span>
+                                            <Users className="w-4 h-4 sm:w-5 sm:h-5 mb-1" />
+                                            <span className="text-[10px] sm:text-xs">Auto</span>
                                         </Button>
                                         <Button
                                             variant={vehicleType === 'car' ? 'default' : 'outline'}
-                                            className="flex-col h-auto py-3"
+                                            className="flex-col h-auto py-2 sm:py-3 px-1"
                                             onClick={() => setVehicleType('car')}
                                         >
-                                            <Car className="w-5 h-5 mb-1" />
-                                            <span className="text-xs">Car</span>
+                                            <Car className="w-4 h-4 sm:w-5 sm:h-5 mb-1" />
+                                            <span className="text-[10px] sm:text-xs">Car</span>
                                         </Button>
                                     </div>
                                 </div>
@@ -319,36 +418,40 @@ export function QuickBookWidget({ className = '' }: QuickBookWidgetProps) {
                                     />
                                 )}
 
-                                {/* Promo Code */}
-                                <PromoCodeInput
-                                    onPromoApplied={handlePromoApplied}
-                                    onPromoRemoved={handlePromoRemoved}
-                                />
+                                {/* PromoCodeInput - standard block element */}
+                                <div className="w-full">
+                                    <PromoCodeInput
+                                        onPromoApplied={handlePromoApplied}
+                                        onPromoRemoved={handlePromoRemoved}
+                                    />
+                                </div>
 
-                                {/* Fare Estimate */}
-                                {/* Ride Preferences */}
-                                <div className="py-2">
+
+                                {/* Ride Preferences - Compact */}
+                                <div className="py-1">
                                     <RidePreferences
                                         showSaveButton={false}
                                         onPreferencesChange={setPreferences}
                                         className="border-0 shadow-none p-0"
+                                        inline={true} // Force inline if supported or styling needs adjustment
                                     />
                                 </div>
 
                                 {/* Colleague Carpooling Toggle */}
                                 {user?.organization && (
-                                    <div className="flex items-center justify-between p-3 bg-primary/5 rounded-lg border border-primary/10">
+                                    <div className="flex items-center justify-between p-2.5 bg-primary/5 rounded-lg border border-primary/10">
                                         <div className="flex items-center gap-2">
-                                            <Building2 className="w-5 h-5 text-primary" />
+                                            <Building2 className="w-4 h-4 text-primary" />
                                             <div>
-                                                <Label htmlFor="org-toggle" className="font-medium">Ride with Colleagues Only</Label>
-                                                <p className="text-[10px] text-muted-foreground">Only drivers from {user.organization} will be matched.</p>
+                                                <Label htmlFor="org-toggle" className="font-medium text-xs sm:text-sm">Ride with Colleagues</Label>
+                                                <p className="text-[10px] text-muted-foreground">Only matching with drivers from {user.organization}</p>
                                             </div>
                                         </div>
                                         <Switch
                                             id="org-toggle"
                                             checked={organizationOnly}
                                             onCheckedChange={setOrganizationOnly}
+                                            className="scale-90"
                                         />
                                     </div>
                                 )}
@@ -356,21 +459,21 @@ export function QuickBookWidget({ className = '' }: QuickBookWidgetProps) {
                                 {/* Book Button */}
                                 <Button
                                     size="lg"
-                                    className="w-full"
+                                    className="w-full h-10 sm:h-12 text-sm sm:text-base mt-2"
                                     onClick={handleConfirmBooking}
                                     disabled={!destination || !destinationCoords || loading}
                                 >
-                                    {loading ? 'Calculating...' : 'Find Rides'}
+                                    {loading ? 'Calculating...' : (fareEstimate ? `Book for ${fareEstimate.totalFare}` : 'Find Rides')}
                                 </Button>
                             </TabsContent>
 
-                            <TabsContent value="scheduled" className="space-y-4 mt-4">
+                            <TabsContent value="scheduled" className="space-y-2 mt-2 overflow-y-auto flex-1 min-h-0 pr-1">
                                 {/* Current Location */}
-                                <div className="flex items-center gap-3 p-3 bg-success/10 rounded-lg border border-success/20">
-                                    <MapPin className="w-5 h-5 text-success" />
-                                    <div className="flex-1">
-                                        <p className="text-xs text-muted-foreground">Pickup</p>
-                                        <p className="font-medium truncate">{pickupAddress}</p>
+                                <div className="flex items-center gap-2 p-2 bg-success/10 rounded-lg border border-success/20">
+                                    <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-success shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wide">Pickup</p>
+                                        <p className="font-medium text-sm truncate">{pickupAddress}</p>
                                     </div>
                                 </div>
 
@@ -383,55 +486,102 @@ export function QuickBookWidget({ className = '' }: QuickBookWidgetProps) {
                                             setDestinationCoords(coords || null);
                                         }}
                                         placeholder="Where to?"
-                                        className="h-12"
+                                        className="h-10 sm:h-12 text-sm"
                                     />
                                 </div>
 
-                                {/* Ride Scheduler */}
-                                <RideScheduler onSchedule={handleSchedule} className="w-full" />
+                                {/* Date Selection */}
+                                <div>
+                                    <Label className="text-xs sm:text-sm font-medium mb-2 block">Select Date</Label>
+                                    <Calendar
+                                        mode="single"
+                                        selected={selectedDate}
+                                        onSelect={setSelectedDate}
+                                        disabled={(date) => {
+                                            const today = new Date();
+                                            today.setHours(0, 0, 0, 0);
+                                            const maxDate = new Date();
+                                            maxDate.setDate(maxDate.getDate() + 7); // Max 7 days in advance
+                                            return date < today || date > maxDate;
+                                        }}
+                                        className="rounded-md border w-full"
+                                    />
+                                </div>
 
-                                {scheduledDateTime && (
-                                    <Card className="p-3 bg-primary/5 border-primary/20">
-                                        <p className="text-sm font-medium">Scheduled for:</p>
-                                        <p className="text-lg font-bold text-primary">
-                                            {scheduledDateTime.toLocaleString()}
-                                        </p>
-                                    </Card>
+                                {/* Time Selection */}
+                                {selectedDate && (
+                                    <div>
+                                        <Label className="text-xs sm:text-sm font-medium mb-2 block flex items-center gap-2">
+                                            <Clock className="w-4 h-4" />
+                                            Select Time
+                                        </Label>
+                                        <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto p-2 border rounded-md">
+                                            {generateTimeSlots().map((time) => {
+                                                const [hours, minutes] = time.split(':');
+                                                const testDateTime = new Date(selectedDate);
+                                                testDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+                                                const minTime = new Date();
+                                                minTime.setMinutes(minTime.getMinutes() + 30);
+
+                                                const isDisabled = testDateTime < minTime;
+
+                                                return (
+                                                    <Button
+                                                        key={time}
+                                                        variant={selectedTime === time ? 'default' : 'outline'}
+                                                        size="sm"
+                                                        onClick={() => setSelectedTime(time)}
+                                                        disabled={isDisabled}
+                                                        className="text-xs"
+                                                    >
+                                                        {time}
+                                                    </Button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {selectedDate && selectedTime && !scheduledDateTime && (
+                                    <p className="text-xs text-destructive text-center">
+                                        Please select a time at least 30 minutes from now
+                                    </p>
                                 )}
 
                                 {/* Vehicle Type Selection */}
                                 <div>
-                                    <p className="text-sm font-medium mb-3">Select Vehicle</p>
+                                    <p className="text-xs sm:text-sm font-medium mb-2">Select Vehicle</p>
                                     <div className="grid grid-cols-3 gap-2">
                                         <Button
                                             variant={vehicleType === 'bike' ? 'default' : 'outline'}
-                                            className="flex-col h-auto py-3"
+                                            className="flex-col h-auto py-2 sm:py-3 px-1"
                                             onClick={() => setVehicleType('bike')}
                                         >
-                                            <Bike className="w-5 h-5 mb-1" />
-                                            <span className="text-xs">Bike</span>
+                                            <Bike className="w-4 h-4 sm:w-5 sm:h-5 mb-1" />
+                                            <span className="text-[10px] sm:text-xs">Bike</span>
                                         </Button>
                                         <Button
                                             variant={vehicleType === 'auto' ? 'default' : 'outline'}
-                                            className="flex-col h-auto py-3"
+                                            className="flex-col h-auto py-2 sm:py-3 px-1"
                                             onClick={() => setVehicleType('auto')}
                                         >
-                                            <Users className="w-5 h-5 mb-1" />
-                                            <span className="text-xs">Auto</span>
+                                            <Users className="w-4 h-4 sm:w-5 sm:h-5 mb-1" />
+                                            <span className="text-[10px] sm:text-xs">Auto</span>
                                         </Button>
                                         <Button
                                             variant={vehicleType === 'car' ? 'default' : 'outline'}
-                                            className="flex-col h-auto py-3"
+                                            className="flex-col h-auto py-2 sm:py-3 px-1"
                                             onClick={() => setVehicleType('car')}
                                         >
-                                            <Car className="w-5 h-5 mb-1" />
-                                            <span className="text-xs">Car</span>
+                                            <Car className="w-4 h-4 sm:w-5 sm:h-5 mb-1" />
+                                            <span className="text-[10px] sm:text-xs">Car</span>
                                         </Button>
                                     </div>
                                 </div>
 
                                 {/* Fare Estimate */}
-                                {fareEstimate && distanceKm > 0 && (
+                                {distanceKm > 0 && (
                                     <FareEstimator
                                         vehicleType={vehicleType}
                                         distanceKm={distanceKm}
@@ -441,7 +591,7 @@ export function QuickBookWidget({ className = '' }: QuickBookWidgetProps) {
                                 )}
 
                                 {/* Ride Preferences */}
-                                <div className="py-2">
+                                <div className="py-1">
                                     <RidePreferences
                                         showSaveButton={false}
                                         onPreferencesChange={setPreferences}
@@ -452,18 +602,19 @@ export function QuickBookWidget({ className = '' }: QuickBookWidgetProps) {
 
                                 {/* Colleague Carpooling Toggle for Scheduled */}
                                 {user?.organization && (
-                                    <div className="flex items-center justify-between p-3 bg-primary/5 rounded-lg border border-primary/10 mb-4">
+                                    <div className="flex items-center justify-between p-2.5 bg-primary/5 rounded-lg border border-primary/10 mb-2">
                                         <div className="flex items-center gap-2">
-                                            <Building2 className="w-5 h-5 text-primary" />
+                                            <Building2 className="w-4 h-4 text-primary" />
                                             <div>
-                                                <Label htmlFor="org-toggle-sched" className="font-medium">Ride with Colleagues Only</Label>
-                                                <p className="text-[10px] text-muted-foreground">Only drivers from {user.organization} will be matched.</p>
+                                                <Label htmlFor="org-toggle-sched" className="font-medium text-xs sm:text-sm">Ride with Colleagues</Label>
+                                                <p className="text-[10px] text-muted-foreground">Only matching with drivers from {user.organization}</p>
                                             </div>
                                         </div>
                                         <Switch
                                             id="org-toggle-sched"
                                             checked={organizationOnly}
                                             onCheckedChange={setOrganizationOnly}
+                                            className="scale-90"
                                         />
                                     </div>
                                 )}
@@ -471,7 +622,7 @@ export function QuickBookWidget({ className = '' }: QuickBookWidgetProps) {
                                 {/* Book Button */}
                                 <Button
                                     size="lg"
-                                    className="w-full"
+                                    className="w-full h-10 sm:h-12 text-sm sm:text-base mt-2"
                                     onClick={handleConfirmBooking}
                                     disabled={!destination || !destinationCoords || !scheduledDateTime || loading}
                                 >

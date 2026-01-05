@@ -8,6 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 interface RealDriverTrackerProps {
     tripId: string;
     driverId: string;
+    driverUserId: string;
     pickupLocation: Coordinates;
     dropLocation: Coordinates;
     isDriver: boolean;
@@ -18,6 +19,7 @@ interface RealDriverTrackerProps {
 export function RealDriverTracker({
     tripId,
     driverId,
+    driverUserId,
     pickupLocation,
     dropLocation,
     isDriver,
@@ -28,11 +30,11 @@ export function RealDriverTracker({
     const { toast } = useToast();
     const [isTracking, setIsTracking] = useState(false);
     const watchIdRef = useRef<number | null>(null);
-    const notifiedArrivedRef = useRef(false);
-    const notifiedCompletedRef = useRef(false);
+    const notifiedArrivedRef = useRef<Record<string, boolean>>({});
+    const notifiedCompletedRef = useRef<Record<string, boolean>>({});
 
-    // Only run if the current user is the driver
-    const shouldRun = isDriver && user?.id === driverId;
+    // Only run if the current user is the driver and matches the trip's driver user ID
+    const shouldRun = isDriver && user?.id === driverUserId;
 
     useEffect(() => {
         if (!shouldRun) return;
@@ -86,7 +88,7 @@ export function RealDriverTracker({
         // Options for high accuracy tracking (for driving)
         const options = {
             enableHighAccuracy: true,
-            timeout: 5000,
+            timeout: 20000,
             maximumAge: 0
         };
 
@@ -101,39 +103,86 @@ export function RealDriverTracker({
     }, [shouldRun, tripId, driverId]);
 
     const checkProximity = async (currentLat: number, currentLng: number) => {
-        // 1. Driver Arrived (Distance to pickup < 100m)
-        const distToPickup = calculateDistanceKm(currentLat, currentLng, pickupLocation.lat, pickupLocation.lng);
+        try {
+            // Fetch all active bookings for this trip to check against ALL stops (pooling)
+            const { data: bookings } = await supabase
+                .from('bookings')
+                .select('*')
+                .eq('trip_id', tripId)
+                .neq('status', 'cancelled')
+                .neq('status', 'completed'); // Only care about incomplete ones
 
-        if (distToPickup < 0.1 && !notifiedArrivedRef.current) {
-            notifiedArrivedRef.current = true;
+            if (!bookings) return;
 
-            await supabase.from('notifications').insert({
-                // We'd ideally notify all passengers. For now, we rely on backend triggers or client notifications
-                // But this component might not know passenger IDs.
-                // Best practice: The backend should listen to location updates and trigger this.
-                // However, following the existing pattern of client-side logic:
-                // We will just let the parent know.
-            });
+            // 1. Check Pickups
+            for (const booking of bookings) {
+                if (booking.status === 'confirmed') { // Waiting to be picked up
+                    const dist = calculateDistanceKm(currentLat, currentLng, Number(booking.pickup_lat), Number(booking.pickup_lng));
 
-            if (onArrival) onArrival();
+                    // Use a unique key for "notified" ref to avoid re-notifying for same passenger
+                    const notifKey = `arrived_pickup_${booking.id}`;
+                    if (dist < 0.1 && !(notifiedArrivedRef.current as any)[notifKey]) {
+                        (notifiedArrivedRef.current as any)[notifKey] = true;
 
-            toast({
-                title: "You have arrived!",
-                description: "Notify passengers that you are at the pickup point."
-            });
-        }
+                        await supabase.from('notifications').insert({
+                            user_id: booking.passenger_id,
+                            title: 'Driver Arrived',
+                            message: 'Your driver has arrived at the pickup location.',
+                            type: 'trip_update',
+                            is_read: false
+                        });
 
-        // 2. Trip Completed (Distance to drop < 100m)
-        const distToDrop = calculateDistanceKm(currentLat, currentLng, dropLocation.lat, dropLocation.lng);
-        if (distToDrop < 0.1 && !notifiedCompletedRef.current) {
-            notifiedCompletedRef.current = true;
+                        toast({
+                            title: "Arrived at Pickup",
+                            description: `Pickup for passenger #${booking.id.slice(0, 4)}`
+                        });
+                    }
+                }
+            }
 
-            if (onComplete) onComplete();
+            // 2. Check Drop-offs
+            for (const booking of bookings) {
+                if (booking.status === 'picked_up') { // On board
+                    const dist = calculateDistanceKm(currentLat, currentLng, Number(booking.drop_lat), Number(booking.drop_lng));
 
-            toast({
-                title: "Destination Reached",
-                description: "You have arrived at the drop location."
-            });
+                    const notifKey = `arrived_drop_${booking.id}`;
+                    if (dist < 0.1 && !(notifiedCompletedRef.current as any)[notifKey]) {
+                        (notifiedCompletedRef.current as any)[notifKey] = true;
+
+                        // We don't auto-complete the booking here (driver must confirm "Drop Off" in manual manifest for safety/payment trigger)
+                        // But we can notify
+
+                        await supabase.from('notifications').insert({
+                            user_id: booking.passenger_id,
+                            title: 'Arriving at Destination',
+                            message: 'You are arriving at your drop location.',
+                            type: 'trip_update',
+                            is_read: false
+                        });
+
+                        toast({
+                            title: "Arrived at Drop",
+                            description: `Drop-off for passenger #${booking.id.slice(0, 4)}`
+                        });
+                    }
+                }
+            }
+
+            // 3. Driver Arrival (Legacy/Single Passenger compatibility) - keeping existing props check as fallback
+            const distToPickup = calculateDistanceKm(currentLat, currentLng, pickupLocation.lat, pickupLocation.lng);
+            if (distToPickup < 0.1 && !(notifiedArrivedRef.current as any)['main']) {
+                (notifiedArrivedRef.current as any)['main'] = true;
+                if (onArrival) onArrival();
+            }
+
+            const distToDrop = calculateDistanceKm(currentLat, currentLng, dropLocation.lat, dropLocation.lng);
+            if (distToDrop < 0.1 && !(notifiedCompletedRef.current as any)['main']) {
+                (notifiedCompletedRef.current as any)['main'] = true;
+                if (onComplete) onComplete();
+            }
+
+        } catch (error) {
+            console.error("Proximity check failed", error);
         }
     };
 

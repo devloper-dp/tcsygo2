@@ -17,13 +17,13 @@ export interface RouteData {
 }
 
 // Nominatim API for geocoding (free, no key required)
-const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org';
+const NOMINATIM_BASE = '/api/nominatim';
 
 // OSRM API for routing (free, no key required)
 const OSRM_BASE = 'https://router.project-osrm.org';
 
 // User agent required by Nominatim
-const USER_AGENT = 'TCSYGO-Carpooling-App';
+// const USER_AGENT = 'TCSYGO-Carpooling-App';
 
 /**
  * Get route between two points using OSRM
@@ -41,10 +41,7 @@ export async function getRoute(
         ].join(';');
 
         const response = await fetch(
-            `${OSRM_BASE}/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=true`,
-            {
-                headers: { 'User-Agent': USER_AGENT }
-            }
+            `${OSRM_BASE}/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=true`
         );
 
         const data = await response.json();
@@ -100,9 +97,6 @@ export async function geocodeAddress(address: string): Promise<Coordinates | nul
             `&format=json` +
             `&limit=1` +
             `&countrycodes=in`, // Restrict to India
-            {
-                headers: { 'User-Agent': USER_AGENT }
-            }
         );
 
         const data = await response.json();
@@ -131,9 +125,7 @@ export async function reverseGeocode(coords: Coordinates): Promise<string> {
             `lat=${coords.lat}` +
             `&lon=${coords.lng}` +
             `&format=json`,
-            {
-                headers: { 'User-Agent': USER_AGENT }
-            }
+
         );
 
         const data = await response.json();
@@ -165,9 +157,7 @@ export async function searchLocations(query: string): Promise<Array<{
             `&format=json` +
             `&limit=5` +
             `&countrycodes=in`,
-            {
-                headers: { 'User-Agent': USER_AGENT }
-            }
+
         );
 
         const data = await response.json();
@@ -262,4 +252,45 @@ function mapManeuverToType(type: string, modifier?: string): 'straight' | 'left'
     if (modifier && modifier.includes('left')) return 'left';
     if (modifier && modifier.includes('right')) return 'right';
     return 'straight';
+}
+
+/**
+ * Calculate the detour impact (time and distance) of adding a stop to a trip.
+ * 
+ * @param start Current driver location or trip start
+ * @param end Trip destination
+ * @param currentWaypoints Existing waypoints
+ * @param newStops The new pickup/drop locations to test
+ * @returns Object containing original metrics, new metrics, and the difference
+ */
+export async function calculateDetour(
+    start: Coordinates,
+    end: Coordinates,
+    currentWaypoints: Coordinates[],
+    newStops: Coordinates[]
+): Promise<{
+    originalDuration: number;
+    newDuration: number;
+    detourDuration: number;
+    originalDistance: number;
+    newDistance: number;
+    detourDistance: number;
+    geometry: Coordinates[];
+}> {
+    // 1. Get original route details
+    const originalRoute = await getRoute(start, end, currentWaypoints);
+
+    // 2. Get new route details with the new stops
+    const newWaypoints = [...currentWaypoints, ...newStops];
+    const newRoute = await getRoute(start, end, newWaypoints);
+
+    return {
+        originalDuration: originalRoute.duration,
+        newDuration: newRoute.duration,
+        detourDuration: newRoute.duration - originalRoute.duration,
+        originalDistance: originalRoute.distance,
+        newDistance: newRoute.distance,
+        detourDistance: newRoute.distance - originalRoute.distance,
+        geometry: newRoute.geometry
+    };
 }

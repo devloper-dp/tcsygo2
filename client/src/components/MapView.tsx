@@ -144,32 +144,65 @@ export function MapView({
   useEffect(() => {
     if (!map.current) return;
 
-    // Remove old markers
-    markersRef.current.forEach(marker => marker.remove());
-    markersRef.current = [];
+    const currentMarkersMap = new Map<string, L.Marker>();
 
-    // Add new markers
-    markers.forEach(marker => {
-      const icon = L.divIcon({
-        className: 'custom-marker',
-        html: `<div style="width: 32px; height: 32px; background-color: ${marker.color || '#3b82f6'}; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
-        iconSize: [32, 32],
-        iconAnchor: [16, 16]
-      });
+    // Create/Update markers
+    markers.forEach(markerData => {
+      let marker = markersRef.current.find(m => (m as any).options.id === markerData.id);
 
-      const markerInstance = L.marker([marker.coordinates.lat, marker.coordinates.lng], { icon })
-        .addTo(map.current!);
+      if (marker) {
+        // Update existing marker
+        const newLatLng = new L.LatLng(markerData.coordinates.lat, markerData.coordinates.lng);
 
-      if (marker.popup) {
-        markerInstance.bindPopup(marker.popup);
+        // Simple interpolation could go here, but for now just setting it works better than recreation
+        // If we want smooth movement, we can rely on CSS transition on the icon or use a small animation loop
+        // For now, let's just setLatLng which is instant but avoids the 'blink' of recreation
+        marker.setLatLng(newLatLng);
+        marker.setIcon(L.divIcon({
+          className: 'custom-marker',
+          html: `<div style="width: 32px; height: 32px; background-color: ${markerData.color || '#3b82f6'}; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); transition: all 0.3s ease;"></div>`,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16]
+        }));
+        if (markerData.popup) {
+          marker.setPopupContent(markerData.popup);
+        }
+        currentMarkersMap.set(markerData.id, marker);
+      } else {
+        // Create new marker
+        const icon = L.divIcon({
+          className: 'custom-marker',
+          html: `<div style="width: 32px; height: 32px; background-color: ${markerData.color || '#3b82f6'}; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); transition: all 0.3s ease;"></div>`,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16]
+        });
+
+        const newMarker = L.marker([markerData.coordinates.lat, markerData.coordinates.lng], { icon, title: markerData.id } as any)
+          .addTo(map.current!);
+
+        // Store ID in options for retrieval
+        (newMarker as any).options.id = markerData.id;
+
+        if (markerData.popup) {
+          newMarker.bindPopup(markerData.popup);
+        }
+        currentMarkersMap.set(markerData.id, newMarker);
+        markersRef.current.push(newMarker);
       }
-
-      markersRef.current.push(markerInstance);
     });
 
-    // Fit bounds only if there are multiple markers (not on every single marker update)
+    // Remove markers that are no longer present
+    for (let i = markersRef.current.length - 1; i >= 0; i--) {
+      const marker = markersRef.current[i];
+      const id = (marker as any).options.id;
+      if (!markers.find(m => m.id === id)) {
+        marker.remove();
+        markersRef.current.splice(i, 1);
+      }
+    }
+
+    // Fit bounds logic (kept simple)
     if (markers.length > 1) {
-      // Use requestAnimationFrame to ensure fitBounds happens at the right time
       requestAnimationFrame(() => {
         if (!map.current) return;
         try {

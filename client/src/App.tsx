@@ -36,6 +36,8 @@ import DriverRequests from "@/pages/driver-requests";
 import SafetyCenter from "@/pages/safety-center";
 import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
+import RideSimulator from "@/pages/dev/RideSimulator";
+import TestDB from "@/pages/test-db";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 import { OnboardingFlow, useOnboarding } from "@/components/OnboardingFlow";
@@ -47,22 +49,22 @@ function Router() {
     <>
       <OnboardingFlow isOpen={showOnboarding} onComplete={() => setShowOnboarding(false)} />
       <Switch>
-        <Route path="/" component={Home} />
+        <ProtectedRoute path="/" component={Home} allowedRoles={['passenger']} />
         {/* ... existing routes ... */}
 
         <ProtectedRoute path="/search" component={Search} allowedRoles={['passenger', 'driver']} />
         <ProtectedRoute path="/create-trip" component={CreateTrip} allowedRoles={['driver']} />
-        <ProtectedRoute path="/driver-onboarding" component={DriverOnboarding} allowedRoles={['passenger']} />
+        <ProtectedRoute path="/driver-onboarding" component={DriverOnboarding} allowedRoles={['passenger', 'driver']} />
         <ProtectedRoute path="/track/:id" component={TrackTrip} allowedRoles={['passenger', 'driver', 'admin']} />
         <ProtectedRoute path="/trip/:id" component={TripDetails} allowedRoles={['passenger', 'driver']} />
         <Route path="/login" component={Login} />
         <Route path="/signup" component={Signup} />
         <Route path="/forgot-password" component={ForgotPassword} />
         <Route path="/reset-password" component={ResetPassword} />
-        <ProtectedRoute path="/my-trips" component={MyTrips} allowedRoles={['passenger', 'driver']} />
+        <ProtectedRoute path="/my-trips" component={MyTrips} allowedRoles={['passenger', 'driver', 'admin']} />
         <ProtectedRoute path="/profile" component={Profile} allowedRoles={['passenger', 'driver']} />
         <ProtectedRoute path="/payment-methods" component={PaymentMethods} allowedRoles={['passenger', 'driver']} />
-        <ProtectedRoute path="/payment-history" component={PaymentHistory} allowedRoles={['passenger', 'driver']} />
+        <ProtectedRoute path="/payment-history" component={PaymentHistory} allowedRoles={['passenger', 'driver', 'admin']} />
         <ProtectedRoute path="/earnings" component={Earnings} allowedRoles={['driver']} />
         <ProtectedRoute path="/payment/:bookingId" component={Payment} allowedRoles={['passenger', 'driver']} />
         <ProtectedRoute path="/payment-success" component={PaymentSuccess} allowedRoles={['passenger', 'driver']} />
@@ -70,13 +72,16 @@ function Router() {
         <ProtectedRoute path="/wallet" component={Wallet} allowedRoles={['passenger', 'driver']} />
         <ProtectedRoute path="/saved-places" component={SavedPlaces} allowedRoles={['passenger', 'driver']} />
         <ProtectedRoute path="/referrals" component={Referrals} allowedRoles={['passenger', 'driver']} />
-        <ProtectedRoute path="/statistics" component={Statistics} allowedRoles={['passenger', 'driver']} />
+        <ProtectedRoute path="/statistics" component={Statistics} allowedRoles={['passenger', 'driver', 'admin']} />
         <ProtectedRoute path="/ride-request/:id" component={RideRequestWaiting} allowedRoles={['passenger']} />
         <ProtectedRoute path="/driver-requests" component={DriverRequests} allowedRoles={['driver']} />
         <ProtectedRoute path="/safety-center" component={SafetyCenter} allowedRoles={['passenger', 'driver']} />
         <Route path="/help" component={Help} />
         <Route path="/terms" component={Terms} />
         <Route path="/privacy" component={Privacy} />
+        {/* Dev Tools */}
+        <Route path="/dev/simulator" component={RideSimulator} />
+        <Route path="/test-db" component={TestDB} />
         <Route component={NotFound} />
       </Switch>
     </>
@@ -101,3 +106,4 @@ function App() {
 }
 
 export default App;
+// Force reload

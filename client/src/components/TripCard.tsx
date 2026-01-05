@@ -16,6 +16,14 @@ export function TripCard({ trip, onBook, showActions = true }: TripCardProps) {
   const departureDate = new Date(trip.departureTime);
   const driver = trip.driver;
 
+  if (!driver || !driver.user) {
+    return (
+      <Card className="p-6 text-destructive">
+        Error: Driver details not available for trip {trip.id}
+      </Card>
+    );
+  }
+
   return (
     <Card className="p-6 hover-elevate" data-testid={`trip-card-${trip.id}`}>
       <div className="flex gap-6">

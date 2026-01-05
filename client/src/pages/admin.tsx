@@ -7,14 +7,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  ArrowLeft,
   Users,
   Car,
   MapPin,
   DollarSign,
   TrendingUp,
-  Shield,
-  Ticket
+  Shield
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -58,14 +56,31 @@ export default function AdminDashboard() {
   }>({
     queryKey: ['admin-stats'],
     queryFn: async () => {
-      const { count: totalUsers } = await supabase.from('users').select('*', { count: 'exact', head: true });
-      const { count: totalDrivers } = await supabase.from('drivers').select('*', { count: 'exact', head: true });
-      const { count: totalTrips } = await supabase.from('trips').select('*', { count: 'exact', head: true });
-      const { count: pendingVerifications } = await supabase.from('drivers').select('*', { count: 'exact', head: true }).eq('verification_status', 'pending');
+      // Parallelize queries for better performance
+      const [
+        { count: totalUsers },
+        { count: totalDrivers },
+        { count: totalTrips },
+        { count: pendingVerifications }
+      ] = await Promise.all([
+        supabase.from('users').select('*', { count: 'exact', head: true }),
+        supabase.from('drivers').select('*', { count: 'exact', head: true }),
+        supabase.from('trips').select('*', { count: 'exact', head: true }),
+        supabase.from('drivers').select('*', { count: 'exact', head: true }).eq('verification_status', 'pending')
+      ]);
 
-      // Revenue (simplified, calculating on client)
-      const { data: payments } = await supabase.from('payments').select('amount').eq('status', 'success');
-      const totalRevenue = payments?.reduce((sum, p) => sum + parseFloat(p.amount), 0) || 0;
+      // Revenue calculation (Try RPC first, fallback to client-side)
+      let totalRevenue = 0;
+      const { data: rpcRevenue, error: rpcError } = await supabase.rpc('get_total_revenue');
+
+      if (!rpcError && rpcRevenue !== null) {
+        totalRevenue = rpcRevenue;
+      } else {
+        // Fallback or if payments not yet fetched
+        console.warn('RPC get_total_revenue failed or unavailable, falling back to client-side', rpcError);
+        const { data: payments } = await supabase.from('payments').select('amount').eq('status', 'success');
+        totalRevenue = payments?.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) || 0;
+      }
 
       return {
         totalUsers: totalUsers || 0,

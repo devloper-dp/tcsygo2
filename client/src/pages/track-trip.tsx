@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useRoute } from 'wouter';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -16,6 +16,7 @@ import { SplitFare } from '@/components/SplitFare';
 import { SafetyCheckIn } from '@/components/SafetyCheckIn';
 import { DriverVerification } from '@/components/DriverVerification';
 import { TurnByTurnNavigation } from '@/components/TurnByTurnNavigation';
+import { TripManifest } from '@/components/TripManifest';
 import { TripWithDriver } from '@shared/schema';
 import { supabase } from '@/lib/supabase';
 import { mapTrip } from '@/lib/mapper';
@@ -38,6 +39,9 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { RealDriverTracker } from '@/components/RealDriverTracker';
 import { processAutoPayments } from '@/lib/auto-pay';
+import { handlePassengerPayment } from '@/lib/passenger-payment';
+import { CancelDialog } from '@/components/CancelDialog';
+import { RatingModal } from '@/components/RatingModal';
 
 export default function TrackTrip() {
     const [, navigate] = useLocation();
@@ -45,6 +49,7 @@ export default function TrackTrip() {
     const tripId = params?.id;
     const { user } = useAuth();
     const { toast } = useToast();
+    const queryClient = useQueryClient();
     const [driverLocation, setDriverLocation] = useState<LocationUpdate | null>(null);
     const [eta, setEta] = useState<string>('Calculating...');
     const [isChatOpen, setIsChatOpen] = useState(false);
@@ -55,6 +60,8 @@ export default function TrackTrip() {
     const [distanceToDrop, setDistanceToDrop] = useState<number | null>(null);
     const [showVerification, setShowVerification] = useState(false);
     const [verificationCompleted, setVerificationCompleted] = useState(false);
+    const [showCancelTrip, setShowCancelTrip] = useState(false);
+    const [showRatingModal, setShowRatingModal] = useState(false);
 
     const { data: trip, isLoading } = useQuery<TripWithDriver>({
         queryKey: ['track-trip', tripId],
@@ -153,28 +160,70 @@ export default function TrackTrip() {
         queryKey: ['trip-booking', tripId],
         queryFn: async () => {
             if (!tripId) return null;
-            const { data, error } = await supabase
+            const { data } = await supabase
                 .from('bookings')
-                .select('id, passenger_id, total_amount')
+                .select('id, passenger_id, total_amount, pickup_location, pickup_lat, pickup_lng, drop_location, drop_lat, drop_lng')
                 .eq('trip_id', tripId)
+                .eq('passenger_id', user?.id || '')
                 .maybeSingle();
             return data;
         },
         enabled: !!tripId
     });
 
+    // Use booking coordinates if available (for pooled passengers), otherwise trip coordinates
+    const pickupLat = booking?.pickup_lat ? Number(booking.pickup_lat) : (trip ? Number(trip.pickupLat) : 0);
+    const pickupLng = booking?.pickup_lng ? Number(booking.pickup_lng) : (trip ? Number(trip.pickupLng) : 0);
+    const dropLat = booking?.drop_lat ? Number(booking.drop_lat) : (trip ? Number(trip.dropLat) : 0);
+    const dropLng = booking?.drop_lng ? Number(booking.drop_lng) : (trip ? Number(trip.dropLng) : 0);
+
+    // Watch for trip status changes to trigger rating AND payment (only for passenger)
+    useEffect(() => {
+        if (trip?.status === 'completed' && user?.id !== trip.driver.userId) {
+            // 1. Process Payment
+            if (booking && booking.total_amount) {
+                handlePassengerPayment(booking.id, parseFloat(booking.total_amount), trip.id);
+            }
+
+            // 2. Show Rating Modal
+            // small delay to allow animations to finish or user to realize arrival
+            const timer = setTimeout(() => setShowRatingModal(true), 1500);
+            return () => clearTimeout(timer);
+        }
+    }, [trip?.status, user?.id, trip?.driver.userId, booking]);
+
     // Fetch route if not available in trip data
     useEffect(() => {
         if (!trip) return;
 
         const fetchRoute = async () => {
-            // If trip already has a route, use it
+            // For pooling, we always want to calculate OUR segment
+            // But if trip.route exists and we just want to show the whole car path, keeping it might be okay.
+            // Rapido shows relevant path.
+
+            // Prioritize calculating specific path if booking exists (passenger view)
+            if (booking && (booking.pickup_lat !== trip.pickupLat || booking.drop_lat !== trip.dropLat)) {
+                try {
+                    const pickup: Coordinates = { lat: Number(booking.pickup_lat), lng: Number(booking.pickup_lng) };
+                    const drop: Coordinates = { lat: Number(booking.drop_lat), lng: Number(booking.drop_lng) };
+
+                    const routeData = await getRoute(pickup, drop);
+                    setRoutePath(routeData.geometry);
+                    if (routeData.steps) {
+                        setNavigationSteps(routeData.steps);
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch pooled route:', error);
+                }
+                return;
+            }
+
             if (trip.route && Array.isArray(trip.route) && trip.route.length > 0) {
                 setRoutePath(trip.route);
                 return;
             }
 
-            // Otherwise fetch from OSRM
+            // Otherwise fetch from OSRM (fallback logic)
             try {
                 const pickup: Coordinates = { lat: Number(trip.pickupLat), lng: Number(trip.pickupLng) };
                 const drop: Coordinates = { lat: Number(trip.dropLat), lng: Number(trip.dropLng) };
@@ -190,7 +239,48 @@ export default function TrackTrip() {
         };
 
         fetchRoute();
-    }, [trip]);
+    }, [trip, booking]);
+
+    // REAL-TIME BOOKING SYNC (POOLING)
+    useEffect(() => {
+        if (!tripId) return;
+
+        console.log("Subscribing to bookings for trip:", tripId);
+
+        const channel = supabase
+            .channel(`trip-bookings:${tripId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'bookings',
+                    filter: `trip_id=eq.${tripId}`,
+                },
+                async (payload) => {
+                    console.log("Booking update received:", payload);
+
+                    if (payload.eventType === 'INSERT') {
+                        toast({
+                            title: "New Passenger Joined!",
+                            description: "Route is being updated to include new stop.",
+                        });
+                    }
+
+                    // Invalidate queries to refresh data
+                    queryClient.invalidateQueries({ queryKey: ['track-trip', tripId] });
+                    queryClient.invalidateQueries({ queryKey: ['trip-manifest', tripId] });
+
+                    // If we are the driver or looking at the main trip route, we might want to re-fetch the route
+                    // logic here would ideally trigger a route recalculation if the trip's route field updates
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [tripId, queryClient, toast]);
 
     const handleSOS = async () => {
         if (!trip) return;
@@ -222,6 +312,62 @@ export default function TrackTrip() {
         }
     };
 
+    const handleCancelTrip = async () => {
+        if (!trip) return;
+        try {
+            const { error } = await supabase
+                .from('trips')
+                .update({ status: 'cancelled' })
+                .eq('id', trip.id);
+
+            if (error) throw error;
+
+            toast({
+                title: "Trip Cancelled",
+                description: "The trip has been cancelled.",
+            });
+            setShowCancelTrip(false);
+            navigate('/my-trips');
+        } catch (error: any) {
+            console.error("Error cancelling trip:", error);
+            toast({
+                title: "Failed to cancel trip",
+                description: error.message || "Please try again.",
+                variant: 'destructive',
+            });
+        }
+    };
+
+    const handleRatingSubmit = async (rating: number, feedback: string, tags: string[]) => {
+        if (!trip) return;
+
+        try {
+            // Check if ratings table exists and insert, otherwise just log (fail-safe)
+            const { error } = await supabase.from('ratings').insert({
+                trip_id: trip.id,
+                rater_id: user?.id,
+                rated_user_id: trip.driver.userId, // Rating the driver
+                rating,
+                feedback,
+                tags,
+                role: 'passenger'
+            });
+
+            if (error) {
+                console.warn("Rating submission failed (table might be missing):", error);
+            }
+
+            toast({
+                title: "Feedback Submitted",
+                description: "Thank you for rating your ride!",
+            });
+            navigate('/my-trips');
+        } catch (error) {
+            console.error("Error submitting rating:", error);
+            navigate('/my-trips');
+        }
+    };
+
     if (isLoading || !trip) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center">
@@ -239,15 +385,15 @@ export default function TrackTrip() {
     const markers = [
         {
             id: 'pickup',
-            coordinates: { lat: Number(trip.pickupLat), lng: Number(trip.pickupLng) },
+            coordinates: { lat: pickupLat, lng: pickupLng },
             color: '#22c55e',
-            popup: `<strong>Pickup:</strong> ${trip.pickupLocation}`
+            popup: `<strong>Pickup here</strong>`
         },
         {
             id: 'drop',
-            coordinates: { lat: Number(trip.dropLat), lng: Number(trip.dropLng) },
+            coordinates: { lat: dropLat, lng: dropLng },
             color: '#ef4444',
-            popup: `<strong>Drop:</strong> ${trip.dropLocation}`
+            popup: `<strong>Drop here</strong>`
         },
     ];
 
@@ -289,6 +435,16 @@ export default function TrackTrip() {
                                 totalAmount={booking.total_amount || 0}
                                 className="hidden md:flex"
                             />
+                        )}
+                        {trip.driver.userId === user?.id && trip.status === 'ongoing' && (
+                            <Button
+                                variant="destructive"
+                                size="sm"
+                                className="hidden md:flex"
+                                onClick={() => setShowCancelTrip(true)}
+                            >
+                                Cancel Trip
+                            </Button>
                         )}
                         <Badge variant="outline" className="animate-pulse bg-green-500/10 text-green-500 border-green-500/20 hidden sm:flex">
                             ● LIVE
@@ -349,6 +505,17 @@ export default function TrackTrip() {
                                     iconOnly
                                 />
                             )}
+                            {trip.driver.userId === user?.id && trip.status === 'ongoing' && (
+                                <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    className="h-9 w-9 px-0"
+                                    onClick={() => setShowCancelTrip(true)}
+                                >
+                                    <span className="sr-only">Cancel</span>
+                                    <div className="flex items-center justify-center font-bold text-lg">×</div>
+                                </Button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -378,7 +545,7 @@ export default function TrackTrip() {
                 <SafetyCheckIn
                     tripId={trip.id}
                     isActive={trip.status === 'ongoing'}
-                    className="absolute top-6 left-6 right-6 md:left-auto md:right-6 md:w-96"
+                    className="absolute top-6 left-6 right-6 md:left-auto md:right-6 md:w-96 z-[500] animate-in slide-in-from-top-5 duration-500"
                 />
 
                 {/* Turn-by-Turn Navigation */}
@@ -390,12 +557,12 @@ export default function TrackTrip() {
                             ? (distanceToDrop ? distanceToDrop * 1000 : 2000)
                             : (distanceToPickup ? distanceToPickup * 1000 : 2000)}
                         currentStepIndex={currentStepIndex}
-                        className="absolute top-24 left-6 right-6 md:left-6 md:right-auto md:w-96"
+                        className="absolute top-24 left-6 right-6 md:left-6 md:right-auto md:w-96 z-[500] animate-in slide-in-from-top-5 duration-500"
                     />
                 )}
 
                 {/* Driver Info Overlay */}
-                <div className="absolute bottom-6 left-6 right-6 md:left-auto md:right-6 md:w-96 space-y-3">
+                <div className="absolute bottom-6 left-6 right-6 md:left-auto md:right-6 md:w-96 space-y-3 z-[500] animate-in slide-in-from-bottom-5 duration-500">
                     {/* Driver Arrival Timer */}
                     {trip.status !== 'completed' && driverLocation && (
                         <DriverArrivalTimer
@@ -528,12 +695,20 @@ export default function TrackTrip() {
                 />
             )}
 
+            {/* Trip Manifest (Only for Driver) */}
+            {trip && user?.id === trip.driver.userId && (
+                <div className="absolute top-24 left-6 md:left-auto md:right-6 md:w-96 z-[500] animate-in slide-in-from-right-5 duration-500 bg-background/90 backdrop-blur rounded-lg p-4 shadow-xl border overflow-y-auto max-h-[60vh]">
+                    <TripManifest tripId={trip.id} currentLocation={driverLocation ? { lat: driverLocation.lat, lng: driverLocation.lng } : undefined} />
+                </div>
+            )}
+
 
             {/* Real Driver Tracker (Only for Driver) */}
             {trip && user?.id === trip.driver.userId && (
                 <RealDriverTracker
                     tripId={trip.id}
                     driverId={trip.driverId}
+                    driverUserId={trip.driver.userId}
                     isDriver={true}
                     pickupLocation={{ lat: Number(trip.pickupLat), lng: Number(trip.pickupLng) }}
                     dropLocation={{ lat: Number(trip.dropLat), lng: Number(trip.dropLng) }}
@@ -548,13 +723,40 @@ export default function TrackTrip() {
                                 console.error("Failed to complete trip", error);
                             } else {
                                 toast({ title: "Trip Completed", description: "You have reached the destination." });
-                                // Trigger Auto-Pay
-                                await processAutoPayments(trip.id);
+                                // Auto-pay is now handled by passenger clients individually
                             }
                         }
                     }}
                 />
             )}
+
+            <CancelDialog
+                isOpen={showCancelTrip}
+                onClose={() => setShowCancelTrip(false)}
+                onConfirm={handleCancelTrip}
+                type="trip"
+            />
+
+            {trip && (
+                <RatingModal
+                    isOpen={showRatingModal}
+                    onClose={() => {
+                        setShowRatingModal(false);
+                        navigate('/my-trips');
+                    }}
+                    onSubmit={handleRatingSubmit}
+                    tripDetails={{
+                        driverName: trip.driver.user.fullName,
+                        driverPhoto: trip.driver.user.profilePhoto || undefined,
+                        amount: booking?.total_amount || 0,
+                        pickup: trip.pickupLocation,
+                        drop: trip.dropLocation,
+                    }}
+                    isDriver={false}
+                />
+            )}
+
+
 
         </div>
     );

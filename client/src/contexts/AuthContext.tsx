@@ -148,7 +148,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Setup abort controller for timeout
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2500); // 2.5s timeout to ensure fallback triggers fast
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout to ensure fallback triggers fast
 
         try {
           // Direct REST API call to avoid SDK timeouts

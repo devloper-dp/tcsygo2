@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
 import {
     Dialog,
     DialogContent,
@@ -7,107 +6,133 @@ import {
     DialogTitle,
     DialogDescription,
     DialogFooter,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Star } from 'lucide-react';
-import { queryClient } from '@/lib/queryClient';
-import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Star, ThumbsUp, Medal } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 interface RatingModalProps {
     isOpen: boolean;
     onClose: () => void;
-    tripId: string;
-    driverId: string;
-    driverName: string;
+    onSubmit: (rating: number, feedback: string, tags: string[]) => void;
+    tripDetails: {
+        driverName: string;
+        driverPhoto?: string;
+        amount: number;
+        pickup: string;
+        drop: string;
+    };
+    isDriver?: boolean; // If true, we are rating the passenger
 }
 
-export function RatingModal({ isOpen, onClose, tripId, driverId, driverName }: RatingModalProps) {
-    const { toast } = useToast();
-    const { user } = useAuth();
+export function RatingModal({ isOpen, onClose, onSubmit, tripDetails, isDriver = false }: RatingModalProps) {
     const [rating, setRating] = useState(0);
-    const [review, setReview] = useState('');
+    const [feedback, setFeedback] = useState('');
+    const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
-    const submitRatingMutation = useMutation({
-        mutationFn: async () => {
-            if (!user) throw new Error("Must be logged in");
+    const driverTags = ["Polite", "Safe Driving", "Clean Car", "Good Music", "Conversation"];
+    const passengerTags = ["Polite", "Punctual", "Respectful", "Tipped"];
 
-            const { error } = await supabase.from('ratings').insert({
-                trip_id: tripId,
-                from_user_id: user.id,
-                to_user_id: driverId,
-                rating,
-                review
-            });
+    const tags = isDriver ? passengerTags : driverTags;
 
-            if (error) throw error;
-            return true;
-        },
-        onSuccess: () => {
-            toast({
-                title: 'Rating submitted',
-                description: 'Thank you for your feedback!',
-            });
-            // queryClient.invalidateQueries({ queryKey: ['/api/ratings'] }); // No specific query to invalidate yet
-            onClose();
-        },
-        onError: (error: any) => {
-            toast({
-                title: 'Submission failed',
-                description: error.message || 'Please try again',
-                variant: 'destructive',
-            });
+    const toggleTag = (tag: string) => {
+        if (selectedTags.includes(tag)) {
+            setSelectedTags(selectedTags.filter(t => t !== tag));
+        } else {
+            setSelectedTags([...selectedTags, tag]);
         }
-    });
+    };
+
+    const handleRating = (value: number) => {
+        setRating(value);
+    };
+
+    const handleSubmit = () => {
+        onSubmit(rating, feedback, selectedTags);
+        onClose();
+    };
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                    <DialogTitle>Rate your trip with {driverName}</DialogTitle>
+                <DialogHeader className="text-center items-center">
+                    <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mb-2">
+                        <Medal className="w-8 h-8 text-success" />
+                    </div>
+                    <DialogTitle className="text-xl">
+                        {isDriver ? 'Rate Passenger' : 'How was your ride?'}
+                    </DialogTitle>
                     <DialogDescription>
-                        How was your experience? Your feedback helps us improve.
+                        Help us improve by rating your experience with {tripDetails.driverName}
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="flex flex-col items-center gap-4 py-4">
+                <div className="flex flex-col items-center gap-6 py-4">
+                    {/* User Info */}
+                    <div className="flex flex-col items-center gap-2">
+                        <Avatar className="w-20 h-20 border-4 border-background shadow-lg">
+                            <AvatarImage src={tripDetails.driverPhoto} />
+                            <AvatarFallback className="text-lg">{tripDetails.driverName.charAt(0)}</AvatarFallback>
+                        </Avatar>
+                        <div className="text-center">
+                            <p className="font-semibold text-lg">{tripDetails.driverName}</p>
+                            <p className="font-bold text-2xl text-primary">₹{tripDetails.amount}</p>
+                        </div>
+                    </div>
+
+                    {/* Stars */}
                     <div className="flex gap-2">
                         {[1, 2, 3, 4, 5].map((star) => (
                             <button
                                 key={star}
-                                onClick={() => setRating(star)}
-                                className="focus:outline-none transition-transform hover:scale-110"
+                                type="button"
+                                className={`transition-all hover:scale-110 focus:outline-none ${rating >= star ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'
+                                    }`}
+                                onClick={() => handleRating(star)}
                             >
-                                <Star
-                                    className={`w-8 h-8 ${star <= rating ? 'fill-warning text-warning' : 'text-muted-foreground'}`}
-                                />
+                                <Star className={`w-8 h-8 ${rating >= star ? 'fill-current' : ''}`} />
                             </button>
                         ))}
                     </div>
-                    {rating > 0 && (
-                        <span className="text-sm font-medium text-warning">
-                            {rating === 5 ? 'Excellent!' : rating >= 4 ? 'Good' : rating >= 3 ? 'Average' : 'Poor'}
-                        </span>
-                    )}
 
+                    {/* Tags */}
+                    <div className="flex flex-wrap justify-center gap-2">
+                        {tags.map((tag) => (
+                            <Button
+                                key={tag}
+                                variant={selectedTags.includes(tag) ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => toggleTag(tag)}
+                                className={`rounded-full transition-all ${selectedTags.includes(tag) ? 'bg-primary text-primary-foreground' : 'hover:border-primary/50'
+                                    }`}
+                            >
+                                {selectedTags.includes(tag) && <ThumbsUp className="w-3 h-3 mr-1" />}
+                                {tag}
+                            </Button>
+                        ))}
+                    </div>
+
+                    {/* Feedback */}
                     <Textarea
-                        placeholder="Write a review (optional)"
-                        value={review}
-                        onChange={(e) => setReview(e.target.value)}
+                        placeholder="Additional comments (optional)..."
+                        value={feedback}
+                        onChange={(e) => setFeedback(e.target.value)}
+                        className="w-full resize-none"
                         rows={3}
-                        className="w-full"
                     />
                 </div>
 
-                <DialogFooter>
-                    <Button variant="outline" onClick={onClose}>Cancel</Button>
+                <DialogFooter className="sm:justify-between gap-2">
+                    <Button variant="ghost" className="w-full sm:w-auto" onClick={onClose}>
+                        Skip
+                    </Button>
                     <Button
-                        onClick={() => submitRatingMutation.mutate()}
-                        disabled={rating === 0 || submitRatingMutation.isPending}
+                        className="w-full sm:w-auto"
+                        onClick={handleSubmit}
+                        disabled={rating === 0}
                     >
-                        {submitRatingMutation.isPending ? 'Submitting...' : 'Submit Rating'}
+                        Submit Feedback
                     </Button>
                 </DialogFooter>
             </DialogContent>

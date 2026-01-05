@@ -21,7 +21,13 @@ export const BookingStatus = {
   CONFIRMED: "confirmed",
   PAYMENT_PENDING: "payment_pending",
   REJECTED: "rejected",
-  CANCELLED: "cancelled"
+  CANCELLED: "cancelled",
+  PICKED_UP: "picked_up",
+  COMPLETED: "completed",
+  MATCHED: "matched",
+  ONGOING: "ongoing",
+  PAID: "paid",
+  UPCOMING: "upcoming"
 } as const;
 
 // Payment status enum
@@ -119,8 +125,13 @@ export interface Booking {
   totalAmount: string;
   status: string;
   pickupLocation?: string | null;
+  pickupLat?: string | null;
+  pickupLng?: string | null;
   dropLocation?: string | null;
+  dropLat?: string | null;
+  dropLng?: string | null;
   promoCodeId?: string | null;
+  paymentStatus?: string | null;
   preferences?: {
     acPreferred: boolean;
     musicAllowed: boolean;
@@ -348,6 +359,31 @@ export const insertPromoCodeSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
+export interface PaymentMethod {
+  id: string;
+  userId: string;
+  type: 'card' | 'upi' | 'wallet' | 'cash';
+  lastFour?: string | null;
+  cardBrand?: string | null;
+  upiId?: string | null;
+  walletType?: string | null;
+  provider?: string | null;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const insertPaymentMethodSchema = z.object({
+  userId: z.string(),
+  type: z.enum(['card', 'upi', 'wallet', 'cash']),
+  lastFour: z.string().optional().nullable(),
+  cardBrand: z.string().optional().nullable(),
+  upiId: z.string().optional().nullable(),
+  walletType: z.string().optional().nullable(),
+  provider: z.string().optional().nullable(),
+  isDefault: z.boolean().default(false),
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertDriver = z.infer<typeof insertDriverSchema>;
@@ -360,6 +396,7 @@ export type InsertLiveLocation = z.infer<typeof insertLiveLocationSchema>;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;
 export type InsertPromoCode = z.infer<typeof insertPromoCodeSchema>;
+export type InsertPaymentMethod = z.infer<typeof insertPaymentMethodSchema>;
 
 // Extended types for application logic
 export type TripWithDriver = Trip & {
@@ -460,6 +497,8 @@ export interface RideRequest {
   driverId?: string | null; // Set when accepted
   tripId?: string | null;   // Created trip ID after acceptance
   organization_only?: boolean;
+  scheduled_time?: string;
+  seats: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -480,6 +519,8 @@ export const insertRideRequestSchema = z.object({
   driverId: z.string().nullable().optional(),
   tripId: z.string().nullable().optional(),
   organization_only: z.boolean().default(false),
+  scheduled_time: z.string().optional().nullable(),
+  seats: z.number().min(1).default(1),
 });
 
 export type InsertRideRequest = z.infer<typeof insertRideRequestSchema>;

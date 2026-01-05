@@ -113,7 +113,7 @@ export function PromoCodeInput({
                     </div>
                 ) : (
                     <div className="space-y-2">
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 w-full">
                             <Input
                                 placeholder="Enter promo code"
                                 value={code}
@@ -126,12 +126,12 @@ export function PromoCodeInput({
                                         handleApply();
                                     }
                                 }}
-                                className={error ? 'border-destructive' : ''}
+                                className={`flex-1 min-w-0 ${error ? 'border-destructive' : ''}`}
                             />
                             <Button
                                 onClick={handleApply}
                                 disabled={isValidating || !code.trim()}
-                                className="whitespace-nowrap"
+                                className="whitespace-nowrap shrink-0"
                             >
                                 {isValidating ? (
                                     <Loader2 className="w-4 h-4 animate-spin" />

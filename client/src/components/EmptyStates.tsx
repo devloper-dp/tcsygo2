@@ -29,15 +29,33 @@ function EmptyState({ icon, title, description, actionLabel, onAction }: EmptySt
     );
 }
 
-export function NoTripsFound({ onAdjustFilters }: { onAdjustFilters?: () => void }) {
+export function NoTripsFound({ onAdjustFilters, onRequestRide }: { onAdjustFilters?: () => void, onRequestRide?: () => void }) {
     return (
-        <EmptyState
-            icon={<Search className="w-10 h-10" />}
-            title="No trips found"
-            description="We couldn't find any trips matching your search criteria. Try adjusting your filters or search for a different route."
-            actionLabel="Adjust Filters"
-            onAction={onAdjustFilters}
-        />
+        <Card className="p-12 text-center">
+            <div className="flex justify-center mb-6">
+                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center text-gray-400">
+                    <Search className="w-10 h-10" />
+                </div>
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No trips found</h3>
+            <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                We couldn't find any existing trips matching your search.
+                <br />
+                However, you can request a ride and we'll notify nearby drivers!
+            </p>
+            <div className="flex justify-center gap-4">
+                {onAdjustFilters && (
+                    <Button variant="outline" onClick={onAdjustFilters}>
+                        Adjust Filters
+                    </Button>
+                )}
+                {onRequestRide && (
+                    <Button onClick={onRequestRide} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                        Request a Ride
+                    </Button>
+                )}
+            </div>
+        </Card>
     );
 }
 

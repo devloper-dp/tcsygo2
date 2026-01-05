@@ -67,7 +67,7 @@ export interface Booking {
     passenger_id: string;
     seats_booked: number;
     total_amount: number;
-    status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
+    status: 'pending' | 'confirmed' | 'payment_pending' | 'rejected' | 'cancelled' | 'picked_up' | 'completed' | 'matched' | 'ongoing' | 'paid' | 'upcoming';
     pickup_location?: string;
     drop_location?: string;
     created_at: string;

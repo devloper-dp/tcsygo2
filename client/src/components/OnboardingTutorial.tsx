@@ -5,6 +5,7 @@ import { Progress } from '@/components/ui/progress';
 import { CheckCircle2, ArrowRight, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { useToast } from '@/hooks/use-toast';
 
 interface OnboardingTutorialProps {
     open: boolean;
@@ -46,6 +47,7 @@ const ONBOARDING_STEPS = [
 
 export function OnboardingTutorial({ open, onComplete }: OnboardingTutorialProps) {
     const { user } = useAuth();
+    const { toast } = useToast();
     const [currentStep, setCurrentStep] = useState(0);
 
     const handleNext = () => {
@@ -61,17 +63,39 @@ export function OnboardingTutorial({ open, onComplete }: OnboardingTutorialProps
     };
 
     const handleComplete = async () => {
+        console.log('OnboardingTutorial: Marking onboarding as complete for user:', user?.id);
+
         // Mark onboarding as complete in user preferences
         if (user) {
             try {
-                await supabase
+                const { data, error } = await supabase
                     .from('users')
                     .update({ onboarding_completed: true })
-                    .eq('id', user.id);
+                    .eq('id', user.id)
+                    .select();
+
+                if (error) {
+                    console.error('OnboardingTutorial: Failed to update onboarding status:', error);
+                    toast({
+                        title: "Warning",
+                        description: "Could not save tutorial completion status. You may see this tutorial again.",
+                        variant: "destructive",
+                    });
+                } else {
+                    console.log('OnboardingTutorial: Successfully marked onboarding as complete:', data);
+                }
             } catch (error) {
-                console.error('Failed to update onboarding status:', error);
+                console.error('OnboardingTutorial: Exception while updating onboarding status:', error);
+                toast({
+                    title: "Warning",
+                    description: "Could not save tutorial completion status. You may see this tutorial again.",
+                    variant: "destructive",
+                });
             }
+        } else {
+            console.warn('OnboardingTutorial: No user found, cannot mark onboarding as complete');
         }
+
         onComplete();
     };
 

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Loader2, MapPin, User, Star, Phone, MessageCircle, X, Clock, Navigation } from 'lucide-react';
+import { Loader2, MapPin, User, Star, Phone, MessageCircle, X, Clock, Navigation, CheckCircle } from 'lucide-react';
 import { RideRequest, subscribeToRideRequest, cancelRideRequest, getRideRequest } from '@/lib/ride-matching-service';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistance, formatDuration } from '@/lib/navigation-service';
@@ -15,11 +15,10 @@ import { GeofenceAlerts } from '@/components/GeofenceAlerts';
 
 interface RideRequestStatusProps {
     requestId: string;
-    onComplete?: () => void;
     onCancel?: () => void;
 }
 
-export function RideRequestStatus({ requestId, onComplete, onCancel }: RideRequestStatusProps) {
+export function RideRequestStatus({ requestId, onCancel }: RideRequestStatusProps) {
     const [, navigate] = useLocation();
     const { toast } = useToast();
     const [request, setRequest] = useState<RideRequest | null>(null);
@@ -149,16 +148,16 @@ export function RideRequestStatus({ requestId, onComplete, onCancel }: RideReque
         }
 
         if (updatedRequest.status === 'accepted') {
-            toast({
-                title: '✅ Ride Confirmed',
-                description: 'Driver is on the way to pick you up',
-            });
-            if (onComplete) {
-                onComplete();
+            if (updatedRequest.trip_id) {
+                toast({
+                    title: '✅ Ride Confirmed',
+                    description: 'Driver is on the way to pick you up',
+                });
+                // Navigate to track trip page with correct trip ID
+                navigate(`/track/${updatedRequest.trip_id}`);
             } else {
-                // Navigate to track trip page - in a real app, this would be the trip ID
-                // For now, we'll navigate to my-trips
-                navigate(`/my-trips`);
+                // Wait for trip_id to be populated (race condition handling)
+                console.log('Ride accepted but waiting for Trip ID...');
             }
         }
 
@@ -237,21 +236,33 @@ export function RideRequestStatus({ requestId, onComplete, onCancel }: RideReque
         <>
             <Card className="overflow-hidden">
                 {/* Status Header */}
-                <div className={`p-4 ${request.status === 'searching' ? 'bg-primary/10' :
+                <div className={`p-6 transition-colors duration-500 ${request.status === 'searching' ? 'bg-primary/10' :
                     request.status === 'matched' ? 'bg-warning/10' :
                         request.status === 'accepted' ? 'bg-success/10' :
                             'bg-muted'
                     }`}>
                     <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            {request.status === 'searching' && (
-                                <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                            )}
+                        <div className="flex items-center gap-4">
+                            {request.status === 'searching' ? (
+                                <div className="relative">
+                                    <div className="absolute inset-0 bg-primary/30 rounded-full animate-ping opacity-75"></div>
+                                    <Loader2 className="w-8 h-8 animate-spin text-primary relative z-10" />
+                                </div>
+                            ) : request.status === 'accepted' ? (
+                                <div className="w-8 h-8 rounded-full bg-success text-white flex items-center justify-center animate-in zoom-in spin-in-90 duration-300">
+                                    <CheckCircle className="w-5 h-5" />
+                                </div>
+                            ) : request.status === 'matched' ? (
+                                <div className="w-8 h-8 rounded-full bg-warning text-white flex items-center justify-center animate-bounce">
+                                    <User className="w-5 h-5" />
+                                </div>
+                            ) : null}
+
                             <div>
-                                <h3 className="font-semibold">
-                                    {(request.status === 'searching' || request.status === 'pending') && (request.scheduled_time ? '📅 Ride Scheduled' : '🔍 Finding Drivers...')}
-                                    {request.status === 'matched' && 'Driver Found!'}
-                                    {request.status === 'accepted' && 'Ride Confirmed'}
+                                <h3 className="font-bold text-lg">
+                                    {(request.status === 'searching' || request.status === 'pending') && (request.scheduled_time ? '📅 Ride Scheduled' : 'Finding your Captain...')}
+                                    {request.status === 'matched' && 'Captain Found!'}
+                                    {request.status === 'accepted' && (request.trip_id ? 'Captain is on the way' : 'Ride Confirmed')}
                                     {request.status === 'cancelled' && 'Cancelled'}
                                     {request.status === 'expired' && 'Expired'}
                                 </h3>
@@ -259,10 +270,10 @@ export function RideRequestStatus({ requestId, onComplete, onCancel }: RideReque
                                     {(request.status === 'searching' || request.status === 'pending') && (
                                         request.scheduled_time
                                             ? `Scheduled for ${new Date(request.scheduled_time).toLocaleString()}`
-                                            : `Searching within ${searchRadius}km radius`
+                                            : `Searching nearby drivers in ${searchRadius}km...`
                                     )}
-                                    {request.status === 'matched' && 'Waiting for driver confirmation'}
-                                    {request.status === 'accepted' && 'Driver is on the way'}
+                                    {request.status === 'matched' && 'Waiting for them to accept...'}
+                                    {request.status === 'accepted' && (request.trip_id ? 'Get to the pickup point' : 'Allocating vehicle...')}
                                 </p>
                             </div>
                         </div>
@@ -272,7 +283,7 @@ export function RideRequestStatus({ requestId, onComplete, onCancel }: RideReque
                                     request.status === 'accepted' ? 'default' :
                                         request.status === 'pending' ? 'outline' :
                                             'outline'
-                        }>
+                        } className="hidden sm:flex">
                             {(request.status === 'pending' ? 'SCHEDULED' : request.status).toUpperCase()}
                         </Badge>
                     </div>
@@ -420,7 +431,7 @@ export function RideRequestStatus({ requestId, onComplete, onCancel }: RideReque
                     ) : request.status === 'accepted' ? (
                         <Button
                             className="w-full"
-                            onClick={() => navigate(`/track-trip/${requestId}`)}
+                            onClick={() => request.trip_id && navigate(`/track/${request.trip_id}`)}
                         >
                             Track Ride
                         </Button>

@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { createHmac } from "https://deno.land/std@0.160.0/node/crypto.ts"
+import { createHmac } from "node:crypto"
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -65,7 +65,8 @@ serve(async (req) => {
         const { error: bookingError } = await supabaseClient
             .from('bookings')
             .update({
-                status: 'confirmed',
+                status: 'completed',
+                payment_status: 'paid',
                 updated_at: new Date().toISOString(),
             })
             .eq('id', bookingId)

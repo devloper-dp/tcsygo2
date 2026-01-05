@@ -347,8 +347,10 @@ async function notifyEmergencyContacts(
                 sent_at: new Date().toISOString(),
             });
 
-        // In a real implementation, you would send SMS/email here
-        console.log(`Emergency notification sent to ${contact.name} at ${contact.phone}`);
+        // In a real implementation, you would send SMS/email here via an Edge Function or backend service.
+        // For this client-side demo, we simulate the network request and notification.
+        await new Promise(resolve => setTimeout(resolve, 500)); // Simulate API delay
+        console.log(`[SafetyService] SIMULATION: Emergency notification sent to ${contact.name} (${contact.relationship}) at ${contact.phone}`);
     }
 }
 
