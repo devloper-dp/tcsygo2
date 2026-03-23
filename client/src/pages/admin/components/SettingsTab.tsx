@@ -1,5 +1,6 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { z } from 'zod';
 import { supabase } from '@/lib/supabase';
 import { SystemSettings, insertSystemSettingsSchema } from '@shared/schema';
 import { Button } from '@/components/ui/button';
@@ -39,7 +40,7 @@ export function SettingsTab() {
 
     const currentSettings = settings?.[0]; // Assuming single row
 
-    const form = useForm({
+    const form = useForm<z.infer<typeof insertSystemSettingsSchema>>({
         resolver: zodResolver(insertSystemSettingsSchema),
         defaultValues: {
             platformFeePercentage: '10',

@@ -1,53 +1,72 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { View, Platform } from 'react-native';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
+import { useResponsive } from '@/hooks/useResponsive';
 
 export default function TabLayout() {
+  const { colors, theme } = useTheme();
+  const { t } = useTranslation();
+  const { hScale, vScale, spacing, fontSize } = useResponsive();
+  const isDark = theme === 'dark';
+
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#3b82f6',
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textSecondary,
         headerShown: false,
         tabBarStyle: {
           borderTopWidth: 1,
-          borderTopColor: '#e5e7eb',
-          paddingBottom: 5,
-          paddingTop: 5,
+          borderTopColor: colors.border,
+          elevation: 0,
+          height: Platform.OS === 'ios' ? vScale(84) : vScale(64),
+          paddingBottom: Platform.OS === 'ios' ? vScale(28) : vScale(10),
+          paddingTop: vScale(10),
+          backgroundColor: colors.surface,
+          shadowColor: 'transparent',
+        },
+        tabBarLabelStyle: {
+          fontSize: fontSize.xs,
+          fontWeight: '500',
+          marginTop: vScale(-4),
         },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="map-outline" size={size} color={color} />
+          title: t('tabs.home'),
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "map" : "map-outline"} size={hScale(24)} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="search"
         options={{
-          title: 'Search',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="search-outline" size={size} color={color} />
+          title: t('tabs.search'),
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "search" : "search-outline"} size={hScale(24)} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="trips"
         options={{
-          title: 'My Trips',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="car-outline" size={size} color={color} />
+          title: t('tabs.trips'),
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "car" : "car-outline"} size={hScale(24)} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" size={size} color={color} />
+          title: t('tabs.profile'),
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "person" : "person-outline"} size={hScale(24)} color={color} />
           ),
         }}
       />

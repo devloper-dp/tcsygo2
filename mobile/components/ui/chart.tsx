@@ -2,7 +2,9 @@ import React from 'react';
 import { View, Dimensions, StyleSheet } from 'react-native';
 import { LineChart, BarChart, PieChart } from 'react-native-chart-kit';
 import { Text } from './text';
-import { cn } from '@/lib/utils';
+import { cn } from "../../lib/utils";
+import { Feather } from "@expo/vector-icons";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -31,23 +33,6 @@ interface ChartProps {
     height?: number;
 }
 
-const chartConfig = {
-    backgroundColor: '#ffffff',
-    backgroundGradientFrom: '#ffffff',
-    backgroundGradientTo: '#ffffff',
-    decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
-    style: {
-        borderRadius: 16,
-    },
-    propsForDots: {
-        r: '6',
-        strokeWidth: '2',
-        stroke: '#3b82f6',
-    },
-};
-
 export function Chart({
     type,
     data,
@@ -56,6 +41,25 @@ export function Chart({
     width = screenWidth - 40,
     height = 220,
 }: ChartProps) {
+    const { isDark } = useTheme();
+
+    const chartConfig = {
+        backgroundColor: isDark ? '#111827' : '#ffffff',
+        backgroundGradientFrom: isDark ? '#111827' : '#ffffff',
+        backgroundGradientTo: isDark ? '#111827' : '#ffffff',
+        decimalPlaces: 0,
+        color: (opacity = 1) => isDark ? `rgba(96, 165, 250, ${opacity})` : `rgba(59, 130, 246, ${opacity})`,
+        labelColor: (opacity = 1) => isDark ? `rgba(156, 163, 175, ${opacity})` : `rgba(107, 114, 128, ${opacity})`,
+        style: {
+            borderRadius: 16,
+        },
+        propsForDots: {
+            r: '6',
+            strokeWidth: '2',
+            stroke: isDark ? '#60a5fa' : '#3b82f6',
+        },
+    };
+
     const renderChart = () => {
         switch (type) {
             case 'line':
@@ -101,8 +105,8 @@ export function Chart({
     };
 
     return (
-        <View className={cn('bg-white rounded-2xl p-4', className)} style={styles.container}>
-            {title && <Text style={styles.title}>{title}</Text>}
+        <View className={cn('bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-100 dark:border-slate-800', className)} style={styles.container}>
+            {title && <Text style={[styles.title, { color: isDark ? '#f9fafb' : '#1f2937' }]}>{title}</Text>}
             {renderChart()}
         </View>
     );
@@ -119,7 +123,6 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#1f2937',
         marginBottom: 12,
     },
     chart: {

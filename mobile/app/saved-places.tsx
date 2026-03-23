@@ -1,22 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import {
     View,
-    Text,
-    StyleSheet,
     ScrollView,
     TouchableOpacity,
     TextInput,
     Alert,
     ActivityIndicator,
+    StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Home, Briefcase, Heart, MapPin, Plus, Edit2, Trash2, X } from 'lucide-react-native';
+import { Home, Briefcase, Heart, MapPin, Plus, Edit2, Trash2, X, Navigation } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { MapService } from '@/services/MapService';
 import { logger } from '@/services/LoggerService';
-
+import { Text } from '@/components/ui/text';
+import { useTheme } from '@/contexts/ThemeContext';
+import { Card } from '@/components/ui/card';
+import { useResponsive } from '@/hooks/useResponsive';
+ 
 interface SavedPlace {
     id: string;
     user_id: string;
@@ -27,20 +30,22 @@ interface SavedPlace {
     longitude: number;
     created_at: string;
 }
-
+ 
 export default function SavedPlacesScreen() {
     const { user } = useAuth();
+    const { theme, isDark } = useTheme();
+    const { hScale, vScale, spacing, fontSize } = useResponsive();
     const [places, setPlaces] = useState<SavedPlace[]>([]);
     const [loading, setLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingPlace, setEditingPlace] = useState<SavedPlace | null>(null);
-
+ 
     useEffect(() => {
         if (user) {
             loadSavedPlaces();
         }
     }, [user]);
-
+ 
     const loadSavedPlaces = async () => {
         try {
             setLoading(true);
@@ -49,7 +54,7 @@ export default function SavedPlacesScreen() {
                 .select('*')
                 .eq('user_id', user?.id)
                 .order('created_at', { ascending: false });
-
+ 
             if (error) throw error;
             setPlaces(data || []);
         } catch (error: any) {
@@ -59,15 +64,15 @@ export default function SavedPlacesScreen() {
             setLoading(false);
         }
     };
-
+ 
     const handleDeletePlace = async (placeId: string) => {
         Alert.alert(
             'Delete Place',
-            'Are you sure you want to delete this saved place?',
+            'Remove this location from your secure terminal?',
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: 'Abort', style: 'cancel' },
                 {
-                    text: 'Delete',
+                    text: 'Confirm Deletion',
                     style: 'destructive',
                     onPress: async () => {
                         try {
@@ -75,10 +80,9 @@ export default function SavedPlacesScreen() {
                                 .from('saved_places')
                                 .delete()
                                 .eq('id', placeId);
-
+ 
                             if (error) throw error;
                             await loadSavedPlaces();
-                            Alert.alert('Success', 'Place deleted successfully');
                         } catch (error: any) {
                             logger.error('Error deleting place:', error);
                             Alert.alert('Error', 'Failed to delete place');
@@ -88,173 +92,159 @@ export default function SavedPlacesScreen() {
             ]
         );
     };
-
+ 
     const getPlaceIcon = (type: string) => {
+        const iconSize = hScale(22);
         switch (type) {
             case 'home':
-                return <Home size={24} color="#6366f1" />;
+                return <Home size={iconSize} color="#3b82f6" />;
             case 'work':
-                return <Briefcase size={24} color="#8b5cf6" />;
+                return <Briefcase size={iconSize} color="#818cf8" />;
             case 'favorite':
-                return <Heart size={24} color="#ef4444" fill="#ef4444" />;
+                return <Heart size={iconSize} color="#ef4444" fill="#ef4444" />;
             default:
-                return <MapPin size={24} color="#6b7280" />;
+                return <MapPin size={iconSize} color="#94a3b8" />;
         }
     };
-
+ 
     const getPlaceTypeLabel = (type: string): string => {
         switch (type) {
-            case 'home':
-                return 'Home';
-            case 'work':
-                return 'Work';
-            case 'favorite':
-                return 'Favorite';
-            default:
-                return 'Place';
+            case 'home': return 'RESIDENCE';
+            case 'work': return 'HQ / OFFICE';
+            case 'favorite': return 'PRIORITY';
+            default: return 'LOCATION';
         }
     };
-
+ 
     if (loading) {
         return (
-            <SafeAreaView style={styles.container}>
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#6366f1" />
-                    <Text style={styles.loadingText}>Loading saved places...</Text>
+            <SafeAreaView className="flex-1 bg-white dark:bg-slate-950">
+                <View style={{ padding: spacing.xxl }} className="flex-1 justify-center items-center">
+                    <ActivityIndicator size="large" color={isDark ? "#ffffff" : "#3b82f6"} />
+                    <Text style={{ fontSize: hScale(10), marginTop: vScale(24) }} className="font-black text-slate-400 dark:text-slate-600 uppercase tracking-[2px]">Syncing Saved Coordinates...</Text>
                 </View>
             </SafeAreaView>
         );
     }
-
+ 
     return (
-        <SafeAreaView style={styles.container}>
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <X size={24} color="#1f2937" />
+        <SafeAreaView className="flex-1 bg-slate-50 dark:bg-slate-950" edges={['top']}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+            
+            <View style={{ paddingHorizontal: spacing.xl, paddingVertical: vScale(20), borderBottomWidth: 1 }} className="flex-row items-center justify-between bg-white dark:bg-slate-950 border-slate-100 dark:border-slate-800 shadow-sm z-30">
+                <TouchableOpacity 
+                    onPress={() => router.back()} 
+                    style={{ width: hScale(48), height: hScale(48), borderRadius: hScale(24), borderWidth: 1 }}
+                    className="bg-slate-50 dark:bg-slate-900 items-center justify-center border border-slate-100 dark:border-slate-800"
+                >
+                    <X size={hScale(24)} color={isDark ? "#f8fafc" : "#1e293b"} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Saved Places</Text>
-                <View style={{ width: 40 }} />
+                <Text style={{ fontSize: fontSize.xl }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter">Terminals</Text>
+                <View style={{ width: hScale(48) }} />
             </View>
-
-            <ScrollView style={styles.content}>
+ 
+            <ScrollView 
+                className="flex-1" 
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ padding: spacing.xl, paddingBottom: vScale(100) }}
+            >
                 {/* Quick Add Buttons */}
-                <View style={styles.quickAddContainer}>
-                    <Text style={styles.sectionTitle}>Quick Add</Text>
-                    <View style={styles.quickAddButtons}>
-                        <TouchableOpacity
-                            style={styles.quickAddButton}
-                            onPress={() => {
-                                setEditingPlace({
-                                    id: '',
-                                    user_id: user?.id || '',
-                                    place_type: 'home',
-                                    label: 'Home',
-                                    address: '',
-                                    latitude: 0,
-                                    longitude: 0,
-                                    created_at: new Date().toISOString(),
-                                });
-                                setShowAddModal(true);
-                            }}
-                        >
-                            <Home size={20} color="#6366f1" />
-                            <Text style={styles.quickAddText}>Add Home</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.quickAddButton}
-                            onPress={() => {
-                                setEditingPlace({
-                                    id: '',
-                                    user_id: user?.id || '',
-                                    place_type: 'work',
-                                    label: 'Work',
-                                    address: '',
-                                    latitude: 0,
-                                    longitude: 0,
-                                    created_at: new Date().toISOString(),
-                                });
-                                setShowAddModal(true);
-                            }}
-                        >
-                            <Briefcase size={20} color="#8b5cf6" />
-                            <Text style={styles.quickAddText}>Add Work</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.quickAddButton}
-                            onPress={() => {
-                                setEditingPlace({
-                                    id: '',
-                                    user_id: user?.id || '',
-                                    place_type: 'favorite',
-                                    label: 'Favorite Place',
-                                    address: '',
-                                    latitude: 0,
-                                    longitude: 0,
-                                    created_at: new Date().toISOString(),
-                                });
-                                setShowAddModal(true);
-                            }}
-                        >
-                            <Heart size={20} color="#ef4444" />
-                            <Text style={styles.quickAddText}>Add Favorite</Text>
-                        </TouchableOpacity>
+                <View style={{ marginBottom: vScale(40) }}>
+                    <Text style={{ fontSize: hScale(10), marginBottom: vScale(24), paddingHorizontal: spacing.xs }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-[2px]">Rapid Access Assignment</Text>
+                    <View style={{ flexDirection: 'row', gap: spacing.lg }}>
+                        {[
+                            { type: 'home', icon: Home, color: '#3b82f6', label: 'ADD HOME' },
+                            { type: 'work', icon: Briefcase, color: '#818cf8', label: 'ADD WORK' },
+                            { type: 'favorite', icon: Heart, color: '#ef4444', label: 'ADD FAV' }
+                        ].map((item: any) => (
+                            <TouchableOpacity
+                                key={item.type}
+                                style={{ padding: spacing.xl, borderRadius: hScale(24), borderWidth: 1 }}
+                                className="flex-1 items-center justify-center bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm active:bg-slate-50 dark:active:bg-slate-800"
+                                onPress={() => {
+                                    setEditingPlace({
+                                        id: '',
+                                        user_id: user?.id || '',
+                                        place_type: item.type,
+                                        label: item.type.charAt(0).toUpperCase() + item.type.slice(1),
+                                        address: '',
+                                        latitude: 0,
+                                        longitude: 0,
+                                        created_at: new Date().toISOString(),
+                                    });
+                                    setShowAddModal(true);
+                                }}
+                            >
+                                <View 
+                                    style={{ width: hScale(48), height: hScale(48), borderRadius: hScale(12), marginBottom: vScale(12), backgroundColor: isDark ? `${item.color}20` : `${item.color}10` }}
+                                    className="items-center justify-center"
+                                >
+                                    <item.icon size={hScale(20)} color={item.color} fill={item.type === 'favorite' ? item.color : 'transparent'} />
+                                </View>
+                                <Text style={{ fontSize: hScale(9) }} className="font-black text-slate-500 dark:text-slate-400 text-center tracking-widest uppercase">{item.label}</Text>
+                            </TouchableOpacity>
+                        ))}
                     </View>
                 </View>
-
+ 
                 {/* Saved Places List */}
-                <View style={styles.placesContainer}>
-                    <Text style={styles.sectionTitle}>Your Places</Text>
+                <View>
+                    <Text style={{ fontSize: hScale(10), marginBottom: vScale(24), paddingHorizontal: spacing.xs }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-[2px]">Secure Map Index</Text>
                     {places.length === 0 ? (
-                        <View style={styles.emptyState}>
-                            <MapPin size={48} color="#d1d5db" />
-                            <Text style={styles.emptyText}>No saved places yet</Text>
-                            <Text style={styles.emptySubtext}>
-                                Add your frequently visited places for quick access
+                        <View style={{ paddingVertical: vScale(80) }} className="items-center justify-center opacity-30">
+                            <Navigation size={hScale(64)} color={isDark ? "#334155" : "#cbd5e1"} strokeWidth={1} />
+                            <Text style={{ fontSize: fontSize.xl, marginTop: vScale(32) }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter">Terminal Empty</Text>
+                            <Text style={{ fontSize: hScale(10), marginTop: vScale(12), lineHeight: vScale(16), paddingHorizontal: spacing.xxl }} className="font-medium text-slate-500 dark:text-slate-500 text-center tracking-widest uppercase">
+                                Assign frequently used coordinates for optimized navigation.
                             </Text>
                         </View>
                     ) : (
                         places.map((place) => (
-                            <View key={place.id} style={styles.placeCard}>
-                                <View style={styles.placeIcon}>{getPlaceIcon(place.place_type)}</View>
-                                <View style={styles.placeInfo}>
-                                    <Text style={styles.placeLabel}>{place.label}</Text>
-                                    <Text style={styles.placeAddress} numberOfLines={2}>
+                            <Card key={place.id} style={{ padding: spacing.xl, borderRadius: hScale(32), marginBottom: vScale(16), borderWidth: 1 }} className="flex-row items-center bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm">
+                                <View style={{ width: hScale(56), height: hScale(56), borderRadius: hScale(16), marginRight: spacing.xl }} className="bg-slate-50 dark:bg-slate-800 items-center justify-center shadow-inner">
+                                    {getPlaceIcon(place.place_type)}
+                                </View>
+                                <View className="flex-1">
+                                    <Text style={{ fontSize: fontSize.base, marginBottom: vScale(4) }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter">{place.label}</Text>
+                                    <Text style={{ fontSize: hScale(10), marginBottom: vScale(8), lineHeight: vScale(16) }} className="font-medium text-slate-500 dark:text-slate-500 uppercase tracking-tight" numberOfLines={2}>
                                         {place.address}
                                     </Text>
-                                    <Text style={styles.placeType}>
-                                        {getPlaceTypeLabel(place.place_type)}
-                                    </Text>
+                                    <View style={{ paddingHorizontal: spacing.sm, paddingVertical: vScale(2), borderRadius: hScale(6) }} className="self-start bg-slate-100 dark:bg-slate-800">
+                                        <Text style={{ fontSize: hScale(8) }} className="text-slate-400 dark:text-slate-500 uppercase font-black tracking-widest">
+                                            {getPlaceTypeLabel(place.place_type)}
+                                        </Text>
+                                    </View>
                                 </View>
-                                <View style={styles.placeActions}>
+                                <View style={{ flexDirection: 'row', gap: spacing.md, marginLeft: spacing.xl }}>
                                     <TouchableOpacity
-                                        style={styles.actionButton}
+                                        style={{ width: hScale(40), height: hScale(40), borderRadius: hScale(12), borderWidth: 1 }}
+                                        className="bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 items-center justify-center active:bg-slate-100"
                                         onPress={() => {
                                             setEditingPlace(place);
                                             setShowAddModal(true);
                                         }}
                                     >
-                                        <Edit2 size={18} color="#6366f1" />
+                                        <Edit2 size={hScale(16)} color={isDark ? "#475569" : "#64748b"} />
                                     </TouchableOpacity>
                                     <TouchableOpacity
-                                        style={styles.actionButton}
+                                        style={{ width: hScale(40), height: hScale(40), borderRadius: hScale(12), borderWidth: 1 }}
+                                        className="bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-900/30 items-center justify-center"
                                         onPress={() => handleDeletePlace(place.id)}
                                     >
-                                        <Trash2 size={18} color="#ef4444" />
+                                        <Trash2 size={hScale(16)} color="#ef4444" />
                                     </TouchableOpacity>
                                 </View>
-                            </View>
+                            </Card>
                         ))
                     )}
                 </View>
             </ScrollView>
-
+ 
             {/* Add/Edit Modal */}
             {showAddModal && editingPlace && (
                 <AddPlaceModal
                     place={editingPlace}
+                    isDark={isDark}
                     onClose={() => {
                         setShowAddModal(false);
                         setEditingPlace(null);
@@ -264,18 +254,22 @@ export default function SavedPlacesScreen() {
                         setEditingPlace(null);
                         await loadSavedPlaces();
                     }}
+                    useResponsiveHook={useResponsive}
                 />
             )}
         </SafeAreaView>
     );
 }
-
+ 
 // Add Place Modal Component
 const AddPlaceModal: React.FC<{
     place: SavedPlace;
+    isDark: boolean;
     onClose: () => void;
     onSave: () => void;
-}> = ({ place, onClose, onSave }) => {
+    useResponsiveHook: typeof useResponsive;
+}> = ({ place, isDark, onClose, onSave, useResponsiveHook }) => {
+    const { hScale, vScale, spacing, fontSize } = useResponsiveHook();
     const [label, setLabel] = useState(place.label);
     const [address, setAddress] = useState(place.address);
     const [suggestions, setSuggestions] = useState<any[]>([]);
@@ -283,7 +277,7 @@ const AddPlaceModal: React.FC<{
         place.id ? { lat: place.latitude, lng: place.longitude } : null
     );
     const [loading, setLoading] = useState(false);
-
+ 
     const handleAddressChange = async (text: string) => {
         setAddress(text);
         if (text.length > 2) {
@@ -293,7 +287,7 @@ const AddPlaceModal: React.FC<{
             setSuggestions([]);
         }
     };
-
+ 
     const handleSelectSuggestion = async (suggestion: any) => {
         setAddress(suggestion.description);
         setSuggestions([]);
@@ -310,28 +304,25 @@ const AddPlaceModal: React.FC<{
             setLoading(false);
         }
     };
-
+ 
     const handleSave = async () => {
         if (!label.trim() || !address.trim()) {
-            Alert.alert('Error', 'Please enter both label and address');
+            Alert.alert('Error', 'Please enter both identification and coordinates');
             return;
         }
-
+ 
         try {
             setLoading(true);
-
             let coordinates = selectedCoords;
-
-            // If coordinates not set via selection, try geocoding
             if (!coordinates) {
                 coordinates = await MapService.geocode(address);
             }
-
+ 
             if (!coordinates) {
-                Alert.alert('Error', 'Could not find the address. Please try again.');
+                Alert.alert('Error', 'Terminal unreachable. Please verify address.');
                 return;
             }
-
+ 
             const placeData = {
                 user_id: place.user_id,
                 place_type: place.place_type,
@@ -340,78 +331,77 @@ const AddPlaceModal: React.FC<{
                 latitude: coordinates.lat,
                 longitude: coordinates.lng,
             };
-
+ 
             if (place.id) {
-                // Update existing place
                 const { error } = await supabase
                     .from('saved_places')
                     .update(placeData)
                     .eq('id', place.id);
-
                 if (error) throw error;
             } else {
-                // Create new place
                 const { error } = await supabase.from('saved_places').insert(placeData);
-
                 if (error) throw error;
             }
-
-            Alert.alert('Success', 'Place saved successfully');
+ 
             onSave();
         } catch (error: any) {
             logger.error('Error saving place:', error);
-            Alert.alert('Error', 'Failed to save place');
+            Alert.alert('Error', 'Execution failed. Failed to save coordinates.');
         } finally {
             setLoading(false);
         }
     };
-
+ 
     return (
-        <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>
-                        {place.id ? 'Edit Place' : 'Add Place'}
+        <View style={{ padding: spacing.xl }} className="absolute inset-0 bg-slate-900/40 dark:bg-black/80 justify-center items-center z-50">
+            <View style={{ borderRadius: hScale(32), borderWidth: 1 }} className="w-full bg-white dark:bg-slate-900 overflow-hidden border-slate-100 dark:border-slate-800 shadow-2xl">
+                <View style={{ paddingHorizontal: spacing.xxl, paddingVertical: vScale(24), borderBottomWidth: 1 }} className="flex-row items-center justify-between border-slate-50 dark:border-slate-800/50">
+                    <Text style={{ fontSize: fontSize.xl }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter">
+                        {place.id ? 'Edit Assignment' : 'New Assignment'}
                     </Text>
-                    <TouchableOpacity onPress={onClose}>
-                        <X size={24} color="#6b7280" />
+                    <TouchableOpacity onPress={onClose} style={{ width: hScale(40), height: hScale(40), borderRadius: hScale(20) }} className="items-center justify-center bg-slate-50 dark:bg-slate-800">
+                        <X size={hScale(20)} color={isDark ? "#475569" : "#64748b"} />
                     </TouchableOpacity>
                 </View>
-
-                <View style={styles.modalBody}>
-                    <Text style={styles.inputLabel}>Label</Text>
+ 
+                <View style={{ padding: spacing.xxl }}>
+                    <Text style={{ fontSize: hScale(10), marginBottom: vScale(12), marginLeft: spacing.xs }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Terminal ID</Text>
                     <TextInput
-                        style={styles.input}
+                        style={{ paddingHorizontal: spacing.xl, paddingVertical: vScale(16), borderRadius: hScale(16), fontSize: fontSize.base, marginBottom: vScale(24), borderWidth: 1 }}
+                        className="bg-slate-50 dark:bg-slate-950 border-slate-100 dark:border-slate-800 text-slate-900 dark:text-white uppercase tracking-tight shadow-inner"
                         value={label}
                         onChangeText={setLabel}
-                        placeholder="e.g., Home, Office, Gym"
-                        placeholderTextColor="#9ca3af"
+                        placeholder="e.g. MISSION HQ"
+                        placeholderTextColor={isDark ? "#334155" : "#94a3b8"}
                     />
-
-                    <Text style={styles.inputLabel}>Address</Text>
-                    <View style={styles.addressInputContainer}>
+ 
+                    <Text style={{ fontSize: hScale(10), marginBottom: vScale(12), marginLeft: spacing.xs }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Coordinates</Text>
+                    <View className="relative z-10">
                         <TextInput
-                            style={[styles.input, styles.textArea, suggestions.length > 0 && styles.inputWithSuggestions]}
+                            style={{ paddingHorizontal: spacing.xl, paddingVertical: vScale(16), borderRadius: hScale(16), fontSize: fontSize.base, height: vScale(96), borderWidth: 1 }}
+                            className={`bg-slate-50 dark:bg-slate-950 border-slate-100 dark:border-slate-800 text-slate-900 dark:text-white shadow-inner ${suggestions.length > 0 ? 'rounded-b-none' : ''}`}
                             value={address}
                             onChangeText={handleAddressChange}
-                            placeholder="Search for address"
-                            placeholderTextColor="#9ca3af"
+                            placeholder="Search terminal grid..."
+                            placeholderTextColor={isDark ? "#334155" : "#94a3b8"}
                             multiline
                             numberOfLines={3}
+                            textAlignVertical="top"
                         />
                         {suggestions.length > 0 && (
-                            <View style={styles.suggestionsContainer}>
-                                <ScrollView keyboardShouldPersistTaps="handled" style={styles.suggestionsList}>
+                            <View style={{ top: vScale(96), borderRadius: hScale(16), maxHeight: vScale(192), borderTopWidth: 0, borderWidth: 1 }} className="absolute left-0 right-0 bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 rounded-t-none z-50 shadow-xl overflow-hidden">
+                                <ScrollView keyboardShouldPersistTaps="handled" className="flex-1">
                                     {suggestions.map((item, index) => (
                                         <TouchableOpacity
                                             key={index}
-                                            style={styles.suggestionItem}
+                                            style={{ paddingHorizontal: spacing.xl, paddingVertical: vScale(16), borderBottomWidth: 1 }}
+                                            className="flex-row items-center border-slate-50 dark:border-slate-800/50 active:bg-slate-50 dark:active:bg-slate-800"
                                             onPress={() => handleSelectSuggestion(item)}
                                         >
-                                            <MapPin size={16} color="#6b7280" style={styles.suggestionIcon} />
-                                            <View>
-                                                <Text style={styles.suggestionMainText}>{item.mainText}</Text>
-                                                <Text style={styles.suggestionSecondaryText}>{item.secondaryText}</Text>
+                                            <MapPin size={hScale(16)} color="#3b82f6" style={{ marginRight: spacing.lg }} />
+                                            <View className="flex-1">
+                                                <Text style={{ fontSize: fontSize.sm }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter" numberOfLines={1}>{item.mainText}</Text>
+                                                <Text style={{ fontSize: hScale(10) }} className="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-tight" numberOfLines={1}>{item.secondaryText}</Text>
                                             </View>
                                         </TouchableOpacity>
                                     ))}
@@ -420,20 +410,25 @@ const AddPlaceModal: React.FC<{
                         )}
                     </View>
                 </View>
-
-                <View style={styles.modalFooter}>
-                    <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-                        <Text style={styles.cancelButtonText}>Cancel</Text>
+ 
+                <View style={{ flexDirection: 'row', gap: spacing.lg, padding: spacing.xxl, borderTopWidth: 1 }} className="bg-slate-50 dark:bg-slate-950/20 border-slate-50 dark:border-slate-800">
+                    <TouchableOpacity 
+                        style={{ paddingVertical: vScale(20), borderRadius: hScale(16), borderWidth: 1 }}
+                        className="flex-1 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 items-center" 
+                        onPress={onClose}
+                    >
+                        <Text style={{ fontSize: fontSize.xs }} className="font-black text-slate-500 dark:text-slate-500 uppercase tracking-widest">Abort</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                        style={[styles.saveButton, (loading || (!selectedCoords && address.length < 5)) && styles.saveButtonDisabled]}
+                        style={{ paddingVertical: vScale(20), borderRadius: hScale(16) }}
+                        className={`flex-1 bg-slate-900 dark:bg-white items-center shadow-lg ${(loading || (!selectedCoords && address.length < 5)) ? 'opacity-30' : ''}`}
                         onPress={handleSave}
                         disabled={loading || (!selectedCoords && address.length < 5)}
                     >
                         {loading ? (
-                            <ActivityIndicator size="small" color="#fff" />
+                            <ActivityIndicator size="small" color={isDark ? "#000" : "#fff"} />
                         ) : (
-                            <Text style={styles.saveButtonText}>Save</Text>
+                            <Text style={{ fontSize: fontSize.xs }} className="text-xs font-black text-white dark:text-slate-900 uppercase tracking-widest">Initiate</Text>
                         )}
                     </TouchableOpacity>
                 </View>
@@ -441,279 +436,3 @@ const AddPlaceModal: React.FC<{
         </View>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#fff',
-    },
-    loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    loadingText: {
-        marginTop: 12,
-        fontSize: 14,
-        color: '#6b7280',
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#e5e7eb',
-    },
-    backButton: {
-        width: 40,
-        height: 40,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#1f2937',
-    },
-    content: {
-        flex: 1,
-    },
-    quickAddContainer: {
-        padding: 16,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#1f2937',
-        marginBottom: 12,
-    },
-    quickAddButtons: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    quickAddButton: {
-        flex: 1,
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 16,
-        backgroundColor: '#f9fafb',
-        borderRadius: 12,
-        borderWidth: 2,
-        borderColor: '#e5e7eb',
-        gap: 8,
-    },
-    quickAddText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: '#4b5563',
-    },
-    placesContainer: {
-        padding: 16,
-        paddingTop: 0,
-    },
-    emptyState: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 48,
-    },
-    emptyText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#6b7280',
-        marginTop: 16,
-    },
-    emptySubtext: {
-        fontSize: 14,
-        color: '#9ca3af',
-        marginTop: 8,
-        textAlign: 'center',
-        paddingHorizontal: 32,
-    },
-    placeCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
-        backgroundColor: '#f9fafb',
-        borderRadius: 12,
-        marginBottom: 12,
-    },
-    placeIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: '#fff',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 12,
-    },
-    placeInfo: {
-        flex: 1,
-    },
-    placeLabel: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#1f2937',
-        marginBottom: 4,
-    },
-    placeAddress: {
-        fontSize: 13,
-        color: '#6b7280',
-        marginBottom: 4,
-    },
-    placeType: {
-        fontSize: 11,
-        color: '#9ca3af',
-        textTransform: 'uppercase',
-        fontWeight: '600',
-    },
-    placeActions: {
-        flexDirection: 'row',
-        gap: 8,
-    },
-    actionButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: '#fff',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    modalOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 16,
-    },
-    modalContent: {
-        width: '100%',
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        overflow: 'hidden',
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#e5e7eb',
-    },
-    modalTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#1f2937',
-    },
-    modalBody: {
-        padding: 16,
-    },
-    inputLabel: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#4b5563',
-        marginBottom: 8,
-    },
-    input: {
-        borderWidth: 1,
-        borderColor: '#d1d5db',
-        borderRadius: 8,
-        padding: 12,
-        fontSize: 14,
-        color: '#1f2937',
-        marginBottom: 16,
-    },
-    textArea: {
-        height: 80,
-        textAlignVertical: 'top',
-    },
-    modalFooter: {
-        flexDirection: 'row',
-        gap: 12,
-        padding: 16,
-        borderTopWidth: 1,
-        borderTopColor: '#e5e7eb',
-    },
-    cancelButton: {
-        flex: 1,
-        padding: 14,
-        borderRadius: 8,
-        borderWidth: 2,
-        borderColor: '#e5e7eb',
-        alignItems: 'center',
-    },
-    cancelButtonText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#6b7280',
-    },
-    saveButton: {
-        flex: 1,
-        padding: 14,
-        borderRadius: 8,
-        backgroundColor: '#6366f1',
-        alignItems: 'center',
-    },
-    saveButtonDisabled: {
-        backgroundColor: '#9ca3af',
-    },
-    saveButtonText: {
-        fontSize: 15,
-        fontWeight: '700',
-        color: '#fff',
-    },
-    addressInputContainer: {
-        position: 'relative',
-        zIndex: 10,
-    },
-    inputWithSuggestions: {
-        borderBottomLeftRadius: 0,
-        borderBottomRightRadius: 0,
-    },
-    suggestionsContainer: {
-        position: 'absolute',
-        top: 80, // Height of textArea
-        left: 0,
-        right: 0,
-        backgroundColor: '#fff',
-        borderWidth: 1,
-        borderColor: '#d1d5db',
-        borderTopWidth: 0,
-        borderBottomLeftRadius: 8,
-        borderBottomRightRadius: 8,
-        maxHeight: 200,
-        zIndex: 1000,
-        elevation: 5,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-    },
-    suggestionsList: {
-        flex: 1,
-    },
-    suggestionItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
-    },
-    suggestionIcon: {
-        marginRight: 10,
-    },
-    suggestionMainText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#1f2937',
-    },
-    suggestionSecondaryText: {
-        fontSize: 12,
-        color: '#6b7280',
-    },
-});

@@ -41,13 +41,19 @@
     },
     "plugins": [
       "expo-location",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "enableAutoRegistration": false
+        }
+      ],
       [
         "expo-router",
         {
           "root": "./app"
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true

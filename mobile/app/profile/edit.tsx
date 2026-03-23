@@ -1,34 +1,41 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Image, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
-
+import { Text } from '@/components/ui/text';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { useTranslation } from 'react-i18next';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useResponsive } from '@/hooks/useResponsive';
+ 
 export default function EditProfileScreen() {
     const router = useRouter();
     const { user, updateProfile } = useAuth();
-
+    const { t } = useTranslation();
+    const { theme, isDark } = useTheme();
+    const { hScale, vScale, spacing, fontSize } = useResponsive();
+ 
     const [fullName, setFullName] = useState(user?.fullName || '');
     const [phone, setPhone] = useState(user?.phone || '');
-    const [bio, setBio] = useState(''); // Bio might not be in the initial User interface but handled in Supabase
+    const [bio, setBio] = useState('');
     const [loading, setLoading] = useState(false);
-
+ 
     useEffect(() => {
         if (user) {
             setFullName(user.fullName || '');
             setPhone(user.phone || '');
-            // Fetch extra fields if necessary, or assume they come from AuthContext
         }
     }, [user]);
-
+ 
     const handleSave = async () => {
         if (!fullName.trim()) {
-            Alert.alert('Error', 'Full Name is required');
+            Alert.alert(t('common.error'), t('profile.name_required'));
             return;
         }
-
+ 
         try {
             setLoading(true);
             await updateProfile({
@@ -36,8 +43,8 @@ export default function EditProfileScreen() {
                 phone,
                 bio,
             });
-
-            Alert.alert('Success', 'Profile updated successfully', [
+ 
+            Alert.alert(t('common.success'), t('profile.save_success'), [
                 { text: 'OK', onPress: () => router.back() }
             ]);
         } catch (error: any) {
@@ -46,167 +53,94 @@ export default function EditProfileScreen() {
             setLoading(false);
         }
     };
-
+ 
     return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color="#1f2937" />
+        <SafeAreaView className="flex-1 bg-white dark:bg-slate-950">
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+            
+            {/* Header */}
+            <View style={{ paddingHorizontal: spacing.xl, paddingVertical: vScale(16), borderBottomWidth: 1 }} className="flex-row items-center justify-between border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-sm z-10">
+                <TouchableOpacity 
+                    onPress={() => router.back()} 
+                    style={{ width: hScale(40), height: hScale(40) }}
+                    className="rounded-full bg-slate-50 dark:bg-slate-900 items-center justify-center active:bg-slate-100 dark:active:bg-slate-800"
+                >
+                    <Ionicons name="arrow-back" size={hScale(24)} color={isDark ? "#f8fafc" : "#1e293b"} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Edit Profile</Text>
-                <View style={{ width: 40 }} />
+                <Text style={{ fontSize: fontSize.xl }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter">{t('profile.edit_profile')}</Text>
+                <View style={{ width: hScale(40) }} />
             </View>
-
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-                <View style={styles.avatarContainer}>
-                    <View style={styles.avatar}>
-                        <Text style={styles.avatarText}>{fullName?.charAt(0) || 'U'}</Text>
-                        <TouchableOpacity style={styles.cameraIcon}>
-                            <Ionicons name="camera" size={20} color="white" />
+ 
+            <ScrollView 
+                contentContainerStyle={{ padding: spacing.xl, paddingBottom: vScale(100) }}
+                showsVerticalScrollIndicator={false}
+            >
+                {/* Avatar Section */}
+                <View style={{ marginBottom: vScale(40) }} className="items-center">
+                    <View style={{ width: hScale(112), height: hScale(112), borderWidth: 4 }} className="rounded-full bg-indigo-500 dark:bg-indigo-600 justify-center items-center shadow-xl shadow-indigo-500/20 border-white dark:border-slate-800 relative overflow-hidden">
+                        {user?.profilePhoto ? (
+                            <Image source={{ uri: user.profilePhoto }} className="w-full h-full" resizeMode="cover" />
+                        ) : (
+                            <Text style={{ fontSize: hScale(48) }} className="text-white font-black uppercase tracking-tighter">{fullName?.charAt(0) || 'U'}</Text>
+                        )}
+ 
+                        <TouchableOpacity style={{ width: hScale(40), height: hScale(40), borderWidth: 3 }} className="absolute bottom-0 right-0 bg-slate-900 dark:bg-slate-700 rounded-full justify-center items-center border-white dark:border-slate-800 shadow-md">
+                            <Ionicons name="camera" size={hScale(18)} color="white" />
                         </TouchableOpacity>
                     </View>
+                    <Text style={{ fontSize: hScale(10), marginTop: vScale(16) }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Change Profile Picture</Text>
                 </View>
-
-                <View style={styles.form}>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Full Name</Text>
-                        <TextInput
-                            style={styles.input}
+ 
+                <View style={{ gap: spacing.lg }}>
+                    <View style={{ gap: spacing.xs }}>
+                        <Text style={{ fontSize: hScale(10), marginLeft: spacing.xs }} className="font-black text-slate-500 dark:text-slate-500 uppercase tracking-widest">{t('profile.full_name')}</Text>
+                        <Input
                             value={fullName}
                             onChangeText={setFullName}
-                            placeholder="Enter your full name"
+                            placeholder={t('profile.enter_name')}
+                            style={{ height: vScale(56), borderRadius: hScale(20), paddingHorizontal: spacing.xl }}
+                            className="font-bold text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm"
+                            placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                         />
                     </View>
-
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Email (Cannot be changed)</Text>
-                        <TextInput
-                            style={[styles.input, styles.disabledInput]}
+ 
+                    <View style={{ gap: spacing.xs }}>
+                        <Text style={{ fontSize: hScale(10), marginLeft: spacing.xs }} className="font-black text-slate-500 dark:text-slate-500 uppercase tracking-widest">{t('profile.email_readonly')}</Text>
+                        <Input
                             value={user?.email}
                             editable={false}
+                            style={{ height: vScale(56), borderRadius: hScale(20), paddingHorizontal: spacing.xl, borderWidth: 1 }}
+                            className="font-bold text-slate-400 dark:text-slate-600 bg-slate-50/50 dark:bg-slate-900/50 border-slate-100 dark:border-slate-800/50"
                         />
                     </View>
-
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Phone Number</Text>
-                        <TextInput
-                            style={styles.input}
+ 
+                    <View style={{ gap: spacing.xs }}>
+                        <Text style={{ fontSize: hScale(10), marginLeft: spacing.xs }} className="font-black text-slate-500 dark:text-slate-500 uppercase tracking-widest">{t('profile.phone_number')}</Text>
+                        <Input
                             value={phone}
                             onChangeText={setPhone}
-                            placeholder="+91 98765 43210"
+                            placeholder={t('profile.enter_phone')}
                             keyboardType="phone-pad"
+                            style={{ height: vScale(56), borderRadius: hScale(20), paddingHorizontal: spacing.xl }}
+                            className="font-bold text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm"
+                            placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                         />
                     </View>
-
-                    <TouchableOpacity
-                        style={[styles.saveButton, loading && styles.disabledButton]}
+ 
+                    <Button
+                        style={{ marginTop: vScale(32), height: vScale(64), borderRadius: hScale(24) }}
+                        className="bg-slate-900 dark:bg-white shadow-xl shadow-slate-900/10 dark:shadow-none"
                         onPress={handleSave}
                         disabled={loading}
                     >
                         {loading ? (
-                            <ActivityIndicator color="white" />
+                            <ActivityIndicator color={isDark ? "#0f172a" : "#fff"} />
                         ) : (
-                            <Text style={styles.saveButtonText}>Save Changes</Text>
+                            <Text style={{ fontSize: fontSize.base }} className="text-white dark:text-slate-900 font-black uppercase tracking-widest">{t('save')}</Text>
                         )}
-                    </TouchableOpacity>
+                    </Button>
                 </View>
             </ScrollView>
         </SafeAreaView>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#fff',
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
-    },
-    backButton: {
-        padding: 4,
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    scrollContent: {
-        padding: 20,
-    },
-    avatarContainer: {
-        alignItems: 'center',
-        marginBottom: 30,
-    },
-    avatar: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        backgroundColor: '#3b82f6',
-        justifyContent: 'center',
-        alignItems: 'center',
-        position: 'relative',
-    },
-    avatarText: {
-        color: 'white',
-        fontSize: 40,
-        fontWeight: 'bold',
-    },
-    cameraIcon: {
-        position: 'absolute',
-        bottom: 0,
-        right: 0,
-        backgroundColor: '#1f2937',
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 3,
-        borderColor: 'white',
-    },
-    form: {
-        gap: 20,
-    },
-    inputGroup: {
-        gap: 8,
-    },
-    label: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#4b5563',
-    },
-    input: {
-        borderWidth: 1,
-        borderColor: '#d1d5db',
-        borderRadius: 8,
-        padding: 12,
-        fontSize: 16,
-        color: '#1f2937',
-    },
-    disabledInput: {
-        backgroundColor: '#f3f4f6',
-        color: '#9ca3af',
-    },
-    saveButton: {
-        backgroundColor: '#3b82f6',
-        padding: 16,
-        borderRadius: 8,
-        alignItems: 'center',
-        marginTop: 10,
-    },
-    disabledButton: {
-        opacity: 0.7,
-    },
-    saveButtonText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-});

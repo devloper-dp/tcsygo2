@@ -17,7 +17,7 @@ type ToastProps = {
 type ToastActionElement = React.ReactElement;
 
 const TOAST_LIMIT = 1;
-const TOAST_REMOVE_DELAY = 1000000;
+const TOAST_REMOVE_DELAY = 2500;
 
 type ToasterToast = ToastProps & {
     id: string
@@ -105,13 +105,32 @@ function useToast() {
                     id,
                     open: true,
                     onOpenChange: (open: boolean) => {
-                        if (!open) dispatch({ type: "DISMISS_TOAST", toastId: id });
+                        if (!open) {
+                            dispatch({ type: "DISMISS_TOAST", toastId: id });
+                            setTimeout(() => {
+                                dispatch({ type: "REMOVE_TOAST", toastId: id });
+                            }, TOAST_REMOVE_DELAY);
+                        }
                     },
                 }
             });
+
+            // Auto-dismiss after delay
+            setTimeout(() => {
+                dispatch({ type: "DISMISS_TOAST", toastId: id });
+                setTimeout(() => {
+                    dispatch({ type: "REMOVE_TOAST", toastId: id });
+                }, 300); // Small delay for dismiss animation
+            }, TOAST_REMOVE_DELAY);
+
             return {
                 id,
-                dismiss: () => dispatch({ type: "DISMISS_TOAST", toastId: id }),
+                dismiss: () => {
+                    dispatch({ type: "DISMISS_TOAST", toastId: id });
+                    setTimeout(() => {
+                        dispatch({ type: "REMOVE_TOAST", toastId: id });
+                    }, 300);
+                },
                 update: (props: ToasterToast) => dispatch({ type: "UPDATE_TOAST", toast: { ...props, id } }),
             }
         },

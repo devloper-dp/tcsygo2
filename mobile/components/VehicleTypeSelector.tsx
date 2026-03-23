@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { Text } from '@/components/ui/text';
 import { Bike, Car, Zap, Clock, IndianRupee } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { RideService, FareEstimate } from '@/services/RideService';
-
+import { useTheme } from '@/contexts/ThemeContext';
+ 
 interface VehicleType {
     id: 'bike' | 'auto' | 'cab' | 'premium';
     name: string;
@@ -13,25 +15,27 @@ interface VehicleType {
     capacity: number;
     features: string[];
 }
-
+ 
 interface VehicleTypeSelectorProps {
     pickupCoords: { lat: number; lng: number };
     dropCoords: { lat: number; lng: number };
     onSelect: (vehicleType: string, price: number, eta: number) => void;
     selectedType?: string;
 }
-
+ 
 export const VehicleTypeSelector: React.FC<VehicleTypeSelectorProps> = ({
     pickupCoords,
     dropCoords,
     onSelect,
     selectedType: initialSelectedType,
 }) => {
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
     const [selectedType, setSelectedType] = useState<string>(initialSelectedType || 'bike');
     const [loading, setLoading] = useState(true);
     const [baseEstimate, setBaseEstimate] = useState<FareEstimate | null>(null);
     const [surgeActive, setSurgeActive] = useState(false);
-
+ 
     const vehicleTypes: VehicleType[] = [
         {
             id: 'bike',
@@ -70,11 +74,11 @@ export const VehicleTypeSelector: React.FC<VehicleTypeSelectorProps> = ({
             features: ['Luxury cars', 'Top-rated drivers', 'Premium service'],
         },
     ];
-
+ 
     useEffect(() => {
         loadFareEstimate();
     }, [pickupCoords, dropCoords]);
-
+ 
     const loadFareEstimate = async () => {
         setLoading(true);
         try {
@@ -87,26 +91,26 @@ export const VehicleTypeSelector: React.FC<VehicleTypeSelectorProps> = ({
             setLoading(false);
         }
     };
-
+ 
     const handleSelectVehicle = (vehicle: VehicleType) => {
         if (!baseEstimate) return;
-
+ 
         setSelectedType(vehicle.id);
         const price = Math.round(baseEstimate.estimatedPrice * vehicle.multiplier);
         const eta = Math.round(baseEstimate.durationMins + (vehicle.id === 'bike' ? 0 : vehicle.id === 'auto' ? 2 : 5));
-
+ 
         onSelect(vehicle.id, price, eta);
     };
-
+ 
     const calculatePrice = (multiplier: number): number => {
         if (!baseEstimate) return 0;
         return Math.round(baseEstimate.estimatedPrice * multiplier);
     };
-
+ 
     const calculateETA = (vehicleId: string): number => {
         if (!baseEstimate) return 0;
         const baseETA = baseEstimate.durationMins;
-
+ 
         switch (vehicleId) {
             case 'bike':
                 return baseETA;
@@ -119,155 +123,124 @@ export const VehicleTypeSelector: React.FC<VehicleTypeSelectorProps> = ({
                 return baseETA;
         }
     };
-
+ 
     if (loading) {
         return (
-            <View style={styles.loadingContainer}>
+            <View className="p-10 items-center justify-center gap-4">
                 <ActivityIndicator size="large" color="#3b82f6" />
-                <Text style={styles.loadingText}>Finding best options...</Text>
+                <Text className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Finding best options...</Text>
             </View>
         );
     }
-
+ 
     return (
-        <View style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.title}>Choose Your Ride</Text>
+        <View className="p-4">
+            <View className="flex-row items-center justify-between mb-6">
+                <Text className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Choose Your Ride</Text>
                 {surgeActive && (
-                    <View style={styles.surgeBadge}>
+                    <View className="flex-row items-center bg-rose-500 px-3 py-1.5 rounded-full gap-1.5 shadow-lg shadow-rose-500/20">
                         <Zap size={14} color="#fff" fill="#fff" />
-                        <Text style={styles.surgeText}>
+                        <Text className="text-[10px] font-black text-white uppercase tracking-widest">
                             {baseEstimate?.surgeMultiplier}x Surge
                         </Text>
                     </View>
                 )}
             </View>
-
+ 
             {baseEstimate && (
-                <View style={styles.tripInfo}>
-                    <View style={styles.tripInfoItem}>
-                        <Clock size={16} color="#6b7280" />
-                        <Text style={styles.tripInfoText}>
+                <View className="flex-row items-center bg-slate-50 dark:bg-slate-800/40 p-4 rounded-2xl mb-6 border border-slate-100 dark:border-slate-800/30">
+                    <View className="flex-row items-center gap-2">
+                        <View className="w-8 h-8 rounded-full bg-blue-500/10 items-center justify-center">
+                            <Ionicons name="navigate" size={16} color="#3b82f6" />
+                        </View>
+                        <Text className="text-sm font-black text-slate-700 dark:text-slate-300">
                             {baseEstimate.distanceKm} km
                         </Text>
                     </View>
-                    <View style={styles.tripInfoDivider} />
-                    <View style={styles.tripInfoItem}>
-                        <Clock size={16} color="#6b7280" />
-                        <Text style={styles.tripInfoText}>
+                    <View className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-6" />
+                    <View className="flex-row items-center gap-2">
+                        <View className="w-8 h-8 rounded-full bg-amber-500/10 items-center justify-center">
+                            <Clock size={16} color="#f59e0b" />
+                        </View>
+                        <Text className="text-sm font-black text-slate-700 dark:text-slate-300">
                             ~{baseEstimate.durationMins} mins
                         </Text>
                     </View>
                 </View>
             )}
-
-            <View style={styles.vehicleGrid}>
+ 
+            <View className="flex-row flex-wrap gap-3">
                 {vehicleTypes.map((vehicle) => {
                     const isSelected = selectedType === vehicle.id;
                     const price = calculatePrice(vehicle.multiplier);
                     const eta = calculateETA(vehicle.id);
-
+ 
                     return (
                         <TouchableOpacity
                             key={vehicle.id}
-                            style={[
-                                styles.vehicleCard,
-                                isSelected && styles.vehicleCardSelected,
-                            ]}
+                            className={`w-[48%] rounded-[28px] p-5 border-2 ${
+                                isSelected 
+                                    ? 'bg-blue-600 border-blue-600 shadow-xl shadow-blue-500/30' 
+                                    : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm'
+                            }`}
                             onPress={() => handleSelectVehicle(vehicle)}
-                            activeOpacity={0.7}
+                            activeOpacity={0.8}
                         >
-                            <View style={styles.vehicleHeader}>
-                                <View
-                                    style={[
-                                        styles.iconContainer,
-                                        isSelected && styles.iconContainerSelected,
-                                    ]}
-                                >
+                            <View className="flex-row justify-between items-start mb-4">
+                                <View className={`w-14 h-14 rounded-2xl items-center justify-center ${isSelected ? 'bg-white/20' : 'bg-slate-50 dark:bg-slate-800'}`}>
                                     <Ionicons
                                         name={vehicle.icon as any}
-                                        size={28}
-                                        color={isSelected ? '#fff' : '#374151'}
+                                        size={32}
+                                        color={isSelected ? '#fff' : (isDark ? '#e2e8f0' : '#1e293b')}
                                     />
                                 </View>
                                 {isSelected && (
-                                    <View style={styles.selectedBadge}>
+                                    <View className="bg-white dark:bg-slate-900 rounded-full p-0.5 shadow-sm">
                                         <Ionicons name="checkmark-circle" size={20} color="#10b981" />
                                     </View>
                                 )}
                             </View>
-
-                            <Text style={[styles.vehicleName, isSelected && styles.textSelected]}>
+ 
+                            <Text className={`text-lg font-black ${isSelected ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
                                 {vehicle.name}
                             </Text>
-                            <Text
-                                style={[
-                                    styles.vehicleDescription,
-                                    isSelected && styles.descriptionSelected,
-                                ]}
-                            >
+                            <Text className={`text-[10px] font-bold uppercase tracking-widest mb-4 ${isSelected ? 'text-blue-100/70' : 'text-slate-400 dark:text-slate-500'}`}>
                                 {vehicle.description}
                             </Text>
-
-                            <View style={styles.capacityContainer}>
+ 
+                            <View className="flex-row items-center gap-1.5 mb-6">
                                 <Ionicons
                                     name="person"
-                                    size={14}
-                                    color={isSelected ? '#bfdbfe' : '#9ca3af'}
+                                    size={12}
+                                    color={isSelected ? '#bfdbfe' : '#94a3b8'}
                                 />
-                                <Text
-                                    style={[
-                                        styles.capacityText,
-                                        isSelected && styles.capacityTextSelected,
-                                    ]}
-                                >
+                                <Text className={`text-[10px] font-black uppercase ${isSelected ? 'text-blue-100' : 'text-slate-400 dark:text-slate-500'}`}>
                                     {vehicle.capacity} {vehicle.capacity === 1 ? 'seat' : 'seats'}
                                 </Text>
                             </View>
-
-                            <View style={styles.priceContainer}>
-                                <View style={styles.priceRow}>
-                                    <IndianRupee
-                                        size={18}
-                                        color={isSelected ? '#fff' : '#1f2937'}
-                                    />
-                                    <Text style={[styles.price, isSelected && styles.priceSelected]}>
+ 
+                            <View className="flex-row items-end justify-between border-t pt-4" style={{ borderTopColor: isSelected ? 'rgba(255,255,255,0.1)' : (isDark ? '#1e293b' : '#f1f5f9') }}>
+                                <View className="flex-row items-center">
+                                    <Text className={`text-base font-black ${isSelected ? 'text-white' : 'text-slate-900 dark:text-white'}`}>₹</Text>
+                                    <Text className={`text-2xl font-black ${isSelected ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
                                         {price}
                                     </Text>
                                 </View>
-                                <Text
-                                    style={[
-                                        styles.etaText,
-                                        isSelected && styles.etaTextSelected,
-                                    ]}
-                                >
+                                <Text className={`text-[10px] font-black uppercase ${isSelected ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400'}`}>
                                     {eta} min
                                 </Text>
                             </View>
-
-                            {isSelected && (
-                                <View style={styles.featuresContainer}>
-                                    {vehicle.features.slice(0, 2).map((feature, index) => (
-                                        <View key={index} style={styles.featureItem}>
-                                            <Ionicons
-                                                name="checkmark-circle"
-                                                size={12}
-                                                color="#10b981"
-                                            />
-                                            <Text style={styles.featureText}>{feature}</Text>
-                                        </View>
-                                    ))}
-                                </View>
-                            )}
                         </TouchableOpacity>
                     );
                 })}
             </View>
-
+ 
             {surgeActive && baseEstimate && (
-                <View style={styles.surgeInfo}>
-                    <Zap size={16} color="#ef4444" fill="#ef4444" />
-                    <Text style={styles.surgeInfoText}>
+                <View className="flex-row items-center bg-rose-50 dark:bg-rose-950/20 p-5 rounded-2xl mt-8 gap-4 border border-rose-100 dark:border-rose-900/20">
+                    <View className="w-10 h-10 rounded-full bg-rose-500/10 items-center justify-center">
+                        <Zap size={20} color="#ef4444" fill="#ef4444" />
+                    </View>
+                    <Text className="flex-1 text-xs font-medium text-rose-700 dark:text-rose-400 leading-4">
                         High demand in your area. Prices are {baseEstimate.surgeMultiplier}x higher than usual.
                     </Text>
                 </View>
@@ -275,197 +248,5 @@ export const VehicleTypeSelector: React.FC<VehicleTypeSelectorProps> = ({
         </View>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        padding: 16,
-    },
-    loadingContainer: {
-        padding: 40,
-        alignItems: 'center',
-        gap: 12,
-    },
-    loadingText: {
-        fontSize: 14,
-        color: '#6b7280',
-        fontWeight: '500',
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 12,
-    },
-    title: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: '#1f2937',
-    },
-    surgeBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#ef4444',
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-        gap: 4,
-    },
-    surgeText: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: '#fff',
-    },
-    tripInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#f9fafb',
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 16,
-    },
-    tripInfoItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-    },
-    tripInfoText: {
-        fontSize: 14,
-        color: '#4b5563',
-        fontWeight: '500',
-    },
-    tripInfoDivider: {
-        width: 1,
-        height: 16,
-        backgroundColor: '#d1d5db',
-        marginHorizontal: 16,
-    },
-    vehicleGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 12,
-    },
-    vehicleCard: {
-        width: '48%',
-        backgroundColor: '#f9fafb',
-        borderRadius: 12,
-        padding: 14,
-        borderWidth: 2,
-        borderColor: '#e5e7eb',
-    },
-    vehicleCardSelected: {
-        backgroundColor: '#3b82f6',
-        borderColor: '#3b82f6',
-    },
-    vehicleHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 8,
-    },
-    iconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: '#e5e7eb',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    iconContainerSelected: {
-        backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    },
-    selectedBadge: {
-        position: 'absolute',
-        top: -4,
-        right: -4,
-        backgroundColor: '#fff',
-        borderRadius: 10,
-    },
-    vehicleName: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#1f2937',
-        marginBottom: 2,
-    },
-    textSelected: {
-        color: '#fff',
-    },
-    vehicleDescription: {
-        fontSize: 12,
-        color: '#6b7280',
-        marginBottom: 8,
-    },
-    descriptionSelected: {
-        color: '#bfdbfe',
-    },
-    capacityContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        marginBottom: 8,
-    },
-    capacityText: {
-        fontSize: 11,
-        color: '#9ca3af',
-    },
-    capacityTextSelected: {
-        color: '#bfdbfe',
-    },
-    priceContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginTop: 4,
-    },
-    priceRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    price: {
-        fontSize: 22,
-        fontWeight: '800',
-        color: '#1f2937',
-    },
-    priceSelected: {
-        color: '#fff',
-    },
-    etaText: {
-        fontSize: 12,
-        color: '#6b7280',
-        fontWeight: '600',
-    },
-    etaTextSelected: {
-        color: '#bfdbfe',
-    },
-    featuresContainer: {
-        marginTop: 12,
-        paddingTop: 12,
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(255, 255, 255, 0.2)',
-        gap: 6,
-    },
-    featureItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-    },
-    featureText: {
-        fontSize: 11,
-        color: '#fff',
-        fontWeight: '500',
-    },
-    surgeInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#fef2f2',
-        padding: 12,
-        borderRadius: 8,
-        marginTop: 16,
-        gap: 8,
-    },
-    surgeInfoText: {
-        flex: 1,
-        fontSize: 12,
-        color: '#991b1b',
-        fontWeight: '500',
-    },
-});
+ 
+const styles = StyleSheet.create({});

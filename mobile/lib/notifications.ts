@@ -1,20 +1,52 @@
 import { useState, useEffect, useRef } from 'react';
-import * as Notifications from 'expo-notifications';
+import type * as NotificationsType from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 import Constants from 'expo-constants';
 
-// Configure notification behavior
-Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-        shouldShowBanner: true,
-        shouldShowList: true,
-    }),
-});
+/**
+ * Check if the app is running in Expo Go
+ * Expo Go on Android (SDK 53+) doesn't support push notifications
+ */
+export function isExpoGo(): boolean {
+    return Constants.executionEnvironment === 'storeClient';
+}
+
+/**
+ * Check if push notifications are supported in the current environment
+ */
+export function isPushNotificationSupported(): boolean {
+    // Expo Go on Android doesn't support push notifications in SDK 53+
+    if (Platform.OS === 'android' && isExpoGo()) {
+        return false;
+    }
+    return true;
+}
+
+// Lazy import of Notifications to prevent Expo Go crashes
+let Notifications: typeof NotificationsType | null = null;
+
+// Initialize notifications module only if supported
+if (isPushNotificationSupported()) {
+    try {
+        Notifications = require('expo-notifications');
+
+        // Configure notification behavior
+        Notifications!.setNotificationHandler({
+            handleNotification: async () => ({
+                shouldShowAlert: true,
+                shouldPlaySound: true,
+                shouldSetBadge: true,
+                shouldShowBanner: true,
+                shouldShowList: true,
+            }),
+        });
+    } catch (error) {
+        console.warn('Failed to initialize expo-notifications:', error);
+        Notifications = null;
+    }
+}
 
 export interface NotificationData {
     type: 'booking' | 'trip' | 'message' | 'payment' | 'emergency';
@@ -37,41 +69,52 @@ export interface SupabaseNotification {
 
 /**
  * Register for push notifications and get the Expo push token
+ * Returns undefined if running in Expo Go or if permissions are denied
  */
 export async function registerForPushNotificationsAsync(): Promise<string | undefined> {
+    // Check if push notifications are supported
+    if (!isPushNotificationSupported() || !Notifications) {
+        console.log('ℹ️ Push notifications are not supported in Expo Go. Use a development build for full notification support.');
+        return undefined;
+    }
+
     let token: string | undefined;
 
     if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('default', {
-            name: 'default',
-            importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 250, 250, 250],
-            lightColor: '#3b82f6',
-        });
+        try {
+            await Notifications.setNotificationChannelAsync('default', {
+                name: 'default',
+                importance: Notifications.AndroidImportance.MAX,
+                vibrationPattern: [0, 250, 250, 250],
+                lightColor: '#3b82f6',
+            });
 
-        // Create additional channels for different notification types
-        await Notifications.setNotificationChannelAsync('messages', {
-            name: 'Messages',
-            importance: Notifications.AndroidImportance.HIGH,
-            vibrationPattern: [0, 250, 250, 250],
-            lightColor: '#3b82f6',
-            sound: 'default',
-        });
+            // Create additional channels for different notification types
+            await Notifications.setNotificationChannelAsync('messages', {
+                name: 'Messages',
+                importance: Notifications.AndroidImportance.HIGH,
+                vibrationPattern: [0, 250, 250, 250],
+                lightColor: '#3b82f6',
+                sound: 'default',
+            });
 
-        await Notifications.setNotificationChannelAsync('trips', {
-            name: 'Trips',
-            importance: Notifications.AndroidImportance.HIGH,
-            vibrationPattern: [0, 250, 250, 250],
-            lightColor: '#22c55e',
-        });
+            await Notifications.setNotificationChannelAsync('trips', {
+                name: 'Trips',
+                importance: Notifications.AndroidImportance.HIGH,
+                vibrationPattern: [0, 250, 250, 250],
+                lightColor: '#22c55e',
+            });
 
-        await Notifications.setNotificationChannelAsync('emergency', {
-            name: 'Emergency Alerts',
-            importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 500, 250, 500],
-            lightColor: '#ef4444',
-            sound: 'default',
-        });
+            await Notifications.setNotificationChannelAsync('emergency', {
+                name: 'Emergency Alerts',
+                importance: Notifications.AndroidImportance.MAX,
+                vibrationPattern: [0, 500, 250, 500],
+                lightColor: '#ef4444',
+                sound: 'default',
+            });
+        } catch (error) {
+            console.warn('Failed to set notification channels:', error);
+        }
     }
 
     if (Device.isDevice) {
@@ -91,7 +134,7 @@ export async function registerForPushNotificationsAsync(): Promise<string | unde
         try {
             const projectId = Constants.expoConfig?.extra?.eas?.projectId;
             token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-            console.log('Push token:', token);
+            console.log('✅ Push token registered:', token);
         } catch (error) {
             console.error('Error getting push token:', error);
         }
@@ -121,25 +164,36 @@ export async function savePushToken(userId: string, token: string) {
 
 /**
  * Send a local notification (for testing or immediate feedback)
+ * Only works in development builds, not in Expo Go
  */
 export async function sendLocalNotification(
     title: string,
     body: string,
     data?: NotificationData
 ) {
-    await Notifications.scheduleNotificationAsync({
-        content: {
-            title,
-            body,
-            data,
-            sound: true,
-        },
-        trigger: null, // Show immediately
-    });
+    if (!isPushNotificationSupported() || !Notifications) {
+        console.log('ℹ️ Local notifications are not supported in Expo Go');
+        return;
+    }
+
+    try {
+        await Notifications.scheduleNotificationAsync({
+            content: {
+                title,
+                body,
+                data,
+                sound: true,
+            },
+            trigger: null, // Show immediately
+        });
+    } catch (error) {
+        console.error('Error sending local notification:', error);
+    }
 }
 
 /**
  * Schedule a notification for a specific time
+ * Only works in development builds, not in Expo Go
  */
 export async function scheduleNotification(
     title: string,
@@ -147,24 +201,34 @@ export async function scheduleNotification(
     trigger: Date,
     data?: NotificationData
 ) {
-    await Notifications.scheduleNotificationAsync({
-        content: {
-            title,
-            body,
-            data,
-            sound: true,
-        },
-        trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.DATE,
-            date: trigger,
-        } as Notifications.DateTriggerInput,
-    });
+    if (!isPushNotificationSupported() || !Notifications) {
+        console.log('ℹ️ Scheduled notifications are not supported in Expo Go');
+        return;
+    }
+
+    try {
+        await Notifications.scheduleNotificationAsync({
+            content: {
+                title,
+                body,
+                data,
+                sound: true,
+            },
+            trigger: {
+                type: Notifications!.SchedulableTriggerInputTypes.DATE,
+                date: trigger,
+            } as NotificationsType.DateTriggerInput,
+        });
+    } catch (error) {
+        console.error('Error scheduling notification:', error);
+    }
 }
 
 /**
  * Cancel all scheduled notifications
  */
 export async function cancelAllNotifications() {
+    if (!Notifications) return;
     await Notifications.cancelAllScheduledNotificationsAsync();
 }
 
@@ -172,36 +236,65 @@ export async function cancelAllNotifications() {
  * Cancel a specific notification by ID
  */
 export async function cancelNotification(notificationId: string) {
+    if (!Notifications) return;
     await Notifications.cancelScheduledNotificationAsync(notificationId);
 }
 
 /**
  * Get badge count
+ * Returns 0 in Expo Go
  */
 export async function getBadgeCount(): Promise<number> {
-    return await Notifications.getBadgeCountAsync();
+    if (!isPushNotificationSupported() || !Notifications) {
+        return 0;
+    }
+    try {
+        return await Notifications.getBadgeCountAsync();
+    } catch (error) {
+        console.error('Error getting badge count:', error);
+        return 0;
+    }
 }
 
 /**
  * Set badge count
+ * No-op in Expo Go
  */
 export async function setBadgeCount(count: number) {
-    await Notifications.setBadgeCountAsync(count);
+    if (!isPushNotificationSupported() || !Notifications) {
+        return;
+    }
+    try {
+        await Notifications.setBadgeCountAsync(count);
+    } catch (error) {
+        console.error('Error setting badge count:', error);
+    }
 }
 
 /**
  * Clear badge
+ * No-op in Expo Go
  */
 export async function clearBadge() {
-    await Notifications.setBadgeCountAsync(0);
+    if (!isPushNotificationSupported() || !Notifications) {
+        return;
+    }
+    try {
+        await Notifications.setBadgeCountAsync(0);
+    } catch (error) {
+        console.error('Error clearing badge:', error);
+    }
 }
 
 /**
  * Add notification received listener
  */
 export function addNotificationReceivedListener(
-    listener: (notification: Notifications.Notification) => void
+    listener: (notification: NotificationsType.Notification) => void
 ) {
+    if (!Notifications) {
+        return { remove: () => { } };
+    }
     return Notifications.addNotificationReceivedListener(listener);
 }
 
@@ -209,8 +302,11 @@ export function addNotificationReceivedListener(
  * Add notification response listener (when user taps notification)
  */
 export function addNotificationResponseListener(
-    listener: (response: Notifications.NotificationResponse) => void
+    listener: (response: NotificationsType.NotificationResponse) => void
 ) {
+    if (!Notifications) {
+        return { remove: () => { } };
+    }
     return Notifications.addNotificationResponseReceivedListener(listener);
 }
 
@@ -218,9 +314,9 @@ export function addNotificationResponseListener(
  * Remove notification listener
  */
 export function removeNotificationSubscription(
-    subscription: Notifications.Subscription
+    subscription: NotificationsType.Subscription | { remove: () => void }
 ) {
-    subscription.remove();
+    subscription?.remove();
 }
 
 /**
@@ -368,16 +464,20 @@ export async function markAllNotificationsAsRead(userId: string) {
  * Setup notification listeners with automatic cleanup
  */
 export function setupNotificationListeners(
-    onNotificationReceived?: (notification: Notifications.Notification) => void,
-    onNotificationResponse?: (response: Notifications.NotificationResponse) => void
+    onNotificationReceived?: (notification: NotificationsType.Notification) => void,
+    onNotificationResponse?: (response: NotificationsType.NotificationResponse) => void
 ) {
+    if (!Notifications) {
+        return () => { };
+    }
+
     // Notification received while app is foregrounded
-    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
+    const notificationListener = Notifications.addNotificationReceivedListener((notification: NotificationsType.Notification) => {
         onNotificationReceived?.(notification);
     });
 
     // User tapped on notification
-    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+    const responseListener = Notifications.addNotificationResponseReceivedListener((response: NotificationsType.NotificationResponse) => {
         onNotificationResponse?.(response);
     });
 
@@ -389,28 +489,47 @@ export function setupNotificationListeners(
 
 /**
  * Hook to manage push notifications
+ * Gracefully handles Expo Go environment
  */
 export function usePushNotifications(userId?: string) {
     const [expoPushToken, setExpoPushToken] = useState<string | undefined>();
-    const [notification, setNotification] = useState<Notifications.Notification | undefined>();
-    const notificationListener = useRef<Notifications.Subscription>();
-    const responseListener = useRef<Notifications.Subscription>();
+    const [notification, setNotification] = useState<NotificationsType.Notification | undefined>();
+    const [isSupported, setIsSupported] = useState(true);
+    const notificationListener = useRef<NotificationsType.Subscription | undefined>(undefined);
+    const responseListener = useRef<NotificationsType.Subscription | undefined>(undefined);
 
     useEffect(() => {
+        // Check if notifications are supported
+        const supported = isPushNotificationSupported() && !!Notifications;
+        setIsSupported(supported);
+
+        if (!supported) {
+            console.log('ℹ️ Running in Expo Go - push notifications disabled');
+            return;
+        }
+
+        // Register for push notifications
         registerForPushNotificationsAsync().then(token => {
             setExpoPushToken(token);
             if (token && userId) {
                 savePushToken(userId, token);
             }
+        }).catch(error => {
+            console.error('Error registering for push notifications:', error);
         });
 
-        notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-            setNotification(notification);
-        });
+        // Set up listeners
+        try {
+            notificationListener.current = Notifications!.addNotificationReceivedListener((notification: NotificationsType.Notification) => {
+                setNotification(notification);
+            });
 
-        responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-            console.log('Notification response:', response);
-        });
+            responseListener.current = Notifications!.addNotificationResponseReceivedListener((response: NotificationsType.NotificationResponse) => {
+                console.log('Notification response:', response);
+            });
+        } catch (error) {
+            console.error('Error setting up notification listeners:', error);
+        }
 
         return () => {
             notificationListener.current?.remove();
@@ -420,7 +539,8 @@ export function usePushNotifications(userId?: string) {
 
     return {
         expoPushToken,
-        notification
+        notification,
+        isSupported
     };
 }
 

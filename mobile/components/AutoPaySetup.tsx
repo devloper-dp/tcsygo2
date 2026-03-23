@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Switch, TouchableOpacity, Alert } from 'react-native';
+import { View, Switch, TouchableOpacity, Alert, StyleSheet } from 'react-native';
+import { Text } from '@/components/ui/text';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { Card } from '@/components/ui/card';
-import { useAuth } from '@/contexts/AuthContext'; // Assuming context exists or similar
-// import { useToast } from '@/hooks/use-toast'; // Mobile toast hook todo
-
+import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
+ 
 export function AutoPaySetup({ style }: { style?: any }) {
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
+ 
     const [enabled, setEnabled] = useState(false);
     const [limit, setLimit] = useState('500'); // Default limit
     const [loading, setLoading] = useState(false);
     const [userId, setUserId] = useState<string | null>(null);
-
+ 
     useEffect(() => {
         // Get user session
         supabase.auth.getSession().then(({ data: { session } }) => {
@@ -21,7 +25,7 @@ export function AutoPaySetup({ style }: { style?: any }) {
             }
         });
     }, []);
-
+ 
     const loadSettings = async (uid: string) => {
         try {
             const { data, error } = await supabase
@@ -29,7 +33,7 @@ export function AutoPaySetup({ style }: { style?: any }) {
                 .select('*')
                 .eq('user_id', uid)
                 .single();
-
+ 
             if (data && !error) {
                 setEnabled(data.is_enabled);
                 setLimit(data.daily_limit?.toString() || '500');
@@ -38,10 +42,10 @@ export function AutoPaySetup({ style }: { style?: any }) {
             console.error('Error loading auto-pay settings:', error);
         }
     };
-
+ 
     const toggleAutoPay = async (value: boolean) => {
         if (!userId) return;
-
+ 
         setEnabled(value);
         try {
             const { error } = await supabase
@@ -52,44 +56,47 @@ export function AutoPaySetup({ style }: { style?: any }) {
                     daily_limit: parseFloat(limit),
                     updated_at: new Date().toISOString()
                 });
-
+ 
             if (error) throw error;
         } catch (error: any) {
             Alert.alert('Error', 'Failed to update auto-pay settings');
             setEnabled(!value); // Revert on error
         }
     };
-
+ 
     return (
-        <Card style={[styles.container, style]}>
-            <View style={styles.header}>
-                <View style={styles.titleRow}>
-                    <View style={styles.iconBox}>
-                        <Ionicons name="flash-outline" size={24} color="#f59e0b" />
+        <Card className="p-5 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl shadow-sm" style={style}>
+            <View className="flex-row justify-between items-center">
+                <View className="flex-row items-center gap-3.5">
+                    <View className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-900/20 justify-center items-center shadow-sm shadow-amber-500/10">
+                        <Ionicons name="flash" size={24} color={isDark ? "#fbbf24" : "#f59e0b"} />
                     </View>
                     <View>
-                        <Text style={styles.title}>Auto Pay</Text>
-                        <Text style={styles.subtitle}>Pay automatically after ride ends</Text>
+                        <Text className="text-base font-bold text-slate-900 dark:text-white">Auto Pay</Text>
+                        <Text className="text-xs font-medium text-slate-500 dark:text-slate-400">Pay automatically after ride ends</Text>
                     </View>
                 </View>
                 <Switch
                     value={enabled}
                     onValueChange={toggleAutoPay}
-                    trackColor={{ false: '#d1d5db', true: '#fcd34d' }}
-                    thumbColor={enabled ? '#f59e0b' : '#f4f3f4'}
+                    trackColor={{ false: isDark ? '#1e293b' : '#e2e8f0', true: isDark ? '#fbbf24' : '#fcd34d' }}
+                    thumbColor={enabled ? (isDark ? '#d97706' : '#f59e0b') : (isDark ? '#475569' : '#f4f3f4')}
+                    ios_backgroundColor={isDark ? '#1e293b' : '#e2e8f0'}
                 />
             </View>
-
+ 
             {enabled && (
-                <View style={styles.settings}>
-                    <View style={styles.infoRow}>
-                        <Ionicons name="shield-checkmark-outline" size={18} color="#10b981" />
-                        <Text style={styles.infoText}>Secure & Encrypted</Text>
+                <View className="mt-5 pt-5 border-t border-slate-50 dark:border-slate-800">
+                    <View className="flex-row items-center gap-2.5 mb-2.5">
+                        <View className="w-5 h-5 rounded-full bg-emerald-50 dark:bg-emerald-900/20 justify-center items-center">
+                            <Ionicons name="shield-checkmark" size={12} color="#10b981" />
+                        </View>
+                        <Text className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Secure & Encrypted</Text>
                     </View>
-                    <Text style={styles.limitText}>
-                        Daily limit: ₹{limit}
+                    <Text className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                        Daily limit: <Text className="text-blue-600 dark:text-blue-400">₹{limit}</Text>
                     </Text>
-                    <Text style={styles.description}>
+                    <Text className="text-xs text-slate-500 dark:text-slate-500 leading-5 font-medium">
                         Payments below ₹{limit} will be deducted automatically from your wallet or default card.
                     </Text>
                 </View>
@@ -97,66 +104,5 @@ export function AutoPaySetup({ style }: { style?: any }) {
         </Card>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        padding: 16,
-        backgroundColor: 'white',
-        borderRadius: 12,
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    titleRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    iconBox: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: '#fef3c7',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    title: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    subtitle: {
-        fontSize: 12,
-        color: '#6b7280',
-    },
-    settings: {
-        marginTop: 16,
-        paddingTop: 16,
-        borderTopWidth: 1,
-        borderTopColor: '#f3f4f6',
-    },
-    infoRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 8,
-    },
-    infoText: {
-        fontSize: 14,
-        color: '#10b981',
-        fontWeight: '500',
-    },
-    limitText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#374151',
-        marginBottom: 4,
-    },
-    description: {
-        fontSize: 12,
-        color: '#9ca3af',
-        lineHeight: 18,
-    },
-});
+ 
+const styles = StyleSheet.create({});

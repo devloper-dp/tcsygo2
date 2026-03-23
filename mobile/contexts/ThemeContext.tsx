@@ -1,11 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useColorScheme } from 'react-native';
+import { useColorScheme as useRNColorScheme } from 'react-native';
+import { useColorScheme as useNWColorScheme } from 'nativewind';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type ThemeMode = 'light' | 'dark' | 'system';
 
 interface ThemeContextType {
     theme: 'light' | 'dark';
+    isDark: boolean;
     themeMode: ThemeMode;
     setThemeMode: (mode: ThemeMode) => void;
     colors: typeof lightColors;
@@ -44,7 +46,8 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 const THEME_STORAGE_KEY = '@tcsygo_theme_mode';
 
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const systemColorScheme = useColorScheme();
+    const systemColorScheme = useRNColorScheme();
+    const { colorScheme, setColorScheme } = useNWColorScheme();
     const [themeMode, setThemeModeState] = useState<ThemeMode>('system');
     const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
@@ -54,11 +57,14 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     useEffect(() => {
         // Update theme based on mode
+        let newTheme: 'light' | 'dark';
         if (themeMode === 'system') {
-            setTheme(systemColorScheme === 'dark' ? 'dark' : 'light');
+            newTheme = systemColorScheme === 'dark' ? 'dark' : 'light';
         } else {
-            setTheme(themeMode);
+            newTheme = themeMode;
         }
+        setTheme(newTheme);
+        setColorScheme(newTheme);
     }, [themeMode, systemColorScheme]);
 
     const loadThemePreference = async () => {
@@ -81,10 +87,11 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         }
     };
 
-    const colors = theme === 'dark' ? darkColors : lightColors;
+    const isDark = theme === 'dark';
+    const colors = isDark ? darkColors : lightColors;
 
     return (
-        <ThemeContext.Provider value={{ theme, themeMode, setThemeMode, colors }}>
+        <ThemeContext.Provider value={{ theme, isDark, themeMode, setThemeMode, colors }}>
             {children}
         </ThemeContext.Provider>
     );

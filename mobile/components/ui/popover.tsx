@@ -31,11 +31,12 @@ const Popover = ({ children, open, onOpenChange }: any) => {
 const PopoverTrigger = ({ asChild, children, onPress, open, onOpenChange, ...props }: any) => {
     // If asChild is true, we clone.
     if (asChild && React.isValidElement(children)) {
-        return React.cloneElement(children, {
+        const child = children as React.ReactElement<{ onPress?: (e: any) => void }>;
+        return React.cloneElement(child, {
             // @ts-ignore
-            onPress: (e) => {
+            onPress: (e: any) => {
                 onOpenChange(true);
-                children.props?.onPress?.(e);
+                child.props?.onPress?.(e);
             }
         });
     }
@@ -60,12 +61,12 @@ const PopoverContent = ({ className, children, align = "center", sideOffset = 4,
             <TouchableOpacity
                 activeOpacity={1}
                 onPress={() => onOpenChange(false)}
-                className="flex-1 justify-center items-center bg-black/20"
+                className="flex-1 justify-center items-center bg-black/40"
             >
                 <TouchableOpacity
                     activeOpacity={1}
                     className={cn(
-                        "z-50 w-72 rounded-md border bg-popover p-4 text-popover-foreground shadow-md outline-none bg-white",
+                        "z-50 w-[80%] rounded-[24px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-2xl outline-none",
                         className
                     )}
                     {...props}

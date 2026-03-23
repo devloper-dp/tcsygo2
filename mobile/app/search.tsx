@@ -1,4 +1,4 @@
-import { View, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { useState, useEffect } from 'react';
@@ -15,10 +15,15 @@ import { supabase } from '../lib/supabase';
 import { mapTrip } from '../lib/mapper';
 import { useAuth } from '@/contexts/AuthContext';
 import { Coordinates } from '../lib/maps';
+import { NoTripsFound } from '../components/EmptyStates';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useResponsive } from '@/hooks/useResponsive';
 
 export default function SearchScreen() {
     const router = useRouter();
     const params = useLocalSearchParams();
+    const { isDark } = useTheme();
+    const { spacing, fontSize, hScale, vScale } = useResponsive();
 
     const [pickup, setPickup] = useState(params.pickup as string || '');
     const [drop, setDrop] = useState(params.drop as string || '');
@@ -34,7 +39,7 @@ export default function SearchScreen() {
     );
     const [date, setDate] = useState(params.date as string || '');
     const [savedSearches, setSavedSearches] = useState<any[]>([]);
-    const { user } = useAuth(); // Need auth for saved searches
+    const { user } = useAuth();
 
     useEffect(() => {
         if (user) {
@@ -61,7 +66,6 @@ export default function SearchScreen() {
         if (!user || (!pickupLoc && !dropLoc)) return;
 
         try {
-            // Check if similar search exists recently
             const { data: existing } = await supabase
                 .from('saved_searches')
                 .select('id')
@@ -121,10 +125,9 @@ export default function SearchScreen() {
 
             return (data || []).map(mapTrip);
         },
-        enabled: true, // Always enable or check params
+        enabled: true,
     });
 
-    // Call saveSearch when search params change significantly (debounce needed in real app, basic implementation here)
     useEffect(() => {
         if (pickup && drop && trips && trips.length > 0) {
             const timer = setTimeout(() => {
@@ -136,45 +139,60 @@ export default function SearchScreen() {
 
 
     return (
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#f9fafb' }} edges={['top']}>
+        <SafeAreaView className="flex-1 bg-white dark:bg-slate-950" edges={['top']}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
             <Stack.Screen options={{ headerShown: false }} />
 
-            <View className="flex-row items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
-                <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
-                    <Ionicons name="arrow-back" size={24} color="#1f2937" />
+            <View 
+                style={{ paddingHorizontal: spacing.xl, paddingVertical: spacing.lg }}
+                className="flex-row items-center justify-between bg-white dark:bg-slate-950 border-b border-slate-100 dark:border-slate-800 shadow-sm z-30"
+            >
+                <TouchableOpacity 
+                    onPress={() => router.back()} 
+                    style={{ width: hScale(48), height: hScale(48) }}
+                    className="rounded-full bg-slate-50 dark:bg-slate-900 items-center justify-center border border-slate-100 dark:border-slate-800"
+                >
+                    <Ionicons name="arrow-back" size={hScale(24)} color={isDark ? "#f8fafc" : "#1e293b"} />
                 </TouchableOpacity>
-                <Text variant="h3" className="flex-1 text-center font-bold">Find a Ride</Text>
+                <Text style={{ fontSize: fontSize.xl }} className="flex-1 text-center font-black text-slate-900 dark:text-white uppercase tracking-tighter">Discovery</Text>
                 <TouchableOpacity
                     onPress={() => setShowMap(!showMap)}
-                    className="p-2 -mr-2 flex-row items-center gap-1"
+                    style={{ width: hScale(48), height: hScale(48), borderRadius: hScale(18) }}
+                    className="bg-slate-900 dark:bg-white items-center justify-center shadow-lg shadow-slate-900/10"
                 >
-                    <Ionicons name={showMap ? "list" : "map"} size={20} color="#3b82f6" />
-                    <Text className="text-primary font-medium">{showMap ? "List" : "Map"}</Text>
+                    <Ionicons name={showMap ? "list" : "map"} size={hScale(22)} color={isDark ? "#0f172a" : "#ffffff"} />
                 </TouchableOpacity>
             </View>
 
-            <View className="p-4 bg-white border-b border-gray-200 z-50">
+            <View 
+                style={{ paddingHorizontal: spacing.xl, paddingVertical: vScale(32) }}
+                className="bg-white dark:bg-slate-950 border-b border-slate-100 dark:border-slate-800/50 z-20 shadow-xl rounded-b-[40px]"
+            >
                 <LocationAutocomplete
-                    placeholder="Pickup location"
+                    placeholder="Source Terminal"
                     value={pickup}
                     onChange={(val, coords) => {
                         setPickup(val);
                         if (coords) setPickupCoords(coords);
                     }}
-                    className="mb-3"
+                    className="mb-4"
+                    showIcon={true}
+                    placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                 />
                 <LocationAutocomplete
-                    placeholder="Drop location"
+                    placeholder="Destination Terminal"
                     value={drop}
                     onChange={(val, coords) => {
                         setDrop(val);
                         if (coords) setDropCoords(coords);
                     }}
+                    showIcon={true}
+                    placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                 />
             </View>
 
             {showMap ? (
-                <View className="flex-1">
+                <View className="flex-1 overflow-hidden mt-[-20px] bg-slate-50 dark:bg-slate-950">
                     <Map
                         style={StyleSheet.absoluteFillObject}
                         initialRegion={{
@@ -201,44 +219,57 @@ export default function SearchScreen() {
                     </Map>
                 </View>
             ) : (
-                <ScrollView className="flex-1 p-4" contentContainerStyle={{ paddingBottom: 20 }}>
+                <ScrollView 
+                    className="flex-1" 
+                    contentContainerStyle={{ padding: spacing.xl, paddingBottom: vScale(100) }}
+                    showsVerticalScrollIndicator={false}
+                >
                     {!pickup && !drop && (
-                        <View className="mb-6">
-                            <Text className="text-lg font-bold mb-3">Recent Searches</Text>
+                        <View style={{ marginBottom: vScale(40) }}>
+                            <Text style={{ fontSize: hScale(10), marginBottom: vScale(24) }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-[2px] px-1">Tactical History</Text>
                             {savedSearches.length > 0 ? (
                                 savedSearches.map((search) => (
                                     <TouchableOpacity
                                         key={search.id}
-                                        className="flex-row items-center p-3 bg-white rounded-lg border border-gray-100 mb-2"
+                                        style={{ padding: spacing.xl, marginBottom: spacing.base }}
+                                        className="flex-row items-center bg-white dark:bg-slate-900 rounded-[28px] border border-slate-100 dark:border-slate-800 shadow-sm active:bg-slate-50 dark:active:bg-slate-800"
                                         onPress={() => {
                                             setPickup(search.pickup_location || '');
                                             setDrop(search.drop_location || '');
-                                            // Trigger search?
                                         }}
                                     >
-                                        <View className="bg-gray-100 p-2 rounded-full mr-3">
-                                            <Ionicons name="time-outline" size={20} color="#4b5563" />
+                                        <View style={{ width: hScale(48), height: hScale(48), marginRight: spacing.xl }} className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl items-center justify-center">
+                                            <Ionicons name="time" size={hScale(24)} color="#3b82f6" />
                                         </View>
-                                        <View className="flex-1">
-                                            <Text className="font-semibold text-gray-800" numberOfLines={1}>{search.pickup_location || 'Anywhere'}</Text>
-                                            <Text className="text-gray-500 text-xs" numberOfLines={1}>to {search.drop_location || 'Anywhere'}</Text>
+                                        <View className="flex-1 gap-1">
+                                            <Text style={{ fontSize: fontSize.base }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter" numberOfLines={1}>{search.pickup_location.split(',')[0] || 'ANYWHERE'}</Text>
+                                            <View className="flex-row items-center">
+                                                <Text style={{ fontSize: hScale(10), marginRight: spacing.sm }} className="text-slate-400 dark:text-slate-500 font-black uppercase tracking-widest">TO</Text>
+                                                <Text style={{ fontSize: fontSize.xs }} className="text-slate-600 dark:text-slate-400 font-bold flex-1" numberOfLines={1}>{search.drop_location.split(',')[0] || 'ANYWHERE'}</Text>
+                                            </View>
                                         </View>
-                                        <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+                                        <Ionicons name="chevron-forward" size={hScale(18)} color={isDark ? "#334155" : "#cbd5e1"} />
                                     </TouchableOpacity>
                                 ))
                             ) : (
-                                <Text className="text-gray-400 italic">No recent searches</Text>
+                                <View style={{ paddingVertical: vScale(48) }} className="items-center opacity-30">
+                                    <Ionicons name="hourglass-outline" size={hScale(48)} color={isDark ? "#334155" : "#cbd5e1"} />
+                                    <Text style={{ fontSize: hScale(10), marginTop: vScale(16) }} className="text-slate-400 dark:text-slate-500 font-black uppercase tracking-[2px]">No historical data Found</Text>
+                                </View>
                             )}
                         </View>
                     )}
 
                     {isLoading ? (
-                        <View className="flex-1 items-center justify-center py-10">
-                            <ActivityIndicator size="large" color="#3b82f6" />
+                        <View style={{ paddingVertical: vScale(80) }} className="flex-1 items-center justify-center">
+                            <ActivityIndicator size="large" color={isDark ? "#ffffff" : "#2563eb"} />
                         </View>
                     ) : trips && trips.length > 0 ? (
-                        <View className="gap-4">
-                            <Text className="text-lg font-semibold mb-2">{trips.length} trips found</Text>
+                        <View>
+                            <View style={{ marginBottom: vScale(32) }} className="flex-row justify-between items-baseline px-1">
+                                <Text style={{ fontSize: fontSize.xxl }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter">{trips.length} ASSETS FOUND</Text>
+                                <Text style={{ fontSize: hScale(10) }} className="font-black text-blue-600 dark:text-blue-500 uppercase tracking-widest">Optimized Results</Text>
+                            </View>
                             {trips.map((trip) => (
                                 <TripCard
                                     key={trip.id}
@@ -248,16 +279,10 @@ export default function SearchScreen() {
                             ))}
                         </View>
                     ) : (pickup || drop) ? (
-                        <Card className="p-8 items-center">
-                            <Ionicons name="search" size={64} color="#9ca3af" style={{ marginBottom: 16 }} />
-                            <Text variant="h3" className="text-center mb-2">No trips found</Text>
-                            <Text className="text-gray-500 text-center mb-6">
-                                Try adjusting your search criteria or check back later
-                            </Text>
-                            <Button onPress={() => router.push('/create-trip')} className="w-full">
-                                Offer a Ride Instead
-                            </Button>
-                        </Card>
+                        <NoTripsFound onSearch={() => {
+                            setPickup('');
+                            setDrop('');
+                        }} />
                     ) : null}
                 </ScrollView>
             )}

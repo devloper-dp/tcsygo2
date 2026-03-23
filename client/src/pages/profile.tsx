@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useLocation } from 'wouter';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,8 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { queryClient } from '@/lib/queryClient';
-import { ArrowLeft, User, Car, Star, Camera, Shield, Check, Activity, Loader2, Settings, Wallet, Users as UsersIcon } from 'lucide-react';
+import { User, Car, Star, Camera, Shield, Check, Activity, Loader2, Settings, Wallet } from 'lucide-react';
 import { Driver, TripWithDriver, BookingWithDetails } from '@shared/schema';
 import { format } from 'date-fns';
 import { RatingModal } from '@/components/RatingModal';
@@ -36,8 +35,47 @@ export default function Profile() {
   const [bio, setBio] = useState(user?.bio || '');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [ratingBooking, setRatingBooking] = useState<BookingWithDetails | null>(null);
+
+  const ratingMutation = useMutation({
+    mutationFn: async (data: { tripId: string; rating: number; feedback: string; tags: string[] }) => {
+      if (!user) throw new Error("Must be logged in");
+      if (!ratingBooking) throw new Error("No booking selected");
+
+      const driverUserId = ratingBooking.trip.driver?.userId;
+      if (!driverUserId) throw new Error("Driver not found");
+
+      const reviewText = data.tags.length > 0
+        ? `${data.feedback}\n\nTags: ${data.tags.join(', ')}`
+        : data.feedback;
+
+      const { error } = await supabase.from('ratings').insert({
+        trip_id: data.tripId,
+        from_user_id: user.id,
+        to_user_id: driverUserId,
+        rating: data.rating,
+        review: reviewText.trim(),
+      });
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Rating Submitted",
+        description: "Thank you for sharing your experience!",
+      });
+      setRatingBooking(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Rating Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   const { data: driverProfile } = useQuery<Driver | null>({
     queryKey: ['driver-profile', user?.id],
@@ -571,9 +609,21 @@ export default function Profile() {
         <RatingModal
           isOpen={!!ratingBooking}
           onClose={() => setRatingBooking(null)}
-          tripId={ratingBooking.trip.id}
-          driverId={ratingBooking.trip.driver.user.id}
-          driverName={ratingBooking.trip.driver.user.fullName}
+          onSubmit={(rating, feedback, tags) => {
+            ratingMutation.mutate({
+              tripId: ratingBooking.trip.id,
+              rating,
+              feedback,
+              tags
+            });
+          }}
+          tripDetails={{
+            driverName: ratingBooking.trip.driver?.user?.fullName || 'Driver',
+            driverPhoto: ratingBooking.trip.driver?.user?.profilePhoto || undefined,
+            amount: Number(ratingBooking.totalAmount),
+            pickup: ratingBooking.trip.pickupLocation || '',
+            drop: ratingBooking.trip.dropLocation || ''
+          }}
         />
       )}
     </div>

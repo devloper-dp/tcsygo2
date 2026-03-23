@@ -43,16 +43,19 @@ export default function MyTrips() {
       if (!user) return [];
 
       // 1. Get Bookings
-      const { data: bookingsData, error: bookingsError } = await supabase
+      // 1. Get Bookings
+      const { data: rawBookings, error: bookingsError } = await supabase
         .from('bookings')
         .select('*')
         .eq('passenger_id', user.id);
 
       if (bookingsError) throw bookingsError;
-      if (!bookingsData || bookingsData.length === 0) return [];
+      if (!rawBookings || rawBookings.length === 0) return [];
+
+      const bookingsData = rawBookings as any[];
 
       // 2. Get Trips
-      const tripIds = [...new Set(bookingsData.map(b => b.trip_id).filter(Boolean))];
+      const tripIds = Array.from(new Set(bookingsData.map(b => b.trip_id).filter((id): id is string => !!id)));
       const { data: tripsData, error: tripsError } = await supabase
         .from('trips')
         .select('*')
@@ -62,7 +65,7 @@ export default function MyTrips() {
       const tripsMap = new Map(tripsData?.map(t => [t.id, t]));
 
       // 3. Get Drivers
-      const driverIds = [...new Set(tripsData?.map(t => t.driver_id).filter(Boolean))];
+      const driverIds = Array.from(new Set(tripsData?.map(t => t.driver_id).filter(Boolean)));
       const { data: driversData, error: driversError } = await supabase
         .from('drivers')
         .select('*')
@@ -72,7 +75,7 @@ export default function MyTrips() {
       const driversMap = new Map(driversData?.map(d => [d.id, d]));
 
       // 4. Get Users (Driver Profiles)
-      const userIds = [...new Set(driversData?.map(d => d.user_id).filter(Boolean))];
+      const userIds = Array.from(new Set(driversData?.map(d => d.user_id).filter(Boolean)));
       const { data: usersData, error: usersError } = await supabase
         .from('users')
         .select('*')

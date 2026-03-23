@@ -83,7 +83,7 @@ SelectValue.displayName = "SelectValue";
 const SelectContent = React.forwardRef<
     React.ElementRef<typeof View>,
     React.ComponentPropsWithoutRef<typeof View>
->(({ className, children, position = "popper", ...props }, ref) => {
+>(({ className, children, ...props }, ref) => {
     const { open, onOpenChange } = React.useContext(SelectContext);
 
     if (!open) return null;
@@ -103,13 +103,13 @@ const SelectContent = React.forwardRef<
                 <View
                     ref={ref}
                     className={cn(
-                        "relative z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md bg-white w-3/4 max-h-[50%]",
+                        "relative z-50 min-w-[8rem] overflow-hidden rounded-[20px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl w-[85%] max-h-[50%]",
                         className
                     )}
                     {...props}
                 >
-                    <ScrollView>
-                        <View className="p-1">
+                    <ScrollView showsVerticalScrollIndicator={false}>
+                        <View className="p-2">
                             {children}
                         </View>
                     </ScrollView>
@@ -125,6 +125,7 @@ const SelectItem = React.forwardRef<
     React.ComponentPropsWithoutRef<typeof TouchableOpacity> & { value: string }
 >(({ className, children, value: itemValue, ...props }, ref) => {
     const { value, onValueChange, onOpenChange } = React.useContext(SelectContext);
+    const { isDark } = useTheme();
     const isSelected = value === itemValue;
 
     return (
@@ -135,18 +136,18 @@ const SelectItem = React.forwardRef<
                 onOpenChange(false);
             }}
             className={cn(
-                "relative flex-row w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-                isSelected && "bg-accent",
+                "relative flex-row w-full cursor-default select-none items-center rounded-xl py-3.5 pl-10 pr-4 text-sm outline-none active:bg-slate-100 dark:active:bg-slate-800",
+                isSelected && "bg-slate-50 dark:bg-slate-800/50",
                 className
             )}
             {...props}
         >
             {isSelected && (
-                <View className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
-                    <Feather name="check" size={12} />
+                <View className="absolute left-3.5 flex h-3.5 w-3.5 items-center justify-center">
+                    <Feather name="check" size={16} color={isDark ? "#60a5fa" : "#2563eb"} />
                 </View>
             )}
-            <Text className="text-foreground">{children}</Text>
+            <Text className="text-slate-900 dark:text-slate-100 font-bold">{children}</Text>
         </TouchableOpacity>
     )
 });

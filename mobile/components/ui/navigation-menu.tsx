@@ -1,25 +1,27 @@
 import React from 'react';
-import { View, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, ScrollView, TouchableOpacity } from 'react-native';
 import { Text } from './text';
 import { Ionicons } from '@expo/vector-icons';
 import Collapsible from './collapsible';
 import { cn } from '@/lib/utils';
-
+import { useTheme } from '@/contexts/ThemeContext';
+ 
 interface NavigationItem {
     label: string;
     onPress?: () => void;
     icon?: keyof typeof Ionicons.glyphMap;
     children?: NavigationItem[];
 }
-
+ 
 interface NavigationMenuProps {
     items: NavigationItem[];
     className?: string;
 }
-
+ 
 export function NavigationMenu({ items, className }: NavigationMenuProps) {
+    const { isDark } = useTheme();
     const [expandedItems, setExpandedItems] = React.useState<Set<number>>(new Set());
-
+ 
     const toggleItem = (index: number) => {
         const newExpanded = new Set(expandedItems);
         if (newExpanded.has(index)) {
@@ -29,13 +31,13 @@ export function NavigationMenu({ items, className }: NavigationMenuProps) {
         }
         setExpandedItems(newExpanded);
     };
-
+ 
     const renderItem = (item: NavigationItem, index: number, depth: number = 0) => {
         const hasChildren = item.children && item.children.length > 0;
         const isExpanded = expandedItems.has(index);
-
+ 
         return (
-            <View key={index} style={{ marginLeft: depth * 16 }}>
+            <View key={index} style={{ marginLeft: depth * 12 }}>
                 <TouchableOpacity
                     onPress={() => {
                         if (hasChildren) {
@@ -44,29 +46,30 @@ export function NavigationMenu({ items, className }: NavigationMenuProps) {
                             item.onPress();
                         }
                     }}
-                    style={styles.item}
+                    className={`flex-row items-center px-5 py-4 border-b border-slate-50 dark:border-slate-800/50 active:bg-slate-50 dark:active:bg-slate-800/50`}
                 >
                     {item.icon && (
-                        <Ionicons
-                            name={item.icon}
-                            size={20}
-                            color="#6b7280"
-                            style={styles.icon}
-                        />
+                        <View className="mr-4 w-6 items-center">
+                            <Ionicons
+                                name={item.icon}
+                                size={18}
+                                color={isDark ? "#64748b" : "#94a3b8"}
+                            />
+                        </View>
                     )}
-                    <Text style={styles.itemLabel}>{item.label}</Text>
+                    <Text className={`flex-1 text-sm font-black uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{item.label}</Text>
                     {hasChildren && (
                         <Ionicons
                             name={isExpanded ? 'chevron-down' : 'chevron-forward'}
-                            size={16}
-                            color="#9ca3af"
+                            size={14}
+                            color={isDark ? "#475569" : "#cbd5e1"}
                         />
                     )}
                 </TouchableOpacity>
-
+ 
                 {hasChildren && (
                     <Collapsible open={isExpanded}>
-                        <View style={styles.children}>
+                        <View className="bg-slate-50/50 dark:bg-slate-900/50">
                             {item.children!.map((child, childIndex) =>
                                 renderItem(child, index * 1000 + childIndex, depth + 1)
                             )}
@@ -76,36 +79,10 @@ export function NavigationMenu({ items, className }: NavigationMenuProps) {
             </View>
         );
     };
-
+ 
     return (
-        <ScrollView className={cn('bg-white', className)} style={styles.container}>
+        <ScrollView className={cn('flex-1 bg-white dark:bg-slate-950', className)}>
             {items.map((item, index) => renderItem(item, index))}
         </ScrollView>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
-    item: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
-    },
-    icon: {
-        marginRight: 12,
-    },
-    itemLabel: {
-        flex: 1,
-        fontSize: 14,
-        color: '#1f2937',
-        fontWeight: '500',
-    },
-    children: {
-        backgroundColor: '#f9fafb',
-    },
-});

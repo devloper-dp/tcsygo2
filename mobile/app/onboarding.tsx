@@ -1,39 +1,39 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Image } from 'react-native';
+import { View, Text, TouchableOpacity, SafeAreaView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInRight, FadeOutLeft } from 'react-native-reanimated';
-
-const { width } = Dimensions.get('window');
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useResponsive } from '@/hooks/useResponsive';
 
 const slides = [
     {
         id: '1',
-        title: 'Ride Smarter',
-        description: 'Experience the fastest way to navigate through traffic and reach your destination.',
-        icon: 'bicycle',
-        color: '#3b82f6' // Primary Blue
+        title: 'Book a Ride',
+        description: 'Choose your destination and pick your favorite vehicle type.',
+        icon: 'car-outline',
+        color: '#3B82F6',
     },
     {
         id: '2',
-        title: 'Trusted Safety',
-        description: 'Your safety is our priority. Real-time GPS tracking and 24/7 SOS support included.',
-        icon: 'shield-checkmark',
-        color: '#10b981' // Green
+        title: 'Track Location',
+        description: 'Real-time tracking of your driver and estimated arrival time.',
+        icon: 'location-outline',
+        color: '#10B981',
     },
     {
         id: '3',
-        title: 'Instant Payments',
-        description: 'Go cashless with integrated wallets and automatic payment settlements.',
-        icon: 'card',
-        color: '#f59e0b' // Yellow
-    }
+        title: 'Enjoy Your Trip',
+        description: 'Safe and comfortable rides at your fingertips.',
+        icon: 'happy-outline',
+        color: '#F59E0B',
+    },
 ];
 
 export default function OnboardingScreen() {
     const router = useRouter();
+    const { theme, isDark } = useTheme();
+    const { spacing, fontSize, hScale, vScale } = useResponsive();
     const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
 
     const handleNext = async () => {
@@ -42,148 +42,68 @@ export default function OnboardingScreen() {
         } else {
             // Complete onboarding
             await AsyncStorage.setItem('hasSeenOnboarding', 'true');
-            router.replace('/(tabs)');
+            router.replace('/login');
         }
     };
 
     const handleSkip = async () => {
         await AsyncStorage.setItem('hasSeenOnboarding', 'true');
-        router.replace('/(tabs)');
+        router.replace('/login');
     };
 
     const CurrentSlide = slides[currentSlideIndex];
 
     return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
+        <SafeAreaView className="flex-1 bg-white dark:bg-slate-950">
+            <View style={{ padding: spacing.base, alignItems: 'flex-end' }}>
                 <TouchableOpacity onPress={handleSkip}>
-                    <Text style={styles.skipText}>Skip</Text>
+                    <Text style={{ fontSize: fontSize.base }} className="text-slate-500 dark:text-slate-400 font-black uppercase tracking-widest">Skip</Text>
                 </TouchableOpacity>
             </View>
 
-            <View style={styles.slideContainer}>
-                <Animated.View
-                    key={CurrentSlide.id}
-                    entering={FadeInRight}
-                    exiting={FadeOutLeft}
-                    style={styles.slideContent}
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xxl }}>
+                <View 
+                    style={{ 
+                        backgroundColor: CurrentSlide.color,
+                        width: hScale(160),
+                        height: hScale(160),
+                        borderRadius: hScale(80),
+                        marginBottom: vScale(40)
+                    }}
+                    className="justify-center items-center shadow-lg shadow-black/10"
                 >
-                    <View style={[styles.iconContainer, { backgroundColor: CurrentSlide.color }]}>
-                        <Ionicons name={CurrentSlide.icon as any} size={80} color="white" />
-                    </View>
-                    <Text style={styles.title}>{CurrentSlide.title}</Text>
-                    <Text style={styles.description}>{CurrentSlide.description}</Text>
-                </Animated.View>
+                    <Ionicons name={CurrentSlide.icon as any} size={hScale(80)} color="white" />
+                </View>
+                <Text style={{ fontSize: fontSize.xxl }} className="font-black text-slate-900 dark:text-white text-center mb-4">{CurrentSlide.title}</Text>
+                <Text style={{ fontSize: fontSize.base, lineHeight: fontSize.base * 1.5 }} className="text-slate-500 dark:text-slate-400 text-center font-medium">{CurrentSlide.description}</Text>
             </View>
 
-            <View style={styles.footer}>
-                <View style={styles.dots}>
+            <View style={{ padding: spacing.xl, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <View className="flex-row gap-2">
                     {slides.map((_, index) => (
                         <View
                             key={index}
-                            style={[
-                                styles.dot,
-                                currentSlideIndex === index && styles.activeDot
-                            ]}
+                            style={{
+                                height: hScale(10),
+                                width: currentSlideIndex === index ? hScale(20) : hScale(10),
+                                borderRadius: hScale(5)
+                            }}
+                            className={`${currentSlideIndex === index ? 'bg-blue-500' : 'bg-slate-200 dark:bg-slate-800'}`}
                         />
                     ))}
                 </View>
 
-                <TouchableOpacity
-                    style={styles.btn}
+                <TouchableOpacity 
+                    style={{ paddingVertical: vScale(12), paddingHorizontal: hScale(24) }}
+                    className="rounded-full flex-row items-center gap-2 bg-slate-100 dark:bg-slate-900"
                     onPress={handleNext}
                 >
-                    <Text style={styles.btnText}>
+                    <Text style={{ fontSize: fontSize.base }} className="text-slate-900 dark:text-white font-black uppercase tracking-widest">
                         {currentSlideIndex === slides.length - 1 ? 'Get Started' : 'Next'}
                     </Text>
-                    <Ionicons name="arrow-forward" size={20} color="white" />
+                    <Ionicons name="arrow-forward" size={hScale(20)} color={CurrentSlide.color} />
                 </TouchableOpacity>
             </View>
         </SafeAreaView>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: 'white',
-    },
-    header: {
-        padding: 20,
-        alignItems: 'flex-end',
-    },
-    skipText: {
-        fontSize: 16,
-        color: '#6b7280',
-        fontWeight: '600',
-    },
-    slideContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    slideContent: {
-        alignItems: 'center',
-        paddingHorizontal: 40,
-    },
-    iconContainer: {
-        width: 160,
-        height: 160,
-        borderRadius: 80,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 40,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.1,
-        shadowRadius: 10,
-        elevation: 10,
-    },
-    title: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        color: '#1f2937',
-        textAlign: 'center',
-        marginBottom: 16,
-    },
-    description: {
-        fontSize: 16,
-        color: '#6b7280',
-        textAlign: 'center',
-        lineHeight: 24,
-    },
-    footer: {
-        padding: 32,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    dots: {
-        flexDirection: 'row',
-        gap: 8,
-    },
-    dot: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        backgroundColor: '#e5e7eb',
-    },
-    activeDot: {
-        backgroundColor: '#3b82f6',
-        width: 20,
-    },
-    btn: {
-        backgroundColor: '#1f2937',
-        paddingVertical: 12,
-        paddingHorizontal: 24,
-        borderRadius: 30,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    btnText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-});

@@ -1,12 +1,15 @@
 import React from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Image } from 'react-native';
+import { View, StyleSheet, Modal, TouchableOpacity, ScrollView, Image } from 'react-native';
+import { Text } from '@/components/ui/text';
 import { Ionicons } from '@expo/vector-icons';
-
+import { useTheme } from '@/contexts/ThemeContext';
+import { useResponsive } from '@/hooks/useResponsive';
+ 
 interface SafetyTipsModalProps {
     visible: boolean;
     onClose: () => void;
 }
-
+ 
 const TIPS = [
     {
         title: 'Verify Your Ride',
@@ -29,8 +32,11 @@ const TIPS = [
         icon: 'shield-checkmark-outline'
     }
 ];
-
+ 
 export function SafetyTipsModal({ visible, onClose }: SafetyTipsModalProps) {
+    const { theme, isDark } = useTheme();
+    const { hScale, vScale, spacing } = useResponsive();
+ 
     return (
         <Modal
             visible={visible}
@@ -38,131 +44,52 @@ export function SafetyTipsModal({ visible, onClose }: SafetyTipsModalProps) {
             transparent={true}
             onRequestClose={onClose}
         >
-            <View style={styles.centeredView}>
-                <View style={styles.modalView}>
-                    <View style={styles.header}>
-                        <Text style={styles.headerTitle}>Safety Tips</Text>
-                        <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                            <Ionicons name="close" size={24} color="#1f2937" />
+            <View style={{ flex: 1, justifyContent: 'flex-end' }} className="bg-black/60">
+                <View style={{ height: '80%', borderTopLeftRadius: hScale(32), borderTopRightRadius: hScale(32), padding: hScale(24), borderTopWidth: 1 }} className="bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800">
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vScale(24) }}>
+                        <Text style={{ fontSize: hScale(20) }} className="font-bold text-slate-900 dark:text-white">Safety Tips</Text>
+                        <TouchableOpacity 
+                            onPress={onClose} 
+                            style={{ width: hScale(40), height: hScale(40), borderRadius: hScale(20) }}
+                            className="bg-slate-50 dark:bg-slate-800 items-center justify-center"
+                        >
+                            <Ionicons name="close" size={hScale(24)} color={isDark ? "#cbd5e1" : "#1e293b"} />
                         </TouchableOpacity>
                     </View>
-
-                    <ScrollView style={styles.content}>
-                        <View style={styles.banner}>
-                            <Ionicons name="shield-checkmark" size={48} color="#3b82f6" />
-                            <Text style={styles.bannerText}>Your Safety is Our Priority</Text>
+ 
+                    <ScrollView showsVerticalScrollIndicator={false}>
+                        <View style={{ alignItems: 'center', marginBottom: vScale(32), padding: hScale(32), borderRadius: hScale(24), borderWidth: 1 }} className="bg-blue-50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/20">
+                            <View style={{ width: hScale(64), height: hScale(64), borderRadius: hScale(32), marginBottom: vScale(16) }} className="bg-blue-100 dark:bg-blue-900/30 items-center justify-center">
+                                <Ionicons name="shield-checkmark" size={hScale(40)} color={isDark ? "#60a5fa" : "#3b82f6"} />
+                            </View>
+                            <Text style={{ fontSize: hScale(18) }} className="font-bold text-slate-900 dark:text-white text-center">Your Safety is Our Priority</Text>
+                            <Text style={{ fontSize: hScale(14), marginTop: vScale(8), lineHeight: vScale(20) }} className="text-slate-500 dark:text-slate-400 text-center font-medium">Follow these tips for a safe and comfortable journey</Text>
                         </View>
-
+ 
                         {TIPS.map((tip, index) => (
-                            <View key={index} style={styles.tipItem}>
-                                <View style={styles.iconContainer}>
-                                    <Ionicons name={tip.icon as any} size={24} color="#3b82f6" />
+                            <View key={index} style={{ flexDirection: 'row', marginBottom: vScale(32), gap: hScale(16), paddingHorizontal: hScale(4) }}>
+                                <View style={{ width: hScale(48), height: hScale(48), borderRadius: hScale(16), borderWidth: 1 }} className="bg-slate-50 dark:bg-slate-800/80 items-center justify-center border-slate-100 dark:border-slate-800">
+                                    <Ionicons name={tip.icon as any} size={hScale(22)} color={isDark ? "#60a5fa" : "#3b82f6"} />
                                 </View>
-                                <View style={styles.textContainer}>
-                                    <Text style={styles.tipTitle}>{tip.title}</Text>
-                                    <Text style={styles.tipDesc}>{tip.description}</Text>
+                                <View className="flex-1">
+                                    <Text style={{ fontSize: hScale(16), marginBottom: vScale(6) }} className="font-bold text-slate-900 dark:text-white">{tip.title}</Text>
+                                    <Text style={{ fontSize: hScale(14), lineHeight: vScale(24) }} className="text-slate-500 dark:text-slate-400 font-medium">{tip.description}</Text>
                                 </View>
                             </View>
                         ))}
                     </ScrollView>
-
-                    <TouchableOpacity style={styles.okBtn} onPress={onClose}>
-                        <Text style={styles.okBtnText}>Got it</Text>
+ 
+                    <TouchableOpacity 
+                        style={{ height: vScale(56), borderRadius: hScale(16), marginTop: vScale(16) }}
+                        className="bg-blue-600 active:bg-blue-700 items-center justify-center shadow-lg shadow-blue-500/20" 
+                        onPress={onClose}
+                    >
+                        <Text style={{ fontSize: hScale(16) }} className="text-white font-bold">Got it, thanks!</Text>
                     </TouchableOpacity>
                 </View>
             </View>
         </Modal>
     );
 }
-
-const styles = StyleSheet.create({
-    centeredView: {
-        flex: 1,
-        justifyContent: 'flex-end',
-        backgroundColor: 'rgba(0,0,0,0.5)',
-    },
-    modalView: {
-        backgroundColor: 'white',
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        padding: 20,
-        height: '80%',
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
-        shadowOpacity: 0.25,
-        shadowRadius: 4,
-        elevation: 5,
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    headerTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    closeBtn: {
-        padding: 4,
-    },
-    content: {
-        flex: 1,
-    },
-    banner: {
-        alignItems: 'center',
-        marginBottom: 30,
-        backgroundColor: '#eff6ff',
-        padding: 24,
-        borderRadius: 16,
-    },
-    bannerText: {
-        marginTop: 12,
-        fontSize: 18,
-        fontWeight: '600',
-        color: '#1f2937',
-    },
-    tipItem: {
-        flexDirection: 'row',
-        marginBottom: 24,
-        gap: 16,
-    },
-    iconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: '#f3f4f6',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    textContainer: {
-        flex: 1,
-    },
-    tipTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#1f2937',
-        marginBottom: 4,
-    },
-    tipDesc: {
-        fontSize: 14,
-        color: '#6b7280',
-        lineHeight: 20,
-    },
-    okBtn: {
-        backgroundColor: '#3b82f6',
-        padding: 16,
-        borderRadius: 12,
-        alignItems: 'center',
-        marginTop: 10,
-    },
-    okBtnText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-});
+ 
+const styles = StyleSheet.create({});

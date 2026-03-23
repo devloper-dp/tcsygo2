@@ -1,7 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-
+import { View, TouchableOpacity, ScrollView } from 'react-native';
+import { RefreshCcw, MapPin, Plus, Settings } from 'lucide-react-native';
+import { Text } from '@/components/ui/text';
+import { useTheme } from '@/contexts/ThemeContext';
+ 
 interface QuickActionProps {
     onAction: (action: string) => void;
     recentRide?: {
@@ -10,115 +12,79 @@ interface QuickActionProps {
     };
     savedPlaces?: Array<{ id: string, name: string, icon: string, lat?: number, lng?: number }>;
 }
-
+ 
 export function QuickActions({ onAction, recentRide, savedPlaces = [] }: QuickActionProps) {
+    const { isDark } = useTheme();
+ 
     return (
-        <View style={styles.container}>
-            <Text style={styles.title}>Quick Actions</Text>
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <View>
+            <Text className="text-lg font-black text-slate-900 dark:text-white mb-6 px-1 uppercase tracking-tighter">Tactical Presets</Text>
+ 
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 24, gap: 16 }}>
                 {/* Repeat Last Ride */}
                 {recentRide && (
                     <TouchableOpacity
-                        style={[styles.card, styles.repeatCard]}
+                        className="bg-blue-600 dark:bg-blue-600 p-6 rounded-[32px] w-52 h-40 justify-between shadow-2xl shadow-blue-500/30"
                         onPress={() => onAction('repeat_ride')}
+                        activeOpacity={0.9}
                     >
-                        <View style={styles.iconBox}>
-                            <Ionicons name="reload" size={20} color="#fff" />
+                        <View className="w-12 h-12 rounded-2xl bg-white/20 items-center justify-center">
+                            <RefreshCcw size={22} color="#fff" />
                         </View>
                         <View>
-                            <Text style={styles.cardTitle}>Repeat Ride</Text>
-                            <Text style={styles.cardSubtitle} numberOfLines={1}>
-                                To {recentRide.destination}
+                            <Text className="text-white font-black text-[10px] uppercase tracking-widest mb-1">Last Extraction</Text>
+                            <Text className="text-white font-bold text-base leading-tight" numberOfLines={2}>
+                                {recentRide.destination}
                             </Text>
                         </View>
                     </TouchableOpacity>
                 )}
-
+ 
                 {/* Saved Places */}
                 {savedPlaces.map(place => (
                     <TouchableOpacity
                         key={place.id}
-                        style={styles.card}
+                        className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-6 rounded-[32px] w-52 h-40 justify-between shadow-soft dark:shadow-none"
                         onPress={() => onAction(`place_${place.id}`)}
+                        activeOpacity={0.7}
                     >
-                        <View style={[styles.iconBox, { backgroundColor: '#eff6ff' }]}>
-                            <Ionicons name={(place.icon as any) || 'location'} size={20} color="#3b82f6" />
+                        <View className="w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-800 items-center justify-center border border-slate-100 dark:border-slate-700">
+                            <MapPin size={22} color={isDark ? "#60a5fa" : "#2563eb"} />
                         </View>
                         <View>
-                            <Text style={styles.cardTitle}>{place.name}</Text>
-                            <Text style={styles.cardAction}>Go now</Text>
+                            <Text className="text-slate-400 dark:text-slate-500 font-black text-[10px] uppercase tracking-widest mb-1">{place.name}</Text>
+                            <Text className="text-blue-600 dark:text-blue-400 font-black text-sm uppercase tracking-tight">Deploy Now</Text>
                         </View>
                     </TouchableOpacity>
                 ))}
-
+ 
                 {/* Add Place */}
                 <TouchableOpacity
-                    style={[styles.card, { borderStyle: 'dashed', borderWidth: 1, borderColor: '#d1d5db', backgroundColor: 'transparent' }]}
+                    className="bg-slate-50/50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 border-dashed p-6 rounded-[32px] w-40 h-40 justify-center items-center gap-3"
                     onPress={() => onAction('add_place')}
+                    activeOpacity={0.7}
                 >
-                    <View style={[styles.iconBox, { backgroundColor: '#f3f4f6' }]}>
-                        <Ionicons name="add" size={20} color="#6b7280" />
+                    <View className="w-12 h-12 rounded-full bg-slate-200 dark:bg-slate-800 items-center justify-center">
+                        <Plus size={24} color={isDark ? "#94a3b8" : "#64748b"} />
                     </View>
-                    <Text style={[styles.cardTitle, { color: '#6b7280' }]}>Add Place</Text>
+                    <Text className="text-slate-400 dark:text-slate-500 font-black text-[10px] uppercase tracking-widest text-center">Add Station</Text>
+                </TouchableOpacity>
+ 
+                {/* Ride Preferences */}
+                <TouchableOpacity
+                    className="bg-slate-900 dark:bg-white p-6 rounded-[32px] w-52 h-40 justify-between shadow-2xl shadow-black/20"
+                    onPress={() => onAction('preferences')}
+                    activeOpacity={0.9}
+                >
+                    <View className="w-12 h-12 rounded-2xl bg-white/10 dark:bg-slate-100 items-center justify-center">
+                        <Settings size={22} color={isDark ? "#0f172a" : "#fff"} />
+                    </View>
+                    <View>
+                        <Text className={`font-black text-[10px] uppercase tracking-widest mb-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Configuration</Text>
+                        <Text className={`font-black text-sm uppercase tracking-tight ${isDark ? 'text-slate-900' : 'text-white'}`}>Tactical Prefs</Text>
+                    </View>
                 </TouchableOpacity>
             </ScrollView>
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        marginBottom: 24,
-    },
-    title: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        marginBottom: 12,
-        paddingHorizontal: 16,
-        color: '#1f2937',
-    },
-    scrollContent: {
-        paddingHorizontal: 16,
-        gap: 12,
-    },
-    card: {
-        backgroundColor: 'white',
-        padding: 12,
-        borderRadius: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        width: 160,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-        elevation: 2,
-    },
-    repeatCard: {
-        backgroundColor: '#1e40af', // Dark blue
-    },
-    iconBox: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.2)',
-    },
-    cardTitle: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#374151',
-    },
-    cardSubtitle: {
-        fontSize: 12,
-        color: '#dbeafe',
-    },
-    cardAction: {
-        fontSize: 12,
-        color: '#3b82f6',
-        fontWeight: '500',
-    },
-});

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, ScrollView, TouchableOpacity, Alert, ActivityIndicator, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,31 +7,35 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useMutation } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { queryClient } from '@/lib/queryClient';
-
+import { Text } from '@/components/ui/text';
+import { Input } from '@/components/ui/input';
+import { useTheme } from '@/contexts/ThemeContext';
+import { Button } from '@/components/ui/button';
+import { useResponsive } from '@/hooks/useResponsive';
+ 
 export default function AddPaymentMethodScreen() {
     const router = useRouter();
     const { user } = useAuth();
+    const { theme, isDark } = useTheme();
+    const { hScale, vScale, spacing, fontSize } = useResponsive();
     const [cardNumber, setCardNumber] = useState('');
     const [cardholderName, setCardholderName] = useState('');
     const [expiryMonth, setExpiryMonth] = useState('');
     const [expiryYear, setExpiryYear] = useState('');
     const [cvv, setCvv] = useState('');
     const [isDefault, setIsDefault] = useState(false);
-
+ 
     const addPaymentMutation = useMutation({
         mutationFn: async () => {
-            // Validate inputs
             if (!cardNumber || !cardholderName || !expiryMonth || !expiryYear || !cvv) {
                 throw new Error('All fields are required');
             }
-
-            // Basic card number validation (should be 16 digits)
+ 
             const cleanCardNumber = cardNumber.replace(/\s/g, '');
             if (cleanCardNumber.length < 13 || cleanCardNumber.length > 19) {
                 throw new Error('Invalid card number');
             }
-
-            // Validate expiry
+ 
             const month = parseInt(expiryMonth);
             const year = parseInt(expiryYear);
             if (month < 1 || month > 12) {
@@ -41,28 +45,21 @@ export default function AddPaymentMethodScreen() {
             if (year < currentYear) {
                 throw new Error('Card has expired');
             }
-
-            // Validate CVV
+ 
             if (cvv.length < 3 || cvv.length > 4) {
                 throw new Error('Invalid CVV');
             }
-
-            // Detect card brand
+ 
             const cardBrand = detectCardBrand(cleanCardNumber);
-
-            // In production, you would tokenize the card with Razorpay here
-            // For now, we'll store the last 4 digits only (never store full card numbers!)
             const lastFour = cleanCardNumber.slice(-4);
-
-            // If this is set as default, unset all other defaults first
+ 
             if (isDefault) {
                 await supabase
                     .from('payment_methods')
                     .update({ is_default: false })
                     .eq('user_id', user?.id);
             }
-
-            // Insert the payment method
+ 
             const { error } = await supabase
                 .from('payment_methods')
                 .insert({
@@ -71,9 +68,8 @@ export default function AddPaymentMethodScreen() {
                     last_four: lastFour,
                     card_brand: cardBrand,
                     is_default: isDefault,
-                    // In production, store razorpay_customer_id and razorpay_card_id here
                 });
-
+ 
             if (error) throw error;
         },
         onSuccess: () => {
@@ -86,260 +82,165 @@ export default function AddPaymentMethodScreen() {
             Alert.alert('Error', error.message || 'Failed to add payment method');
         },
     });
-
+ 
     const detectCardBrand = (cardNumber: string): string => {
-        // Simple card brand detection
         if (cardNumber.startsWith('4')) return 'visa';
         if (cardNumber.startsWith('5')) return 'mastercard';
         if (cardNumber.startsWith('3')) return 'amex';
         if (cardNumber.startsWith('6')) return 'discover';
         return 'unknown';
     };
-
+ 
     const formatCardNumber = (text: string) => {
-        // Remove all non-digits
         const cleaned = text.replace(/\D/g, '');
-        // Add space every 4 digits
         const formatted = cleaned.match(/.{1,4}/g)?.join(' ') || cleaned;
         setCardNumber(formatted);
     };
-
+ 
     const handleSubmit = () => {
         addPaymentMutation.mutate();
     };
-
+ 
     return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()}>
-                    <Ionicons name="arrow-back" size={24} color="#1f2937" />
+        <SafeAreaView className="flex-1 bg-slate-50 dark:bg-slate-950" edges={['top']}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+            
+            {/* Header */}
+            <View style={{ paddingHorizontal: spacing.xl, paddingVertical: vScale(16), borderBottomWidth: 1 }} className="flex-row items-center justify-between border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-sm z-10">
+                <TouchableOpacity 
+                    onPress={() => router.back()} 
+                    style={{ width: hScale(40), height: hScale(40) }}
+                    className="rounded-full bg-slate-50 dark:bg-slate-900 items-center justify-center active:bg-slate-100 dark:active:bg-slate-800"
+                >
+                    <Ionicons name="arrow-back" size={hScale(24)} color={isDark ? "#f8fafc" : "#1e293b"} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Add Payment Method</Text>
-                <View style={{ width: 24 }} />
+                <Text style={{ fontSize: fontSize.xl }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter">Add Card</Text>
+                <View style={{ width: hScale(40) }} />
             </View>
-
-            <ScrollView style={styles.content}>
-                <View style={styles.infoCard}>
-                    <Ionicons name="shield-checkmark" size={24} color="#22c55e" />
-                    <View style={styles.infoContent}>
-                        <Text style={styles.infoTitle}>Secure Payment</Text>
-                        <Text style={styles.infoText}>
-                            Your card information is encrypted and securely stored. We never store your full card number or CVV.
+ 
+            <ScrollView 
+                style={{ flex: 1, paddingHorizontal: spacing.xl, paddingTop: vScale(24) }}
+                contentContainerStyle={{ paddingBottom: vScale(120) }}
+                showsVerticalScrollIndicator={false}
+            >
+                <View style={{ borderRadius: hScale(28), padding: spacing.xl, marginBottom: vScale(32), gap: spacing.md, borderWidth: 1 }} className="flex-row bg-blue-50/50 dark:bg-blue-900/10 border-blue-100/50 dark:border-blue-900/20">
+                    <Ionicons name="shield-checkmark" size={hScale(24)} color={isDark ? "#60a5fa" : "#3b82f6"} strokeWidth={3} />
+                    <View className="flex-1">
+                        <Text style={{ fontSize: hScale(10), marginBottom: vScale(4) }} className="font-black text-blue-800 dark:text-blue-400 uppercase tracking-widest">Encrypted Transit</Text>
+                        <Text style={{ fontSize: hScale(10), lineHeight: vScale(16) }} className="font-bold text-blue-600 dark:text-blue-500/80 uppercase tracking-tighter">
+                            Your card information is vaulted with industry-standard encryption. We never store CVV codes or full numbers.
                         </Text>
                     </View>
                 </View>
-
-                <View style={styles.form}>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Card Number</Text>
-                        <TextInput
-                            style={styles.input}
+ 
+                <View style={{ borderRadius: hScale(40), padding: spacing.xxl, borderWidth: 1, marginBottom: vScale(24) }} className="bg-white dark:bg-slate-900 shadow-sm border-slate-100 dark:border-slate-800">
+                    <View style={{ marginBottom: vScale(24), gap: spacing.xs }}>
+                        <Text style={{ fontSize: hScale(10), marginLeft: spacing.xs }} className="font-black text-slate-500 dark:text-slate-500 uppercase tracking-widest">Card Number</Text>
+                        <Input
                             placeholder="1234 5678 9012 3456"
                             value={cardNumber}
                             onChangeText={formatCardNumber}
                             keyboardType="numeric"
                             maxLength={19}
+                            style={{ height: vScale(56), borderRadius: hScale(20), paddingHorizontal: spacing.xl, borderWidth: 1 }}
+                            className="font-bold text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-950 border-slate-100 dark:border-slate-800/50"
+                            placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                         />
                     </View>
-
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Cardholder Name</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="John Doe"
+ 
+                    <View style={{ marginBottom: vScale(24), gap: spacing.xs }}>
+                        <Text style={{ fontSize: hScale(10), marginLeft: spacing.xs }} className="font-black text-slate-500 dark:text-slate-500 uppercase tracking-widest">Cardholder Name</Text>
+                        <Input
+                            placeholder="EX: JOHNATHAN DOE"
                             value={cardholderName}
                             onChangeText={setCardholderName}
-                            autoCapitalize="words"
+                            autoCapitalize="characters"
+                            style={{ height: vScale(56), borderRadius: hScale(20), paddingHorizontal: spacing.xl, borderWidth: 1 }}
+                            className="font-bold text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-950 border-slate-100 dark:border-slate-800/50"
+                            placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                         />
                     </View>
-
-                    <View style={styles.row}>
-                        <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                            <Text style={styles.label}>Expiry Month</Text>
-                            <TextInput
-                                style={styles.input}
+ 
+                    <View style={{ flexDirection: 'row', marginBottom: vScale(32), gap: spacing.lg }}>
+                        <View style={{ flex: 1, gap: spacing.xs }}>
+                            <Text style={{ fontSize: hScale(10), marginLeft: spacing.xs }} className="font-black text-slate-500 dark:text-slate-500 uppercase tracking-widest">Month</Text>
+                            <Input
                                 placeholder="MM"
                                 value={expiryMonth}
                                 onChangeText={setExpiryMonth}
                                 keyboardType="numeric"
                                 maxLength={2}
+                                style={{ height: vScale(56), borderRadius: hScale(20), paddingHorizontal: spacing.xl, borderWidth: 1 }}
+                                className="font-bold text-center text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-950 border-slate-100 dark:border-slate-800/50"
+                                placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                             />
                         </View>
-
-                        <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                            <Text style={styles.label}>Expiry Year</Text>
-                            <TextInput
-                                style={styles.input}
+  
+                        <View style={{ flex: 1, gap: spacing.xs }}>
+                            <Text style={{ fontSize: hScale(10), marginLeft: spacing.xs }} className="font-black text-slate-500 dark:text-slate-500 uppercase tracking-widest">Year</Text>
+                            <Input
                                 placeholder="YY"
                                 value={expiryYear}
                                 onChangeText={setExpiryYear}
                                 keyboardType="numeric"
                                 maxLength={2}
+                                style={{ height: vScale(56), borderRadius: hScale(20), paddingHorizontal: spacing.xl, borderWidth: 1 }}
+                                className="font-bold text-center text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-950 border-slate-100 dark:border-slate-800/50"
+                                placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                             />
                         </View>
-
-                        <View style={[styles.inputGroup, { flex: 1, marginLeft: 16 }]}>
-                            <Text style={styles.label}>CVV</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="123"
+  
+                        <View style={{ flex: 1, gap: spacing.xs }}>
+                            <Text style={{ fontSize: hScale(10), marginLeft: spacing.xs }} className="font-black text-slate-500 dark:text-slate-500 uppercase tracking-widest">CVV</Text>
+                            <Input
+                                placeholder="***"
                                 value={cvv}
                                 onChangeText={setCvv}
                                 keyboardType="numeric"
                                 maxLength={4}
                                 secureTextEntry
+                                style={{ height: vScale(56), borderRadius: hScale(20), paddingHorizontal: spacing.xl, borderWidth: 1 }}
+                                className="font-bold text-center text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-950 border-slate-100 dark:border-slate-800/50"
+                                placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                             />
                         </View>
                     </View>
-
+ 
                     <TouchableOpacity
-                        style={styles.checkboxContainer}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: vScale(8), paddingVertical: vScale(8) }}
                         onPress={() => setIsDefault(!isDefault)}
                     >
                         <Ionicons
-                            name={isDefault ? 'checkbox' : 'square-outline'}
-                            size={24}
-                            color={isDefault ? '#3b82f6' : '#9ca3af'}
+                            name={isDefault ? 'checkbox' : 'square'}
+                            size={hScale(24)}
+                            color={isDefault ? '#3b82f6' : (isDark ? '#1e293b' : '#e2e8f0')}
                         />
-                        <Text style={styles.checkboxLabel}>Set as default payment method</Text>
+                        <Text style={{ fontSize: fontSize.xs }} className="font-black text-slate-700 dark:text-slate-300 uppercase tracking-tight">Set as default payment method</Text>
                     </TouchableOpacity>
                 </View>
-
-                <View style={styles.disclaimer}>
-                    <Text style={styles.disclaimerText}>
-                        By adding a payment method, you agree to our Terms of Service and Privacy Policy.
-                        Your payment information will be processed securely through Razorpay.
+ 
+                <View style={{ paddingHorizontal: spacing.xl, opacity: 0.4 }}>
+                    <Text style={{ fontSize: hScale(9), lineHeight: vScale(16) }} className="font-extrabold text-slate-500 text-center uppercase tracking-widest">
+                        By adding this method, you authorize TCSYGO to verify and vault your info. 
+                        All transactions are processed via Razorpay Secure.
                     </Text>
                 </View>
             </ScrollView>
-
-            <View style={styles.footer}>
-                <TouchableOpacity
-                    style={[styles.submitButton, addPaymentMutation.isPending && styles.submitButtonDisabled]}
+ 
+            <View style={{ padding: spacing.xl, borderTopWidth: 1 }} className="bg-white dark:bg-slate-950 border-slate-100 dark:border-slate-800 shadow-xl">
+                <Button
+                    style={{ height: vScale(64), borderRadius: hScale(24) }}
+                    className={addPaymentMutation.isPending ? 'bg-slate-100 dark:bg-slate-900' : 'bg-slate-900 dark:bg-white shadow-lg shadow-blue-500/10'}
                     onPress={handleSubmit}
                     disabled={addPaymentMutation.isPending}
                 >
                     {addPaymentMutation.isPending ? (
-                        <ActivityIndicator size="small" color="#fff" />
+                        <ActivityIndicator size="small" color={isDark ? "#3b82f6" : "#64748b"} />
                     ) : (
-                        <Text style={styles.submitButtonText}>Add Payment Method</Text>
+                        <Text style={{ fontSize: fontSize.base }} className="text-white dark:text-slate-900 font-black uppercase tracking-widest">Authorize & Add Card</Text>
                     )}
-                </TouchableOpacity>
+                </Button>
             </View>
         </SafeAreaView>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#f9fafb',
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 16,
-        backgroundColor: 'white',
-        borderBottomWidth: 1,
-        borderBottomColor: '#e5e7eb',
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    content: {
-        flex: 1,
-        padding: 16,
-    },
-    infoCard: {
-        flexDirection: 'row',
-        backgroundColor: '#f0fdf4',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 24,
-        gap: 12,
-    },
-    infoContent: {
-        flex: 1,
-    },
-    infoTitle: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#166534',
-        marginBottom: 4,
-    },
-    infoText: {
-        fontSize: 12,
-        color: '#15803d',
-        lineHeight: 18,
-    },
-    form: {
-        backgroundColor: 'white',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 16,
-    },
-    inputGroup: {
-        marginBottom: 16,
-    },
-    label: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#374151',
-        marginBottom: 8,
-    },
-    input: {
-        borderWidth: 1,
-        borderColor: '#d1d5db',
-        borderRadius: 8,
-        paddingHorizontal: 12,
-        paddingVertical: 10,
-        fontSize: 16,
-        color: '#1f2937',
-        backgroundColor: '#fff',
-    },
-    row: {
-        flexDirection: 'row',
-        marginBottom: 16,
-    },
-    checkboxContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    checkboxLabel: {
-        fontSize: 14,
-        color: '#374151',
-    },
-    disclaimer: {
-        padding: 16,
-    },
-    disclaimerText: {
-        fontSize: 12,
-        color: '#6b7280',
-        lineHeight: 18,
-        textAlign: 'center',
-    },
-    footer: {
-        padding: 16,
-        backgroundColor: 'white',
-        borderTopWidth: 1,
-        borderTopColor: '#e5e7eb',
-    },
-    submitButton: {
-        backgroundColor: '#3b82f6',
-        borderRadius: 8,
-        paddingVertical: 14,
-        alignItems: 'center',
-    },
-    submitButtonDisabled: {
-        opacity: 0.6,
-    },
-    submitButtonText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-});

@@ -1,202 +1,115 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native';
+import { View, ScrollView, TouchableOpacity, Linking, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-
-// FAQ Configuration - In production, this could be fetched from a CMS or database
+import { Text } from '@/components/ui/text';
+import { useTheme } from '@/contexts/ThemeContext';
+import { Card } from '@/components/ui/card';
+ 
 const FAQ_ITEMS = [
     {
         q: 'How do I book a trip?',
-        a: 'Go to the Search tab, enter your pickup and drop locations, select a trip that matches your schedule, and confirm your booking by completing the payment.'
+        a: 'Navigate to the Discovery console, input your terminal coordinates, select a matching vessel, and authorize the transaction through our secure gateway.'
     },
     {
         q: 'How do I become a driver?',
-        a: 'You can apply to become a driver from the Profile tab. Go to "Become a Driver" and complete the registration process including vehicle details and document verification.'
+        a: 'Elevate your status through the Profile console. Access "Become a Driver" to initiate the professional vetting process and asset registration.'
     },
     {
         q: 'How are payments handled?',
-        a: 'We use secure payment gateways like Razorpay to process all transactions safely. You can pay using UPI, cards, net banking, or wallets.'
+        a: 'We utilize advanced cryptographic payment gateways like Razorpay for all credit/debit, UPI, and wallet transactions in real-time.'
     },
     {
         q: 'Can I cancel my booking?',
-        a: 'Yes, you can cancel your booking from the My Bookings section. Cancellation charges may apply based on the time of cancellation.'
+        a: 'Operations can be aborted via the "My Bookings" terminal. Note that protocol cancellation fees may apply based on temporal proximity to departure.'
     },
     {
         q: 'How do I contact support?',
-        a: 'You can reach us via email at support@tcsygo.com or call us at +91 98765 43210. We\'re available 24/7 to help you.'
+        a: 'Our intelligence officers are available 24/7. Reach out via the secure mail or voice channels listed in this interface.'
     },
 ];
-
+ 
 export default function HelpSupportScreen() {
     const router = useRouter();
-    const faqItems = FAQ_ITEMS;
-
+    const { theme, isDark } = useTheme();
+ 
     return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color="#1f2937" />
+        <SafeAreaView className="flex-1 bg-slate-50 dark:bg-slate-950" edges={['top']}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+            
+            <View className="flex-row items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-sm z-10">
+                <TouchableOpacity 
+                    onPress={() => router.back()} 
+                    className="w-10 h-10 rounded-full bg-slate-50 dark:bg-slate-900 items-center justify-center active:bg-slate-100 dark:active:bg-slate-800"
+                >
+                    <Ionicons name="arrow-back" size={24} color={isDark ? "#f8fafc" : "#1e293b"} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Help & Support</Text>
-                <View style={{ width: 40 }} />
+                <Text className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">Support</Text>
+                <View className="w-10" />
             </View>
-
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-                <View style={styles.contactSection}>
-                    <Text style={styles.sectionTitle}>Contact Us</Text>
-                    <View style={styles.card}>
+ 
+            <ScrollView 
+                contentContainerStyle={{ padding: 24, paddingBottom: 100 }}
+                showsVerticalScrollIndicator={false}
+            >
+                <View className="mb-10">
+                    <Text className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[2px] mb-6 px-1">Direct Channels</Text>
+                    <Card className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 overflow-hidden shadow-sm">
                         <TouchableOpacity
-                            style={styles.contactItem}
+                            className="flex-row items-center gap-5 p-6 active:bg-slate-50 dark:active:bg-slate-800/50"
                             onPress={() => Linking.openURL('mailto:support@tcsygo.com')}
                         >
-                            <View style={styles.contactIcon}>
-                                <Ionicons name="mail-outline" size={24} color="#3b82f6" />
+                            <View className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-900/20 justify-center items-center">
+                                <Ionicons name="mail" size={24} color="#3b82f6" />
                             </View>
-                            <View>
-                                <Text style={styles.contactLabel}>Email Support</Text>
-                                <Text style={styles.contactValue}>support@tcsygo.com</Text>
+                            <View className="flex-1">
+                                <Text className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Mail Transmission</Text>
+                                <Text className="text-base font-black text-slate-900 dark:text-white uppercase tracking-tighter">support@tcsygo.com</Text>
                             </View>
+                            <Ionicons name="chevron-forward" size={20} color={isDark ? "#475569" : "#cbd5e1"} />
                         </TouchableOpacity>
-                        <View style={styles.separator} />
+                        
+                        <View className="h-[1px] bg-slate-50 dark:bg-slate-800/50 mx-6" />
+                        
                         <TouchableOpacity
-                            style={styles.contactItem}
+                            className="flex-row items-center gap-5 p-6 active:bg-slate-50 dark:active:bg-slate-800/50"
                             onPress={() => Linking.openURL('tel:+919876543210')}
                         >
-                            <View style={styles.contactIcon}>
-                                <Ionicons name="call-outline" size={24} color="#22c55e" />
+                            <View className="w-14 h-14 rounded-2xl bg-green-50 dark:bg-green-900/20 justify-center items-center">
+                                <Ionicons name="call" size={24} color="#22c55e" />
                             </View>
-                            <View>
-                                <Text style={styles.contactLabel}>Phone Support</Text>
-                                <Text style={styles.contactValue}>+91 98765 43210</Text>
+                            <View className="flex-1">
+                                <Text className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Voice Terminal</Text>
+                                <Text className="text-base font-black text-slate-900 dark:text-white uppercase tracking-tighter">+91 98765 43210</Text>
                             </View>
+                            <Ionicons name="chevron-forward" size={20} color={isDark ? "#475569" : "#cbd5e1"} />
                         </TouchableOpacity>
-                    </View>
+                    </Card>
                 </View>
-
-                <View style={styles.faqSection}>
-                    <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
-                    {faqItems.map((item, index) => (
-                        <View key={index} style={styles.faqCard}>
-                            <Text style={styles.faqQuestion}>{item.q}</Text>
-                            <Text style={styles.faqAnswer}>{item.a}</Text>
-                        </View>
+ 
+                <View className="mb-10">
+                    <Text className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[2px] mb-6 px-1">Common Queries</Text>
+                    {FAQ_ITEMS.map((item, index) => (
+                        <Card key={index} className="bg-white dark:bg-slate-900 rounded-[28px] p-6 mb-4 border border-slate-100 dark:border-slate-800 shadow-sm">
+                            <Text className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight mb-2 leading-5">{item.q}</Text>
+                            <Text className="text-[11px] font-medium text-slate-500 dark:text-slate-500 leading-5">{item.a}</Text>
+                        </Card>
                     ))}
                 </View>
-
-                <TouchableOpacity style={styles.feedbackBtn}>
-                    <Text style={styles.feedbackBtnText}>Submit Feedback</Text>
+ 
+                <TouchableOpacity 
+                    className="bg-slate-900 dark:bg-white h-16 rounded-[24px] items-center justify-center mb-10 shadow-lg shadow-slate-900/10"
+                >
+                    <Text className="text-white dark:text-slate-900 font-black uppercase tracking-widest">Transmit Feedback</Text>
                 </TouchableOpacity>
+ 
+                <View className="px-10 opacity-30 mb-20">
+                    <Text className="text-[9px] font-extrabold text-slate-500 text-center uppercase leading-4 tracking-widest">
+                        By using the support system, you agree to our terms of service and communications policy.
+                    </Text>
+                </View>
             </ScrollView>
         </SafeAreaView>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#f9fafb',
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        backgroundColor: '#fff',
-        borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
-    },
-    backButton: {
-        padding: 4,
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    scrollContent: {
-        padding: 20,
-    },
-    contactSection: {
-        marginBottom: 30,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#1f2937',
-        marginBottom: 12,
-    },
-    card: {
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-        overflow: 'hidden',
-    },
-    contactItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 16,
-        padding: 16,
-    },
-    contactIcon: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: '#f3f4f6',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    contactLabel: {
-        fontSize: 14,
-        color: '#6b7280',
-    },
-    contactValue: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#1f2937',
-    },
-    separator: {
-        height: 1,
-        backgroundColor: '#f3f4f6',
-        marginHorizontal: 16,
-    },
-    faqSection: {
-        marginBottom: 30,
-    },
-    faqCard: {
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 12,
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-    },
-    faqQuestion: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#1f2937',
-        marginBottom: 8,
-    },
-    faqAnswer: {
-        fontSize: 14,
-        color: '#4b5563',
-        lineHeight: 20,
-    },
-    feedbackBtn: {
-        backgroundColor: '#fff',
-        borderWidth: 1,
-        borderColor: '#3b82f6',
-        padding: 16,
-        borderRadius: 8,
-        alignItems: 'center',
-        marginTop: 10,
-        marginBottom: 40,
-    },
-    feedbackBtnText: {
-        color: '#3b82f6',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-});

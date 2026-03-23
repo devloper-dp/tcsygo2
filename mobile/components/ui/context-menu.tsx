@@ -1,9 +1,9 @@
 import React from 'react';
-import { View, TouchableOpacity, Modal, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, TouchableOpacity, Modal, Pressable, Platform } from 'react-native';
 import { Text } from './text';
 import * as Haptics from 'expo-haptics';
-import { cn } from '@/lib/utils';
-
+import { useTheme } from '@/contexts/ThemeContext';
+ 
 export interface ContextMenuItem {
     label: string;
     onPress: () => void;
@@ -11,31 +11,31 @@ export interface ContextMenuItem {
     destructive?: boolean;
     disabled?: boolean;
 }
-
+ 
 interface ContextMenuProps {
     children: React.ReactNode;
     items: ContextMenuItem[];
     className?: string;
 }
-
+ 
 export function ContextMenu({ children, items, className }: ContextMenuProps) {
+    const { isDark } = useTheme();
     const [visible, setVisible] = React.useState(false);
-    const [position, setPosition] = React.useState({ x: 0, y: 0 });
-
-    const handleLongPress = (event: any) => {
+ 
+    const handleLongPress = () => {
         if (Platform.OS === 'ios') {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         }
         setVisible(true);
     };
-
+ 
     const handleItemPress = (item: ContextMenuItem) => {
         if (!item.disabled) {
             setVisible(false);
             item.onPress();
         }
     };
-
+ 
     return (
         <View className={className}>
             <TouchableOpacity
@@ -45,33 +45,28 @@ export function ContextMenu({ children, items, className }: ContextMenuProps) {
             >
                 {children}
             </TouchableOpacity>
-
+ 
             <Modal
                 transparent
                 visible={visible}
                 animationType="fade"
                 onRequestClose={() => setVisible(false)}
             >
-                <Pressable style={styles.overlay} onPress={() => setVisible(false)}>
-                    <View style={styles.menu}>
+                <Pressable 
+                    className="flex-1 justify-center items-center bg-black/40 dark:bg-black/60" 
+                    onPress={() => setVisible(false)}
+                >
+                    <View className="bg-white dark:bg-slate-900 rounded-[32px] min-w-[240px] max-w-[320px] shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden">
                         {items.map((item, index) => (
                             <TouchableOpacity
                                 key={index}
                                 onPress={() => handleItemPress(item)}
                                 disabled={item.disabled}
-                                style={[
-                                    styles.menuItem,
-                                    index !== items.length - 1 && styles.menuItemBorder,
-                                    item.disabled && styles.menuItemDisabled,
-                                ]}
+                                className={`flex-row items-center px-6 py-5 active:bg-slate-50 dark:active:bg-slate-800/50 ${index !== items.length - 1 ? 'border-b border-slate-50 dark:border-slate-800' : ''} ${item.disabled ? 'opacity-30' : ''}`}
                             >
-                                {item.icon && <View style={styles.icon}>{item.icon}</View>}
+                                {item.icon && <View className="mr-4">{item.icon}</View>}
                                 <Text
-                                    style={[
-                                        styles.menuItemText,
-                                        item.destructive && styles.destructiveText,
-                                        item.disabled && styles.disabledText,
-                                    ]}
+                                    className={`text-sm font-black uppercase tracking-tight ${item.destructive ? 'text-red-500' : 'text-slate-900 dark:text-white'} ${item.disabled ? 'text-slate-400' : ''}`}
                                 >
                                     {item.label}
                                 </Text>
@@ -83,55 +78,3 @@ export function ContextMenu({ children, items, className }: ContextMenuProps) {
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    overlay: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    },
-    menu: {
-        backgroundColor: '#ffffff',
-        borderRadius: 12,
-        minWidth: 200,
-        maxWidth: 300,
-        ...Platform.select({
-            ios: {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.3,
-                shadowRadius: 8,
-            },
-            android: {
-                elevation: 8,
-            },
-        }),
-    },
-    menuItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 14,
-        paddingHorizontal: 16,
-    },
-    menuItemBorder: {
-        borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
-    },
-    menuItemDisabled: {
-        opacity: 0.5,
-    },
-    icon: {
-        marginRight: 12,
-    },
-    menuItemText: {
-        fontSize: 16,
-        color: '#1f2937',
-    },
-    destructiveText: {
-        color: '#ef4444',
-    },
-    disabledText: {
-        color: '#9ca3af',
-    },
-});

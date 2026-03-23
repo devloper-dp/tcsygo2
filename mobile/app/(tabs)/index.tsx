@@ -1,38 +1,103 @@
-import { View, StyleSheet, TouchableOpacity, ScrollView, ImageBackground } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Modal, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
-import { Ionicons } from '@expo/vector-icons';
-import { LocationAutocomplete } from '@/components/LocationAutocomplete';
+import { LinearGradient } from 'expo-linear-gradient';
+import { LocationInput } from '@/components/LocationInput';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Text } from '@/components/ui/text';
-import { Calendar } from '@/components/ui/calendar';
 import { Coordinates } from '@/lib/maps';
 import { QuickActions } from '@/components/QuickActions';
 import { PopularRoutesMobile } from '@/components/HomeComponents';
 import { HomeMap } from '@/components/HomeMap';
-import { RideService, Ride } from '@/services/RideService';
+import { RideService } from '@/services/RideService';
 import { supabase } from '@/lib/supabase';
 import { QuickBookModal } from '@/components/QuickBookModal';
+import { useQuery } from '@tanstack/react-query';
+import { OnboardingTutorial } from '@/components/OnboardingTutorial';
+import { SafetyTips } from '@/components/SafetyTips';
+import { CarbonFootprint } from '@/components/CarbonFootprint';
+import { RidePreferences } from '@/components/RidePreferences';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
+import { Bell, User, Map as MapIcon, Plus, X, Search, ArrowRight } from 'lucide-react-native';
+import { useResponsive } from '@/hooks/useResponsive';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { user } = useAuth();
+  const { t } = useTranslation();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
+  const { hScale, vScale, spacing, fontSize } = useResponsive();
   const [pickup, setPickup] = useState('');
   const [pickupCoords, setPickupCoords] = useState<Coordinates>();
   const [drop, setDrop] = useState('');
   const [dropCoords, setDropCoords] = useState<Coordinates>();
   const [selectedDate, setSelectedDate] = useState<Date>();
-  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // State for QuickActions data
   const [recentRide, setRecentRide] = useState<{ destination: string; time: string } | undefined>();
   const [savedPlaces, setSavedPlaces] = useState<Array<{ id: string, name: string, icon: string, lat?: number, lng?: number }>>([]);
   const [showQuickBook, setShowQuickBook] = useState(false);
 
+  // New States
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showPreferences, setShowPreferences] = useState(false);
+
+  // Fetch user statistics
+  const { data: userStats } = useQuery({
+    queryKey: ['user-stats'],
+    queryFn: async () => {
+      if (!user) return { totalDistance: 0, totalRides: 0 };
+
+      const { data: bookings } = await supabase
+        .from('bookings')
+        .select('trip:trips(distance_covered)')
+        .eq('passenger_id', user.id)
+        .eq('status', 'completed');
+
+      const totalDistance = bookings?.reduce((sum, b: any) => sum + (parseFloat(b.trip?.distance_covered) || 0), 0) || 0;
+      return { totalDistance, totalRides: bookings?.length || 0 };
+    },
+    enabled: !!user
+  });
+
   useEffect(() => {
     fetchUserData();
+    checkOnboarding();
+    checkActiveDriverTrip();
   }, []);
+
+  const checkOnboarding = async () => {
+    // Check local storage first
+    const hasCompleted = await AsyncStorage.getItem('onboarding_completed');
+    if (!hasCompleted) {
+      setShowOnboarding(true);
+    }
+  };
+
+  const checkActiveDriverTrip = async () => {
+    // If user is a driver, check for ongoing trips to redirect
+    if (user?.role === 'driver') {
+      const { data: driver } = await supabase.from('drivers').select('id').eq('user_id', user.id).single();
+      if (driver) {
+        const { data: activeTrip } = await supabase
+          .from('trips')
+          .select('id')
+          .eq('driver_id', driver.id)
+          .eq('status', 'ongoing')
+          .maybeSingle();
+
+        if (activeTrip) {
+          router.replace(`/track/${activeTrip.id}`);
+        }
+      }
+    }
+  };
 
   const fetchUserData = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -46,15 +111,8 @@ export default function HomeScreen() {
       });
     }
 
-    const { data: places, error: placesError } = await supabase
-      .from('saved_places')
-      .select('*')
-      .eq('user_id', user.id);
-
-    if (placesError) {
-      console.log('Error fetching saved places:', placesError);
-      setSavedPlaces([]);
-    } else if (places && places.length > 0) {
+    const { data: places } = await supabase.from('saved_places').select('*').eq('user_id', user.id);
+    if (places && places.length > 0) {
       setSavedPlaces(places.map((p: any) => ({
         id: p.id,
         name: p.label || p.name,
@@ -62,32 +120,25 @@ export default function HomeScreen() {
         lat: p.latitude,
         lng: p.longitude
       })));
-    } else {
-      setSavedPlaces([]);
     }
   };
 
   const handleSearch = () => {
     if (!pickup || !drop) return;
-
-    const params = {
-      pickup,
-      drop,
-      pickupLat: pickupCoords?.lat.toString(),
-      pickupLng: pickupCoords?.lng.toString(),
-      dropLat: dropCoords?.lat.toString(),
-      dropLng: dropCoords?.lng.toString(),
-      date: selectedDate?.toISOString(),
-    };
-
     router.push({
       pathname: '/(tabs)/search',
-      params
+      params: {
+        pickup, drop,
+        pickupLat: pickupCoords?.lat.toString(),
+        pickupLng: pickupCoords?.lng.toString(),
+        dropLat: dropCoords?.lat.toString(),
+        dropLng: dropCoords?.lng.toString(),
+        date: selectedDate?.toISOString(),
+      }
     });
   };
 
   const handleQuickAction = async (action: string) => {
-    console.log('Quick Action:', action);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
@@ -101,134 +152,129 @@ export default function HomeScreen() {
         setDropCoords({ lat: ride.drop_lat, lng: ride.drop_lng });
       }
     } else if (action === 'add_place') {
-      router.push('/saved-places' as any);
+      router.push('/saved-places');
+    } else if (action === 'preferences') {
+      setShowPreferences(true);
     } else if (action.startsWith('place_')) {
       const placeId = action.split('_')[1];
       const place = savedPlaces.find(p => p.id === placeId);
       if (place) {
         setDrop(place.name);
-        if (place.lat && place.lng) {
-          setDropCoords({ lat: place.lat, lng: place.lng });
-        }
+        if (place.lat && place.lng) setDropCoords({ lat: place.lat, lng: place.lng });
       }
     }
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View className="flex-row justify-between items-center px-4 py-3 bg-white border-b border-gray-200">
-        <View className="flex-row items-center gap-2">
-          <View className="w-8 h-8 rounded-lg bg-primary items-center justify-center">
-            <Text className="text-white font-bold text-lg">T</Text>
+    <View className="flex-1 bg-slate-50 dark:bg-slate-950">
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={isDark ? "#020617" : "#ffffff"} />
+
+      {/* Onboarding Tutorial */}
+      <OnboardingTutorial
+        visible={showOnboarding}
+        onComplete={() => setShowOnboarding(false)}
+      />
+
+      {/* Ride Preferences Modal */}
+      <Modal
+        visible={showPreferences}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPreferences(false)}
+      >
+        <TouchableOpacity
+          className="flex-1 bg-black/50 justify-end"
+          activeOpacity={1}
+          >
+          <View style={{ borderTopLeftRadius: hScale(24), borderTopRightRadius: hScale(24), padding: spacing.xl }} className="bg-white dark:bg-slate-900 max-h-[80%]">
+            <View style={{ paddingBottom: vScale(16), marginBottom: vScale(8), borderBottomWidth: 1 }} className="flex-row justify-between items-center border-slate-100 dark:border-slate-800">
+              <Text style={{ fontSize: fontSize.xl }} className="font-bold text-slate-900 dark:text-white">Ride Preferences</Text>
+              <TouchableOpacity onPress={() => setShowPreferences(false)}>
+                <X size={hScale(24)} color={isDark ? "#94a3b8" : "#64748b"} />
+              </TouchableOpacity>
+            </View>
+            <RidePreferences userId={user?.id} />
           </View>
-          <Text variant="h3" className="text-primary text-xl font-bold">TCSYGO</Text>
-        </View>
-        <View className="flex-row items-center gap-2">
-          <TouchableOpacity onPress={() => router.push('/notifications')}>
-            <Ionicons name="notifications-outline" size={24} color="#3b82f6" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/profile')}>
-            <Ionicons name="person-circle-outline" size={32} color="#3b82f6" />
-            <View style={{ position: 'absolute', bottom: 0, right: 0, width: 10, height: 10, borderRadius: 5, backgroundColor: '#10b981', borderWidth: 1, borderColor: 'white' }} />
-          </TouchableOpacity>
-        </View>
+        </TouchableOpacity>
+      </Modal>
+
+
+      {/* HEADER: Premium Slate Design */}
+      <View style={{ paddingTop: vScale(8), paddingHorizontal: spacing.xl, paddingBottom: vScale(16), borderBottomWidth: 1 }} className="bg-white dark:bg-slate-900 border-slate-50 dark:border-slate-800 z-50 shadow-sm">
+        <SafeAreaView edges={['top']} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+            <View style={{ width: hScale(40), height: hScale(40), borderRadius: hScale(20), borderWidth: 1 }} className="bg-slate-100 dark:bg-slate-800 items-center justify-center border-slate-200 dark:border-slate-700 overflow-hidden">
+              <Text style={{ fontSize: fontSize.lg }} className="text-slate-600 dark:text-slate-400 font-bold">{user?.fullName?.charAt(0) || 'U'}</Text>
+            </View>
+            <View>
+              <Text style={{ fontSize: hScale(10) }} className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Good Morning,</Text>
+              <Text style={{ fontSize: fontSize.lg }} className="font-extrabold text-slate-900 dark:text-white leading-tight">{user?.fullName?.split(' ')[0]}</Text>
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+            <TouchableOpacity
+              onPress={() => router.push('/notifications')}
+              style={{ width: hScale(40), height: hScale(40), borderRadius: hScale(20), borderWidth: 1 }}
+              className="bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700 items-center justify-center active:bg-slate-100"
+            >
+              <Bell size={hScale(20)} color={isDark ? "#94a3b8" : "#64748b"} />
+              <View style={{ top: vScale(10), right: hScale(12), width: hScale(8), height: hScale(8) }} className="absolute rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-900" />
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Search Card */}
-        <View className="px-4 py-6 bg-blue-600 pb-12">
-          <Text style={styles.heroTitle}>Where to today?</Text>
-        </View>
+      <ScrollView 
+        style={{ flex: 1, paddingHorizontal: spacing.xl }} 
+        contentContainerStyle={{ paddingBottom: vScale(100), paddingTop: vScale(24) }} 
+        showsVerticalScrollIndicator={false}
+      >
 
-        <View className="px-4 -mt-8">
-          <Card className="p-4 bg-white shadow-lg">
-            <View className="gap-4">
-              <View className="relative z-20">
-                <LocationAutocomplete
-                  placeholder="Pickup location"
+        {/* HERO CARD: Search */}
+        <View style={{ marginBottom: vScale(32) }}>
+          <Card style={{ padding: spacing.xl, borderRadius: hScale(24), borderWidth: 1 }} className="bg-white dark:bg-slate-900 shadow-lg shadow-slate-200/50 border-slate-100 dark:border-slate-800">
+            <View style={{ borderRadius: hScale(16), borderWidth: 1, marginBottom: vScale(24) }} className="bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700 overflow-hidden relative">
+              {/* Connector Line */}
+              <View style={{ left: hScale(34), top: vScale(44), bottom: vScale(44), width: 2 }} className="absolute bg-slate-300 dark:bg-slate-600 z-10" />
+
+              <View style={{ padding: spacing.xs }}>
+                <LocationInput
+                  placeholder="Current Location"
                   value={pickup}
                   onChange={(val, coords) => {
                     setPickup(val);
                     if (coords) setPickupCoords(coords);
                   }}
-                  className="z-20"
+                  isPickup
                 />
               </View>
-
-              <View className="relative z-10">
-                <LocationAutocomplete
-                  placeholder="Drop location"
+              <View style={{ height: 1, marginHorizontal: spacing.xl }} className="bg-slate-200 dark:bg-slate-700" />
+              <View style={{ padding: spacing.xs }}>
+                <LocationInput
+                  placeholder="Enter destination"
                   value={drop}
                   onChange={(val, coords) => {
                     setDrop(val);
                     if (coords) setDropCoords(coords);
                   }}
-                  className="z-10"
                 />
               </View>
-
-              <TouchableOpacity
-                onPress={() => setShowDatePicker(!showDatePicker)}
-                style={styles.dateButton}
-              >
-                <Ionicons name="calendar-outline" size={20} color="#6b7280" />
-                <Text style={styles.dateText}>
-                  {selectedDate ? selectedDate.toLocaleDateString() : 'Now'}
-                </Text>
-                {!selectedDate && <Text style={{ fontSize: 10, color: '#10b981', marginLeft: 'auto', fontWeight: 'bold' }}>CHEAPEST</Text>}
-              </TouchableOpacity>
-
-              {showDatePicker && (
-                <Calendar
-                  selected={selectedDate}
-                  onSelect={(date) => {
-                    setSelectedDate(date);
-                    setShowDatePicker(false);
-                  }}
-                  minDate={new Date()}
-                />
-              )}
-
-              <Button
-                onPress={handleSearch}
-                disabled={!pickup || !drop}
-                size="lg"
-                className="w-full mt-2"
-              >
-                <Ionicons name="search" size={20} color="white" style={{ marginRight: 8 }} />
-                Search Rides
-              </Button>
-
-              <Button
-                onPress={() => setShowQuickBook(true)}
-                disabled={!pickup || !drop}
-                variant="outline"
-                size="lg"
-                className="w-full"
-              >
-                <Ionicons name="flash" size={20} color="#3b82f6" style={{ marginRight: 8 }} />
-                Quick Book (Instant)
-              </Button>
             </View>
+
+            <Button
+              onPress={handleSearch}
+              disabled={!pickup || !drop}
+              style={{ width: '100%', height: vScale(56), borderRadius: hScale(16), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.md }}
+              className={`shadow-button ${!pickup || !drop ? (isDark ? 'bg-slate-800' : 'bg-slate-300') : (isDark ? 'bg-white' : 'bg-slate-900')}`}
+            >
+              <Search size={hScale(20)} color={isDark && pickup && drop ? "black" : "white"} />
+              <Text style={{ fontSize: fontSize.lg }} className={`${isDark && pickup && drop ? 'text-slate-900' : 'text-white'} font-bold tracking-wide`}>Find a Ride</Text>
+            </Button>
           </Card>
         </View>
 
-        {pickupCoords && dropCoords && (
-          <QuickBookModal
-            visible={showQuickBook}
-            onClose={() => setShowQuickBook(false)}
-            pickup={{ address: pickup, coords: pickupCoords }}
-            drop={{ address: drop, coords: dropCoords }}
-            onBookingSuccess={(bookingId) => {
-              setShowQuickBook(false);
-              router.push(`/booking/${bookingId}`);
-            }}
-          />
-        )}
-
-        {/* Quick Actions (Rapido Style) */}
-        <View className="px-4 mt-8">
+        {/* Quick Actions */}
+        <View style={{ marginBottom: vScale(32) }}>
           <QuickActions
             onAction={handleQuickAction}
             recentRide={recentRide}
@@ -236,233 +282,88 @@ export default function HomeScreen() {
           />
         </View>
 
-        {/* Map View */}
-        <HomeMap />
+        <View style={{ marginBottom: vScale(32) }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: vScale(16), paddingHorizontal: spacing.xs }}>
+            <View>
+              <Text style={{ fontSize: fontSize.lg }} className="font-bold text-slate-900 dark:text-white">Nearby Rides</Text>
+              <Text style={{ fontSize: fontSize.sm, marginTop: vScale(2) }} className="text-slate-500 dark:text-slate-400 font-medium">Explore available rides around you</Text>
+            </View>
+            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={{ fontSize: hScale(12), marginRight: spacing.xs }} className="text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wide">View All</Text>
+              <ArrowRight size={hScale(12)} color={isDark ? "#60a5fa" : "#2563eb"} />
+            </TouchableOpacity>
+          </View>
 
-        {/* Popular Routes */}
-        <View className="px-4 mt-4">
-          <PopularRoutesMobile />
-        </View>
-
-        {/* Why Choose TCSYGO */}
-        <View className="px-4 mt-8">
-          <Text style={styles.sectionTitle}>Why Choose TCSYGO?</Text>
-
-          <View style={styles.featureGrid}>
-            <Card className="p-6 mb-4">
-              <View className="items-center">
-                <View style={[styles.iconCircle, { backgroundColor: '#dbeafe' }]}>
-                  <Ionicons name="cash-outline" size={32} color="#3b82f6" />
-                </View>
-                <Text style={styles.featureTitle}>Save Money</Text>
-                <Text style={styles.featureDescription}>
-                  Share travel costs and make your journey more affordable
-                </Text>
-              </View>
-            </Card>
-
-            <Card className="p-6 mb-4">
-              <View className="items-center">
-                <View style={[styles.iconCircle, { backgroundColor: '#d1fae5' }]}>
-                  <Ionicons name="leaf-outline" size={32} color="#10b981" />
-                </View>
-                <Text style={styles.featureTitle}>Go Green</Text>
-                <Text style={styles.featureDescription}>
-                  Reduce carbon emissions by sharing rides with others
-                </Text>
-              </View>
-            </Card>
-
-            <Card className="p-6 mb-4">
-              <View className="items-center">
-                <View style={[styles.iconCircle, { backgroundColor: '#fef3c7' }]}>
-                  <Ionicons name="shield-checkmark-outline" size={32} color="#f59e0b" />
-                </View>
-                <Text style={styles.featureTitle}>Travel Safe</Text>
-                <Text style={styles.featureDescription}>
-                  Verified drivers and secure payment options for peace of mind
-                </Text>
-              </View>
-            </Card>
+          <View style={{ height: vScale(256), borderRadius: hScale(24), borderWidth: 1 }} className="overflow-hidden shadow-md bg-slate-100 border-slate-100 relative">
+            <HomeMap />
+            <LinearGradient
+              colors={['transparent', 'rgba(15, 23, 42, 0.05)']}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={{ bottom: vScale(16), right: hScale(16), width: hScale(48), height: hScale(48), borderRadius: hScale(16), borderWidth: 1 }}
+              className="absolute bg-white items-center justify-center shadow-lg border-slate-100"
+            >
+              <MapIcon size={hScale(24)} color="#0f172a" />
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* How It Works */}
-        <View className="px-4 mt-8 mb-8">
-          <Text style={styles.sectionTitle}>How It Works</Text>
-
-          <Card className="p-4 mb-3">
-            <View className="flex-row items-start gap-4">
-              <View style={styles.stepNumber}>
-                <Text style={styles.stepNumberText}>1</Text>
-              </View>
-              <View className="flex-1">
-                <Text style={styles.stepTitle}>Search for a ride</Text>
-                <Text style={styles.stepDescription}>
-                  Enter your pickup and drop locations to find available trips
-                </Text>
-              </View>
+        {/* Popular Routes */}
+        <View style={{ marginBottom: vScale(32) }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: vScale(16), paddingHorizontal: spacing.xs }}>
+            <View>
+              <Text style={{ fontSize: fontSize.lg }} className="font-bold text-slate-900 dark:text-white">{t('popular_routes') || "Popular Routes"}</Text>
+              <Text style={{ fontSize: fontSize.sm, marginTop: vScale(2) }} className="text-slate-500 dark:text-slate-400 font-medium">Most traveled paths this week</Text>
             </View>
-          </Card>
-
-          <Card className="p-4 mb-3">
-            <View className="flex-row items-start gap-4">
-              <View style={styles.stepNumber}>
-                <Text style={styles.stepNumberText}>2</Text>
-              </View>
-              <View className="flex-1">
-                <Text style={styles.stepTitle}>Book your seat</Text>
-                <Text style={styles.stepDescription}>
-                  Choose a trip that matches your schedule and budget
-                </Text>
-              </View>
-            </View>
-          </Card>
-
-          <Card className="p-4 mb-3">
-            <View className="flex-row items-start gap-4">
-              <View style={styles.stepNumber}>
-                <Text style={styles.stepNumberText}>3</Text>
-              </View>
-              <View className="flex-1">
-                <Text style={styles.stepTitle}>Enjoy your journey</Text>
-                <Text style={styles.stepDescription}>
-                  Track your ride in real-time and arrive safely at your destination
-                </Text>
-              </View>
-            </View>
-          </Card>
+          </View>
+          <PopularRoutesMobile />
         </View>
 
-        {/* CTA Buttons */}
-        <View className="px-4 mb-8">
-          <Button
-            size="lg"
-            className="w-full mb-3"
-            onPress={() => router.push('/(tabs)/search')}
-          >
-            <Ionicons name="people-outline" size={20} color="white" style={{ marginRight: 8 }} />
-            Find a Ride
-          </Button>
-          <Button
-            size="lg"
-            variant="outline"
-            className="w-full"
-            onPress={() => router.push('/create-trip')}
-          >
-            Offer a Ride
-          </Button>
+        {/* Safety Tips Section */}
+        <View style={{ marginBottom: vScale(32) }}>
+          <Text style={{ fontSize: fontSize.lg, marginBottom: vScale(16), paddingHorizontal: spacing.xs }} className="font-bold text-slate-900 dark:text-white">Safety First</Text>
+          <SafetyTips />
         </View>
+
+        {/* Carbon Footprint Section - Only show if data exists */}
+        {userStats && (userStats.totalDistance > 0 || userStats.totalRides > 0) && (
+          <View style={{ marginBottom: vScale(32) }}>
+            <Text style={{ fontSize: fontSize.lg, marginBottom: vScale(16), paddingHorizontal: spacing.xs }} className="font-bold text-slate-900 dark:text-white">Your Impact</Text>
+            <CarbonFootprint totalDistance={userStats.totalDistance} totalRides={userStats.totalRides} />
+          </View>
+        )}
+
       </ScrollView>
 
-      {/* FAB for Create Trip */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => router.push('/create-trip')}
-      >
-        <Ionicons name="add" size={28} color="white" />
-      </TouchableOpacity>
-    </SafeAreaView>
+      {/* Primary Floating Action Button - Drivers Only */}
+      {user?.role === 'driver' && (
+        <TouchableOpacity
+          onPress={() => router.push('/create-trip')}
+          activeOpacity={0.9}
+          style={{ bottom: vScale(24), right: hScale(24), width: hScale(64), height: hScale(64), borderRadius: hScale(32), borderWidth: 4 }}
+          className="absolute bg-slate-900 items-center justify-center shadow-xl z-50 border-white"
+        >
+          <Plus size={hScale(32)} color="white" />
+        </TouchableOpacity>
+      )}
+
+      {/* Booking Modal */}
+      {pickupCoords && dropCoords && (
+        <QuickBookModal
+          visible={showQuickBook}
+          onClose={() => setShowQuickBook(false)}
+          pickup={{ address: pickup, coords: pickupCoords }}
+          drop={{ address: drop, coords: dropCoords }}
+          onBookingSuccess={(bookingId) => {
+            setShowQuickBook(false);
+            router.push(`/booking/${bookingId}`);
+          }}
+        />
+      )}
+
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f9fafb',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  heroTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 12,
-  },
-  dateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    backgroundColor: '#ffffff',
-  },
-  dateText: {
-    fontSize: 14,
-    color: '#6b7280',
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  featureGrid: {
-    gap: 16,
-  },
-  iconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  featureTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 8,
-  },
-  featureDescription: {
-    fontSize: 14,
-    color: '#6b7280',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  stepNumber: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#dbeafe',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stepNumberText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#3b82f6',
-  },
-  stepTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 4,
-  },
-  stepDescription: {
-    fontSize: 14,
-    color: '#6b7280',
-    lineHeight: 20,
-  },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#3b82f6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-});

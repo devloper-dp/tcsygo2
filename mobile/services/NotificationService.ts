@@ -1,19 +1,59 @@
-import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
-import { Platform } from 'react-native';
+import Constants from 'expo-constants';
+import { Platform, LogBox } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { logger } from './LoggerService';
 
-// Configure notification behavior
-Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-        shouldShowBanner: true,
-        shouldShowList: true,
-    }),
-});
+// Check if running in Expo Go (where push notifications are not supported in SDK 53+)
+const isExpoGo = Constants.appOwnership === 'expo';
+
+// Conditionally import expo-notifications only if not in Expo Go
+let Notifications: any = null;
+if (!isExpoGo) {
+    try {
+        Notifications = require('expo-notifications');
+    } catch (error) {
+        logger.warn('Failed to load expo-notifications module:', error);
+    }
+}
+
+// Suppress the Expo Go notification warning since we handle it gracefully
+if (isExpoGo) {
+    LogBox.ignoreLogs([
+        '`expo-notifications` functionality is not fully supported in Expo Go',
+        'expo-notifications',
+        'Android Push notifications',
+    ]);
+}
+
+// Configure notification behavior only if not in Expo Go
+if (!isExpoGo && Notifications) {
+    try {
+        Notifications.setNotificationHandler({
+            handleNotification: async () => ({
+                shouldShowAlert: true,
+                shouldPlaySound: true,
+                shouldSetBadge: true,
+                shouldShowBanner: true,
+                shouldShowList: true,
+            }),
+        });
+    } catch (error) {
+        logger.warn('Failed to set notification handler (likely running in Expo Go):', error);
+    }
+}
+
+/**
+ * Check if push notifications are available
+ * Returns false when running in Expo Go
+ */
+const areNotificationsAvailable = (): boolean => {
+    if (isExpoGo || !Notifications) {
+        logger.info('Push notifications are not available in Expo Go. Use a development build for full notification support.');
+        return false;
+    }
+    return true;
+};
 
 export type NotificationType =
     | 'booking_confirmation'
@@ -44,6 +84,10 @@ export const NotificationService = {
      * Register for push notifications and get Expo push token
      */
     registerForPushNotifications: async (): Promise<string | null> => {
+        if (!areNotificationsAvailable()) {
+            return null;
+        }
+
         try {
             if (!Device.isDevice) {
                 logger.warn('Push notifications only work on physical devices');
@@ -51,11 +95,11 @@ export const NotificationService = {
             }
 
             // Request permissions
-            const { status: existingStatus } = await Notifications.getPermissionsAsync();
+            const { status: existingStatus } = await Notifications!.getPermissionsAsync();
             let finalStatus = existingStatus;
 
             if (existingStatus !== 'granted') {
-                const { status } = await Notifications.requestPermissionsAsync();
+                const { status } = await Notifications!.requestPermissionsAsync();
                 finalStatus = status;
             }
 
@@ -65,7 +109,7 @@ export const NotificationService = {
             }
 
             // Get Expo push token
-            const tokenData = await Notifications.getExpoPushTokenAsync({
+            const tokenData = await Notifications!.getExpoPushTokenAsync({
                 projectId: process.env.EXPO_PUBLIC_PROJECT_ID,
             });
 
@@ -78,7 +122,7 @@ export const NotificationService = {
             }
 
             // Configure notification channels for Android
-            if (Platform.OS === 'android') {
+            if (Platform.OS === 'android' && Notifications) {
                 await Notifications.setNotificationChannelAsync('default', {
                     name: 'Default',
                     importance: Notifications.AndroidImportance.MAX,
@@ -147,14 +191,19 @@ export const NotificationService = {
         data?: any,
         channelId: string = 'default'
     ): Promise<string> => {
+        if (!areNotificationsAvailable()) {
+            logger.info(`[Expo Go] Would send notification: ${title} - ${body}`);
+            return 'expo-go-mock-id';
+        }
+
         try {
-            const notificationId = await Notifications.scheduleNotificationAsync({
+            const notificationId = await Notifications!.scheduleNotificationAsync({
                 content: {
                     title,
                     body,
                     data,
                     sound: true,
-                    priority: Notifications.AndroidNotificationPriority.HIGH,
+                    priority: Notifications!.AndroidNotificationPriority.HIGH,
                 },
                 trigger: null, // Send immediately
             });
@@ -175,8 +224,13 @@ export const NotificationService = {
         triggerDate: Date,
         data?: any
     ): Promise<string> => {
+        if (!areNotificationsAvailable()) {
+            logger.info(`[Expo Go] Would schedule notification for ${triggerDate}: ${title}`);
+            return 'expo-go-mock-scheduled-id';
+        }
+
         try {
-            const notificationId = await Notifications.scheduleNotificationAsync({
+            const notificationId = await Notifications!.scheduleNotificationAsync({
                 content: {
                     title,
                     body,
@@ -197,8 +251,12 @@ export const NotificationService = {
      * Cancel scheduled notification
      */
     cancelNotification: async (notificationId: string): Promise<void> => {
+        if (!areNotificationsAvailable()) {
+            return;
+        }
+
         try {
-            await Notifications.cancelScheduledNotificationAsync(notificationId);
+            await Notifications!.cancelScheduledNotificationAsync(notificationId);
         } catch (error) {
             logger.error('Error canceling notification:', error);
         }
@@ -208,8 +266,12 @@ export const NotificationService = {
      * Cancel all notifications
      */
     cancelAllNotifications: async (): Promise<void> => {
+        if (!areNotificationsAvailable()) {
+            return;
+        }
+
         try {
-            await Notifications.cancelAllScheduledNotificationsAsync();
+            await Notifications!.cancelAllScheduledNotificationsAsync();
         } catch (error) {
             logger.error('Error canceling all notifications:', error);
         }
@@ -219,8 +281,12 @@ export const NotificationService = {
      * Get badge count
      */
     getBadgeCount: async (): Promise<number> => {
+        if (!areNotificationsAvailable()) {
+            return 0;
+        }
+
         try {
-            return await Notifications.getBadgeCountAsync();
+            return await Notifications!.getBadgeCountAsync();
         } catch (error) {
             logger.error('Error getting badge count:', error);
             return 0;
@@ -231,8 +297,12 @@ export const NotificationService = {
      * Set badge count
      */
     setBadgeCount: async (count: number): Promise<void> => {
+        if (!areNotificationsAvailable()) {
+            return;
+        }
+
         try {
-            await Notifications.setBadgeCountAsync(count);
+            await Notifications!.setBadgeCountAsync(count);
         } catch (error) {
             logger.error('Error setting badge count:', error);
         }
@@ -242,8 +312,12 @@ export const NotificationService = {
      * Clear badge
      */
     clearBadge: async (): Promise<void> => {
+        if (!areNotificationsAvailable()) {
+            return;
+        }
+
         try {
-            await Notifications.setBadgeCountAsync(0);
+            await Notifications!.setBadgeCountAsync(0);
         } catch (error) {
             logger.error('Error clearing badge:', error);
         }
@@ -253,18 +327,24 @@ export const NotificationService = {
      * Add notification received listener
      */
     addNotificationReceivedListener: (
-        callback: (notification: Notifications.Notification) => void
-    ): Notifications.Subscription => {
-        return Notifications.addNotificationReceivedListener(callback);
+        callback: (notification: any) => void
+    ): { remove: () => void } => {
+        if (!areNotificationsAvailable()) {
+            return { remove: () => { } };
+        }
+        return Notifications!.addNotificationReceivedListener(callback);
     },
 
     /**
      * Add notification response listener (when user taps notification)
      */
     addNotificationResponseListener: (
-        callback: (response: Notifications.NotificationResponse) => void
-    ): Notifications.Subscription => {
-        return Notifications.addNotificationResponseReceivedListener(callback);
+        callback: (response: any) => void
+    ): { remove: () => void } => {
+        if (!areNotificationsAvailable()) {
+            return { remove: () => { } };
+        }
+        return Notifications!.addNotificationResponseReceivedListener(callback);
     },
 
     /**

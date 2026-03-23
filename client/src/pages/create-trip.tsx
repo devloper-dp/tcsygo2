@@ -36,9 +36,16 @@ export default function CreateTrip() {
   const [departureTime, setDepartureTime] = useState('');
   const [seats, setSeats] = useState('4');
   const [pricePerSeat, setPricePerSeat] = useState('');
-  const [preferences, setPreferences] = useState({
+  const [preferences, setPreferences] = useState<{
+    music: boolean;
+    vehicleType: 'car' | 'auto' | 'bike';
+    smoking: boolean;
+    pets: boolean;
+  }>({
     music: true,
-    vehicleType: 'car' as 'car' | 'auto' | 'bike' // Default to car
+    vehicleType: 'car',
+    smoking: false,
+    pets: false
   });
 
   const [routeInfo, setRouteInfo] = useState<{ distance: number; duration: number; route: Coordinates[] }>();

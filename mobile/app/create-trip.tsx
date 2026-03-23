@@ -1,47 +1,56 @@
 import { useState, useEffect } from 'react';
-import { View, ScrollView, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, ScrollView, StyleSheet, TouchableOpacity, Alert, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Ionicons } from '@expo/vector-icons'; // Or Lucide
+import { Ionicons } from '@expo/vector-icons';
 import { Map, Marker, Polyline } from '../components/Map';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { LocationAutocomplete } from '@/components/LocationAutocomplete';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input'; // Assuming this exists or using TextInput with styles
+import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
 import { MapService, Coordinates } from '@/services/MapService';
 import { Switch, Platform } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-
-// Simple label component if not in UI lib
-const Label = ({ children }: { children: string }) => (
-    <Text className="text-sm font-medium text-gray-700 mb-1.5">{children}</Text>
-);
-
+import { useTheme } from '@/contexts/ThemeContext';
+import { useResponsive } from '@/hooks/useResponsive';
+ 
+// Simple label component
+const Label = ({ children }: { children: string }) => {
+    const { fontSize } = useResponsive();
+    return (
+        <Text style={{ fontSize: fontSize.xs }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-[2px] mb-3 ml-1">{children}</Text>
+    );
+};
+ 
 const CreateTripScreen = () => {
     const router = useRouter();
     const { user } = useAuth();
-
+    const { isDark } = useTheme();
+    const { hScale, vScale, mScale, spacing, fontSize } = useResponsive();
+ 
     const [pickup, setPickup] = useState('');
     const [pickupCoords, setPickupCoords] = useState<Coordinates>();
     const [drop, setDrop] = useState('');
     const [dropCoords, setDropCoords] = useState<Coordinates>();
-
+ 
     const [date, setDate] = useState(new Date());
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showTimePicker, setShowTimePicker] = useState(false);
-
+ 
+    const [waypoints, setWaypoints] = useState<{ id: string; location: string; coords: Coordinates }[]>([]);
     const [seats, setSeats] = useState('4');
     const [price, setPrice] = useState('');
     const [preferences, setPreferences] = useState({
         smoking: false,
         pets: false,
-        music: true
+        music: true,
+        vehicleType: 'car' as 'car' | 'auto' | 'bike'
     });
-
+ 
     const onDateChange = (event: any, selectedDate?: Date) => {
         setShowDatePicker(false);
         if (selectedDate) {
@@ -50,7 +59,7 @@ const CreateTripScreen = () => {
             setDate(currentDate);
         }
     };
-
+ 
     const onTimeChange = (event: any, selectedTime?: Date) => {
         setShowTimePicker(false);
         if (selectedTime) {
@@ -59,9 +68,9 @@ const CreateTripScreen = () => {
             setDate(currentDate);
         }
     };
-
+ 
     const [routeInfo, setRouteInfo] = useState<{ distance: number; duration: number; route: Coordinates[] }>();
-
+ 
     // Check driver profile
     const { data: driverProfile, isLoading: isLoadingDriver } = useQuery<any>({
         queryKey: ['my-driver-profile', user?.id],
@@ -77,48 +86,53 @@ const CreateTripScreen = () => {
         },
         enabled: !!user,
     });
-
+ 
     useEffect(() => {
         if (!isLoadingDriver) {
             if (!driverProfile) {
-                Alert.alert("Driver Profile Required", "You need to complete driver onboarding before posting trips.", [
-                    { text: "OK", onPress: () => router.push('/become-driver') }
+                Alert.alert("Driver Profile Required", "Deploy as a driver before initializing transit missions.", [
+                    { text: "Enlist Now", onPress: () => router.push('/become-driver') }
                 ]);
             } else if (driverProfile.verification_status !== 'verified') {
-                Alert.alert("Verification Pending", "Your driver profile is still under review. You cannot create trips yet.", [
-                    { text: "Check Status", onPress: () => router.push('/become-driver') },
-                    { text: "Cancel", style: "cancel", onPress: () => router.back() }
+                Alert.alert("Verification Pending", "Your credentials are under review by central command. Mission deployment disabled.", [
+                    { text: "Status Feed", onPress: () => router.push('/become-driver') },
+                    { text: "Abort", style: "cancel", onPress: () => router.back() }
                 ]);
             }
         }
     }, [isLoadingDriver, driverProfile]);
-
+ 
     const calculateRoute = async () => {
         if (!pickupCoords || !dropCoords) return;
-
+ 
         try {
-            const route = await MapService.getRoute(pickupCoords, dropCoords);
+            const route = await MapService.getRoute(
+                pickupCoords,
+                dropCoords,
+                waypoints.filter(w => w.coords.lat !== 0).map(w => w.coords)
+            );
             setRouteInfo({
-                distance: route.distance / 1000, // meters to km
-                duration: Math.round(route.duration / 60), // seconds to minutes
+                distance: route.distance / 1000, 
+                duration: Math.round(route.duration / 60), 
                 route: route.geometry
             });
-
-            if (!price) {
-                const estimatedPrice = Math.round((route.distance / 1000) * 8);
-                setPrice(estimatedPrice.toString());
+ 
+            if (!price || price === '0') {
+                const { calculateFare } = await import('@/lib/fareCalculator');
+                const fare = calculateFare(preferences.vehicleType, route.distance / 1000, route.duration / 60);
+                setPrice(fare.totalFare.toString());
             }
         } catch (error) {
             console.error('Error calculating route:', error);
         }
     };
-
+ 
     useEffect(() => {
         if (pickupCoords && dropCoords) {
             calculateRoute();
         }
-    }, [pickupCoords, dropCoords]);
-
+    }, [pickupCoords, dropCoords, waypoints, preferences.vehicleType]);
+ 
     const createTripMutation = useMutation({
         mutationFn: async (tripData: any) => {
             const { data, error } = await supabase
@@ -130,61 +144,84 @@ const CreateTripScreen = () => {
             return data;
         },
         onSuccess: () => {
-            Alert.alert('Success', 'Trip created successfully!');
-            router.replace('/(tabs)/my-trips' as any); // Assuming my-trips tab exists or route
+            Alert.alert('Mission Published', 'Your mission profile has been broadcasted to the terminal.');
+            router.replace('/driver/trips' as any);
         },
         onError: (error: any) => {
-            Alert.alert('Error', error.message || 'Failed to create trip');
+            Alert.alert('Transmission Error', error.message || 'Failed to sync mission profile');
         }
     });
-
+ 
+    const addWaypoint = () => {
+        setWaypoints([...waypoints, { id: Math.random().toString(36).substr(2, 9), location: '', coords: { lat: 0, lng: 0 } }]);
+    };
+ 
+    const removeWaypoint = (id: string) => {
+        setWaypoints(waypoints.filter(w => w.id !== id));
+    };
+ 
+    const updateWaypoint = (id: string, location: string, coords?: Coordinates) => {
+        setWaypoints(waypoints.map(w =>
+            w.id === id ? { ...w, location, coords: coords || w.coords } : w
+        ));
+    };
+ 
     const handleSubmit = () => {
         if (!driverProfile) {
             router.push('/become-driver');
             return;
         }
-
+ 
         if (!pickup || !drop || !price || !pickupCoords || !dropCoords) {
-            Alert.alert('Error', 'Please fill in all required fields');
+            Alert.alert('Configuration Error', 'Please complete all required deployment parameters.');
             return;
         }
-
-        const departureDateTime = date.toISOString();
-
+ 
         const tripData = {
-            driver_id: driverProfile.id, // Use driver profile ID
+            driver_id: driverProfile.id,
             pickup_location: pickup,
             pickup_lat: pickupCoords.lat.toString(),
             pickup_lng: pickupCoords.lng.toString(),
             drop_location: drop,
             drop_lat: dropCoords.lat.toString(),
             drop_lng: dropCoords.lng.toString(),
-            departure_time: departureDateTime,
-            distance: routeInfo?.distance || 0,
+            departure_time: date.toISOString(),
+            distance: (routeInfo?.distance || 0).toString(),
             duration: routeInfo?.duration || 0,
             price_per_seat: parseFloat(price),
             available_seats: parseInt(seats),
             total_seats: parseInt(seats),
             status: 'upcoming',
             route: routeInfo?.route || [],
-            preferences
+            preferences: {
+                ...preferences,
+                waypoints: waypoints.map(w => ({ location: w.location, lat: w.coords.lat, lng: w.coords.lng }))
+            },
+            base_price: parseFloat(price),
+            surge_multiplier: 1.0
         };
-
+ 
         createTripMutation.mutate(tripData);
     };
-
+ 
     return (
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#f9fafb' }} edges={['top']}>
-            <View className="flex-row items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
-                <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
-                    <Ionicons name="arrow-back" size={24} color="#1f2937" />
+        <SafeAreaView className="flex-1 bg-white dark:bg-slate-950" edges={['top']}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+            
+            <View style={{ paddingHorizontal: spacing.xl, paddingVertical: vScale(20), borderBottomWidth: 1 }} className="flex-row items-center justify-between bg-white dark:bg-slate-950 border-slate-100 dark:border-slate-800 shadow-sm z-30">
+                <TouchableOpacity 
+                    onPress={() => router.back()} 
+                    style={{ width: hScale(48), height: hScale(48), borderWidth: 1 }}
+                    className="rounded-full bg-slate-50 dark:bg-slate-900 items-center justify-center border-slate-100 dark:border-slate-800"
+                >
+                    <Ionicons name="arrow-back" size={hScale(24)} color={isDark ? "#f8fafc" : "#1e293b"} />
                 </TouchableOpacity>
-                <Text variant="h3" className="font-bold flex-1 text-center">Create a Trip</Text>
-                <View style={{ width: 40 }} />
+                <Text style={{ fontSize: fontSize.xl }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter">New Mission</Text>
+                <View style={{ width: hScale(48) }} />
             </View>
-
-            <ScrollView className="flex-1">
-                <View className="h-48 bg-gray-100 relative">
+ 
+            <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+                <View style={{ height: vScale(256) }} className="bg-slate-100 dark:bg-slate-900 relative">
                     <Map
                         style={StyleSheet.absoluteFillObject}
                         initialRegion={{
@@ -196,84 +233,136 @@ const CreateTripScreen = () => {
                     >
                         {pickupCoords && <Marker coordinate={{ latitude: pickupCoords.lat, longitude: pickupCoords.lng }} title="Pickup" pinColor="green" />}
                         {dropCoords && <Marker coordinate={{ latitude: dropCoords.lat, longitude: dropCoords.lng }} title="Drop" pinColor="red" />}
+                        {waypoints.map((w, i) => (
+                            w.coords.lat !== 0 && (
+                                <Marker
+                                    key={w.id}
+                                    coordinate={{ latitude: w.coords.lat, longitude: w.coords.lng }}
+                                    title={`Stop ${i + 1}`}
+                                    pinColor="blue"
+                                />
+                            )
+                        ))}
                         {routeInfo && routeInfo.route && routeInfo.route.length > 0 && (
                             <Polyline
                                 coordinates={routeInfo.route.map(coord => ({ latitude: coord.lat, longitude: coord.lng }))}
-                                strokeColor="#3b82f6"
+                                strokeColor={isDark ? "#60a5fa" : "#3b82f6"}
                                 strokeWidth={4}
                             />
                         )}
                     </Map>
                 </View>
-
-                <View className="p-4 gap-6 pb-10">
-                    <Card className="p-4">
-                        <Text variant="h3" className="text-lg font-semibold mb-4 flex-row items-center gap-2">
-                            <Ionicons name="location" size={20} color="#3b82f6" /> Route Details
-                        </Text>
-
-                        <View className="gap-4">
-                            <View className="z-20 relative">
-                                <Label>Pickup Location</Label>
+ 
+                <View style={{ padding: spacing.xl, gap: spacing.xxl, paddingBottom: vScale(128) }}>
+                    <Card style={{ padding: spacing.xxl, borderRadius: hScale(40), marginTop: vScale(-40) }} className="bg-white dark:bg-slate-900 shadow-xl border-slate-100 dark:border-slate-800 overflow-visible">
+                        <View style={{ gap: spacing.sm, marginBottom: spacing.xxl }} className="flex-row items-center">
+                            <View style={{ width: hScale(40), height: hScale(40) }} className="rounded-xl bg-blue-50 dark:bg-blue-900/20 items-center justify-center">
+                                <Ionicons name="location" size={hScale(22)} color="#3b82f6" />
+                            </View>
+                            <Text style={{ fontSize: fontSize.lg }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter">Route Mapping</Text>
+                        </View>
+ 
+                        <View style={{ gap: spacing.lg }}>
+                            <View className="z-50 relative">
+                                <Label>Source Terminal</Label>
                                 <LocationAutocomplete
-                                    placeholder="Where are you starting?"
+                                    placeholder="Origin point..."
                                     value={pickup}
                                     onChange={(val, coords) => {
                                         setPickup(val);
                                         if (coords) setPickupCoords(coords);
                                     }}
+                                    placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                                 />
                             </View>
-
-                            <View className="z-10 relative">
-                                <Label>Drop Location</Label>
+ 
+                            {waypoints.map((waypoint, index) => (
+                                <View key={waypoint.id} className="relative z-40">
+                                    <View style={{ marginBottom: spacing.xs }} className="flex-row justify-between items-center">
+                                        <Label>{`Auxiliary Stop ${index + 1}`}</Label>
+                                        <TouchableOpacity onPress={() => removeWaypoint(waypoint.id)} style={{ width: hScale(24), height: hScale(24), marginBottom: spacing.sm }} className="items-center justify-center">
+                                            <Ionicons name="close-circle" size={hScale(20)} color="#ef4444" />
+                                        </TouchableOpacity>
+                                    </View>
+                                    <LocationAutocomplete
+                                        placeholder="Add mission stop..."
+                                        value={waypoint.location}
+                                        onChange={(val, coords) => updateWaypoint(waypoint.id, val, coords)}
+                                        placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
+                                    />
+                                </View>
+                            ))}
+ 
+                            <TouchableOpacity
+                                onPress={addWaypoint}
+                                style={{ paddingVertical: vScale(16), borderRadius: hScale(16), borderWidth: 1 }}
+                                className="flex-row items-center justify-center bg-slate-50 dark:bg-slate-950/20 border-dashed border-slate-200 dark:border-slate-800"
+                            >
+                                <Ionicons name="add" size={hScale(20)} color={isDark ? "#475569" : "#64748b"} />
+                                <Text style={{ fontSize: hScale(10), marginLeft: spacing.sm }} className="text-slate-500 dark:text-slate-500 font-black uppercase tracking-widest">Append Stop</Text>
+                            </TouchableOpacity>
+ 
+                            <View className="z-30 relative">
+                                <Label>Destination Terminal</Label>
                                 <LocationAutocomplete
-                                    placeholder="Where are you going?"
+                                    placeholder="Arrival point..."
                                     value={drop}
                                     onChange={(val, coords) => {
                                         setDrop(val);
                                         if (coords) setDropCoords(coords);
                                     }}
+                                    placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                                 />
                             </View>
-
+ 
                             {routeInfo && (
-                                <View className="flex-row items-center gap-3 p-3 bg-blue-50 rounded-lg">
-                                    <Ionicons name="navigate-circle" size={24} color="#3b82f6" />
-                                    <View>
-                                        <Text className="font-medium text-blue-900">
-                                            {routeInfo.distance.toFixed(1)} km • {routeInfo.duration} min
+                                <View style={{ gap: spacing.lg, padding: spacing.xl, borderRadius: hScale(24), borderWidth: 1 }} className="flex-row items-center bg-blue-50 dark:bg-blue-900/10 border-blue-100/50 dark:border-blue-900/30">
+                                    <View style={{ width: hScale(48), height: hScale(48) }} className="bg-blue-600 dark:bg-blue-500 rounded-2xl items-center justify-center shadow-lg shadow-blue-500/20">
+                                        <Ionicons name="navigate" size={hScale(24)} color="white" />
+                                    </View>
+                                    <View className="flex-1">
+                                        <Text style={{ fontSize: fontSize.lg }} className="font-black text-slate-900 dark:text-white tracking-tighter uppercase">
+                                            {routeInfo.distance.toFixed(1)} KM • {routeInfo.duration} MIN
                                         </Text>
-                                        <Text className="text-xs text-blue-700">Estimated route</Text>
+                                        <Text style={{ fontSize: hScale(10) }} className="font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">Optimized Trajectory</Text>
                                     </View>
                                 </View>
                             )}
                         </View>
                     </Card>
-
-                    <Card className="p-4">
-                        <Text variant="h3" className="text-lg font-semibold mb-4">Schedule</Text>
-                        <View className="flex-row gap-4">
+ 
+                    <Card style={{ padding: spacing.xxl, borderRadius: hScale(40), borderWidth: 1 }} className="bg-white dark:bg-slate-900 shadow-xl border-slate-100 dark:border-slate-800">
+                        <View style={{ gap: spacing.sm, marginBottom: spacing.xxl }} className="flex-row items-center">
+                            <View style={{ width: hScale(40), height: hScale(40) }} className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 items-center justify-center">
+                                <Ionicons name="calendar-outline" size={hScale(22)} color="#10b981" />
+                            </View>
+                            <Text style={{ fontSize: fontSize.lg }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter">Temporal Windows</Text>
+                        </View>
+                        <View style={{ gap: spacing.lg }} className="flex-row">
                             <View className="flex-1">
                                 <Label>Date</Label>
                                 <TouchableOpacity
                                     onPress={() => setShowDatePicker(true)}
-                                    className="border border-gray-300 rounded-lg p-3 bg-white"
+                                    style={{ paddingHorizontal: spacing.lg, paddingVertical: vScale(16), borderRadius: hScale(16), borderWidth: 1 }}
+                                    className="bg-slate-50 dark:bg-slate-950 border-slate-100 dark:border-slate-800 flex-row items-center justify-between"
                                 >
-                                    <Text>{date.toLocaleDateString()}</Text>
+                                    <Text style={{ fontSize: fontSize.sm }} className="font-bold text-slate-900 dark:text-white uppercase tracking-tight">{date.toLocaleDateString()}</Text>
+                                    <Ionicons name="calendar" size={hScale(16)} color={isDark ? "#334155" : "#cbd5e1"} />
                                 </TouchableOpacity>
                             </View>
                             <View className="flex-1">
                                 <Label>Time</Label>
                                 <TouchableOpacity
                                     onPress={() => setShowTimePicker(true)}
-                                    className="border border-gray-300 rounded-lg p-3 bg-white"
+                                    style={{ paddingHorizontal: spacing.lg, paddingVertical: vScale(16), borderRadius: hScale(16), borderWidth: 1 }}
+                                    className="bg-slate-50 dark:bg-slate-950 border-slate-100 dark:border-slate-800 flex-row items-center justify-between"
                                 >
-                                    <Text>{date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                                    <Text style={{ fontSize: fontSize.sm }} className="font-bold text-slate-900 dark:text-white uppercase tracking-tight">{date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                                    <Ionicons name="time" size={hScale(16)} color={isDark ? "#334155" : "#cbd5e1"} />
                                 </TouchableOpacity>
                             </View>
                         </View>
-
+ 
                         {(showDatePicker || (Platform.OS === 'ios' && showDatePicker)) && (
                             <DateTimePicker
                                 value={date}
@@ -283,7 +372,7 @@ const CreateTripScreen = () => {
                                 minimumDate={new Date()}
                             />
                         )}
-
+ 
                         {(showTimePicker || (Platform.OS === 'ios' && showTimePicker)) && (
                             <DateTimePicker
                                 value={date}
@@ -293,82 +382,110 @@ const CreateTripScreen = () => {
                             />
                         )}
                     </Card>
-
-                    <Card className="p-4">
-                        <Text variant="h3" className="text-lg font-semibold mb-4">Details</Text>
-                        <View className="flex-row gap-4">
+ 
+                    <Card style={{ padding: spacing.xxl, borderRadius: hScale(40), borderWidth: 1 }} className="bg-white dark:bg-slate-900 shadow-xl border-slate-100 dark:border-slate-800">
+                        <View style={{ gap: spacing.sm, marginBottom: spacing.xxl }} className="flex-row items-center">
+                            <View style={{ width: hScale(40), height: hScale(40) }} className="rounded-xl bg-amber-50 dark:bg-amber-900/20 items-center justify-center">
+                                <Ionicons name="car-outline" size={hScale(22)} color="#f59e0b" />
+                            </View>
+                            <Text style={{ fontSize: fontSize.lg }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter">Tech Specs</Text>
+                        </View>
+                        <Label>Vehicle Configuration</Label>
+                        <View style={{ gap: spacing.sm, marginTop: spacing.xs, marginBottom: spacing.xxl }} className="flex-row">
+                            {(['car', 'auto', 'bike'] as const).map((type) => (
+                                <TouchableOpacity
+                                    key={type}
+                                    onPress={() => {
+                                        const seatsMap = { car: '4', auto: '3', bike: '1' };
+                                        setPreferences({ ...preferences, vehicleType: type });
+                                        setSeats(seatsMap[type]);
+                                    }}
+                                    style={{ paddingVertical: vScale(16), borderRadius: hScale(16), borderWidth: 2 }}
+                                    className={`flex-1 items-center transition-all ${preferences.vehicleType === type 
+                                        ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20 shadow-lg shadow-blue-500/10' 
+                                        : 'border-slate-50 dark:border-slate-800 bg-white dark:bg-slate-900'}`}
+                                >
+                                    <Ionicons
+                                        name={type === 'car' ? 'car' : type === 'auto' ? 'car-sport' : 'bicycle'}
+                                        size={hScale(28)}
+                                        color={preferences.vehicleType === type ? (isDark ? '#60a5fa' : '#2563eb') : (isDark ? '#334155' : '#cbd5e1')}
+                                    />
+                                    <Text style={{ fontSize: hScale(9), marginTop: spacing.sm }} className={`font-black uppercase tracking-widest ${preferences.vehicleType === type ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}>{type}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                        
+                        <View style={{ gap: spacing.xl }} className="flex-row">
                             <View className="flex-1">
-                                <Label>Price (₹)</Label>
+                                <Label>Compensation (₹)</Label>
                                 <Input
                                     placeholder="500"
                                     keyboardType="numeric"
                                     value={price}
                                     onChangeText={setPrice}
+                                    style={{ height: vScale(56), borderRadius: hScale(16), borderWidth: 1 }}
+                                    className="bg-slate-50 dark:bg-slate-950 border-slate-100 dark:border-slate-800 text-base font-black tracking-widest text-slate-900 dark:text-white shadow-inner"
                                 />
                             </View>
                             <View className="flex-1">
-                                <Label>Seats</Label>
+                                <Label>Capacity</Label>
                                 <Input
                                     placeholder="4"
                                     keyboardType="numeric"
                                     value={seats}
                                     onChangeText={setSeats}
+                                    style={{ height: vScale(56), borderRadius: hScale(16), borderWidth: 1 }}
+                                    className="bg-slate-50 dark:bg-slate-950 border-slate-100 dark:border-slate-800 text-base font-black tracking-widest text-slate-900 dark:text-white shadow-inner"
                                 />
                             </View>
                         </View>
                     </Card>
-
-                    <Card className="p-4">
-                        <Text variant="h3" className="text-lg font-semibold mb-4">Preferences</Text>
-                        <View className="gap-4">
-                            <View className="flex-row justify-between items-center">
-                                <View>
-                                    <Text className="font-medium">Smoking allowed</Text>
-                                    <Text className="text-gray-500 text-xs">Passengers can smoke</Text>
-                                </View>
-                                <Switch
-                                    value={preferences.smoking}
-                                    onValueChange={(val) => setPreferences({ ...preferences, smoking: val })}
-                                    trackColor={{ false: '#e5e7eb', true: '#3b82f6' }}
-                                />
+ 
+                    <Card style={{ padding: spacing.xxl, borderRadius: hScale(40), borderWidth: 1 }} className="bg-white dark:bg-slate-900 shadow-xl border-slate-100 dark:border-slate-800">
+                        <View style={{ gap: spacing.sm, marginBottom: spacing.xxl }} className="flex-row items-center">
+                            <View style={{ width: hScale(40), height: hScale(40) }} className="rounded-xl bg-purple-50 dark:bg-purple-900/20 items-center justify-center">
+                                <Ionicons name="settings-outline" size={hScale(22)} color="#8b5cf6" />
                             </View>
-                            <View className="flex-row justify-between items-center">
-                                <View>
-                                    <Text className="font-medium">Pets allowed</Text>
-                                    <Text className="text-gray-500 text-xs">Passengers can bring pets</Text>
+                            <Text style={{ fontSize: fontSize.lg }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter">Operational Limits</Text>
+                        </View>
+                        <View style={{ gap: spacing.lg }}>
+                            {[
+                                { id: 'smoking', label: 'Incendiaries Allowed', desc: 'Permit smoking during mission' },
+                                { id: 'pets', label: 'Biological Assets', desc: 'Permit animal transport' },
+                                { id: 'music', label: 'Sonic Comms', desc: 'Live audio feed active' }
+                            ].map((pref) => (
+                                <View key={pref.id} className="flex-row justify-between items-center">
+                                    <View style={{ flex: 1, marginRight: spacing.lg }}>
+                                        <Text style={{ fontSize: fontSize.sm }} className="font-black text-slate-900 dark:text-white uppercase tracking-tight">{pref.label}</Text>
+                                        <Text style={{ fontSize: hScale(10), marginTop: spacing.xs }} className="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest">{pref.desc}</Text>
+                                    </View>
+                                    <Switch
+                                        value={(preferences as any)[pref.id]}
+                                        onValueChange={(val) => setPreferences({ ...preferences, [pref.id]: val })}
+                                        trackColor={{ false: isDark ? '#1e293b' : '#e2e8f0', true: '#3b82f6' }}
+                                        thumbColor={Platform.OS === 'android' ? '#ffffff' : undefined}
+                                    />
                                 </View>
-                                <Switch
-                                    value={preferences.pets}
-                                    onValueChange={(val) => setPreferences({ ...preferences, pets: val })}
-                                    trackColor={{ false: '#e5e7eb', true: '#3b82f6' }}
-                                />
-                            </View>
-                            <View className="flex-row justify-between items-center">
-                                <View>
-                                    <Text className="font-medium">Music allowed</Text>
-                                    <Text className="text-gray-500 text-xs">Music during trip</Text>
-                                </View>
-                                <Switch
-                                    value={preferences.music}
-                                    onValueChange={(val) => setPreferences({ ...preferences, music: val })}
-                                    trackColor={{ false: '#e5e7eb', true: '#3b82f6' }}
-                                />
-                            </View>
+                            ))}
                         </View>
                     </Card>
-
-                    <Button
+ 
+                    <TouchableOpacity
                         onPress={handleSubmit}
-                        size="lg"
+                        activeOpacity={0.9}
                         disabled={createTripMutation.isPending}
-                        className="mb-8"
+                        style={{ height: vScale(80), borderRadius: hScale(32) }}
+                        className={`bg-slate-900 dark:bg-white items-center justify-center shadow-2xl shadow-slate-900/30 mb-10 overflow-hidden ${createTripMutation.isPending ? 'opacity-50' : ''}`}
                     >
-                        {createTripMutation.isPending ? 'Publishing...' : 'Publish Trip'}
-                    </Button>
+                        <Text style={{ fontSize: fontSize.xl }} className="text-white dark:text-slate-900 font-black uppercase tracking-[4px]">
+                            {createTripMutation.isPending ? 'TRANSMITTING...' : 'INITIALIZE MISSION'}
+                        </Text>
+                        <View style={{ height: vScale(4) }} className="absolute bottom-0 left-0 right-0 bg-blue-600/30" />
+                    </TouchableOpacity>
                 </View>
             </ScrollView>
         </SafeAreaView>
     );
 };
-
+ 
 export default CreateTripScreen;

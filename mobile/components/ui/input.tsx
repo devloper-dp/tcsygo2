@@ -1,5 +1,7 @@
 import React from 'react';
 import { TextInput, TextInputProps, View, StyleSheet } from 'react-native';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useResponsive } from '@/hooks/useResponsive';
 
 interface InputProps extends TextInputProps {
     className?: string; // For NativeWind
@@ -7,17 +9,30 @@ interface InputProps extends TextInputProps {
 }
 
 export const Input = React.forwardRef<TextInput, InputProps>(
-    ({ className, error, ...props }, ref) => {
+    ({ className, error, style, ...props }, ref) => {
+        const { theme } = useTheme();
+        const isDark = theme === 'dark';
+        const { hScale, vScale, fontSize } = useResponsive();
+ 
         return (
             <View className="w-full">
                 <TextInput
                     ref={ref}
-                    className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 text-gray-900 dark:text-gray-100 ${error ? 'border-destructive' : 'border-gray-200 dark:border-gray-800'
+                    className={`flex w-full border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-primary dark:focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 disabled:opacity-50 text-slate-900 dark:text-slate-100 uppercase tracking-tight font-black ${error ? 'border-destructive' : ''
                         } ${className || ''}`}
-                    placeholderTextColor="#9ca3af"
+                    placeholderTextColor={isDark ? "#475569" : "#94a3af"}
+                    style={[
+                        { 
+                            height: vScale(56), 
+                            borderRadius: hScale(20), 
+                            paddingHorizontal: hScale(24), 
+                            paddingVertical: vScale(16),
+                            fontSize: fontSize.base
+                        }, 
+                        style
+                    ]}
                     {...props}
                 />
-                {/* Error message could be added here if needed, but usually handled externally */}
             </View>
         );
     }

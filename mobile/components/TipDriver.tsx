@@ -1,28 +1,33 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import { Text } from '@/components/ui/text';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/ui/card';
-
+import { useTheme } from '@/contexts/ThemeContext';
+ 
 interface TipDriverProps {
     driverName: string;
     onTipSelected?: (amount: number) => void;
     style?: any;
 }
-
+ 
 const PRESET_TIPS = [10, 20, 30, 50];
-
+ 
 export function TipDriver({ driverName, onTipSelected, style }: TipDriverProps) {
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
+ 
     const [selectedTip, setSelectedTip] = useState<number | null>(null);
     const [customTip, setCustomTip] = useState('');
     const [showCustom, setShowCustom] = useState(false);
-
+ 
     const handlePresetTip = (amount: number) => {
         setSelectedTip(amount);
         setShowCustom(false);
         setCustomTip('');
         onTipSelected?.(amount);
     };
-
+ 
     const handleCustomSubmit = () => {
         const amount = parseFloat(customTip);
         if (!isNaN(amount) && amount > 0) {
@@ -30,164 +35,70 @@ export function TipDriver({ driverName, onTipSelected, style }: TipDriverProps) 
             onTipSelected?.(amount);
         }
     };
-
+ 
     return (
-        <Card style={[styles.container, style]}>
-            <View style={styles.header}>
-                <View style={styles.iconBg}>
-                    <Ionicons name="heart" size={24} color="#f59e0b" />
+        <Card className="p-6 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[32px] shadow-sm" style={style}>
+            <View className="items-center mb-6">
+                <View className="w-14 h-14 rounded-full bg-amber-50 dark:bg-amber-900/20 items-center justify-center mb-4">
+                    <Ionicons name="heart" size={28} color={isDark ? "#fbbf24" : "#f59e0b"} />
                 </View>
-                <Text style={styles.title}>Tip Your Driver</Text>
-                <Text style={styles.subtitle}>Show appreciation for {driverName}</Text>
+                <Text className="text-xl font-bold text-slate-900 dark:text-white">Tip Your Driver</Text>
+                <Text className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">Show appreciation for {driverName}</Text>
             </View>
-
-            <View style={styles.grid}>
+ 
+            <View className="flex-row justify-between mb-6 gap-3">
                 {PRESET_TIPS.map(amount => (
                     <TouchableOpacity
                         key={amount}
-                        style={[
-                            styles.chip,
-                            selectedTip === amount && styles.chipSelected
-                        ]}
+                        className={`flex-1 py-4 rounded-2xl border items-center shadow-sm ${
+                            selectedTip === amount 
+                                ? 'bg-blue-600 dark:bg-blue-500 border-blue-600 dark:border-blue-500' 
+                                : 'bg-slate-50 dark:bg-slate-800/10 border-slate-100 dark:border-slate-800'
+                        }`}
                         onPress={() => handlePresetTip(amount)}
+                        activeOpacity={0.7}
                     >
-                        <Text style={[
-                            styles.chipText,
-                            selectedTip === amount && styles.chipTextSelected
-                        ]}>₹{amount}</Text>
+                        <Text className={`text-base font-black ${
+                            selectedTip === amount ? 'text-white' : 'text-slate-700 dark:text-slate-300'
+                        }`}>₹{amount}</Text>
                     </TouchableOpacity>
                 ))}
             </View>
-
+ 
             {showCustom ? (
-                <View style={styles.customRow}>
+                <View className="flex-row gap-3 mb-4">
                     <TextInput
-                        style={styles.input}
+                        className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-2xl px-4 py-3 h-14 text-slate-900 dark:text-white font-bold"
                         placeholder="Enter amount"
+                        placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                         keyboardType="numeric"
                         value={customTip}
                         onChangeText={setCustomTip}
                     />
-                    <TouchableOpacity style={styles.addBtn} onPress={handleCustomSubmit}>
-                        <Text style={styles.addBtnText}>Add</Text>
+                    <TouchableOpacity 
+                        className="bg-blue-600 active:bg-blue-700 h-14 rounded-2xl px-6 items-center justify-center shadow-lg shadow-blue-500/20" 
+                        onPress={handleCustomSubmit}
+                    >
+                        <Text className="text-white font-bold">Add</Text>
                     </TouchableOpacity>
                 </View>
             ) : (
                 <TouchableOpacity
-                    style={styles.customLink}
+                    className="items-center py-3 mb-2"
                     onPress={() => setShowCustom(true)}
                 >
-                    <Text style={styles.customLinkText}>Enter Custom Amount</Text>
+                    <Text className="text-sm font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest">Enter Custom Amount</Text>
                 </TouchableOpacity>
             )}
-
+ 
             {selectedTip !== null && selectedTip > 0 && (
-                <View style={styles.successMsg}>
-                    <Ionicons name="star" size={16} color="#10b981" />
-                    <Text style={styles.successText}>₹{selectedTip} tip added to bill</Text>
+                <View className="flex-row items-center justify-center bg-emerald-50 dark:bg-emerald-900/10 py-4 px-6 rounded-2xl gap-2.5 border border-emerald-100 dark:border-emerald-900/20">
+                    <Ionicons name="star" size={18} color="#10b981" />
+                    <Text className="text-emerald-700 dark:text-emerald-400 font-bold text-sm">₹{selectedTip} tip added to bill</Text>
                 </View>
             )}
         </Card>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        padding: 16,
-        backgroundColor: 'white',
-        borderRadius: 12,
-    },
-    header: {
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    iconBg: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: '#fef3c7',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 8,
-    },
-    title: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    subtitle: {
-        fontSize: 14,
-        color: '#6b7280',
-    },
-    grid: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 16,
-    },
-    chip: {
-        flex: 1,
-        marginHorizontal: 4,
-        paddingVertical: 12,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-        alignItems: 'center',
-    },
-    chipSelected: {
-        backgroundColor: '#3b82f6',
-        borderColor: '#3b82f6',
-    },
-    chipText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#374151',
-    },
-    chipTextSelected: {
-        color: 'white',
-    },
-    customLink: {
-        alignItems: 'center',
-        padding: 12,
-    },
-    customLinkText: {
-        color: '#3b82f6',
-        fontWeight: '600',
-    },
-    customRow: {
-        flexDirection: 'row',
-        gap: 8,
-    },
-    input: {
-        flex: 1,
-        borderWidth: 1,
-        borderColor: '#d1d5db',
-        borderRadius: 8,
-        padding: 10,
-        fontSize: 16,
-    },
-    addBtn: {
-        backgroundColor: '#3b82f6',
-        justifyContent: 'center',
-        paddingHorizontal: 20,
-        borderRadius: 8,
-    },
-    addBtnText: {
-        color: 'white',
-        fontWeight: '600',
-    },
-    successMsg: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#ecfdf5',
-        padding: 12,
-        borderRadius: 8,
-        marginTop: 12,
-        gap: 6,
-    },
-    successText: {
-        color: '#059669',
-        fontWeight: '600',
-        fontSize: 14,
-    },
-});
+ 
+const styles = StyleSheet.create({});

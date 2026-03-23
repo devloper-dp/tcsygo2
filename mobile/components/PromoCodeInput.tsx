@@ -1,24 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import {
     View,
-    Text,
     TextInput,
     TouchableOpacity,
     StyleSheet,
     ActivityIndicator,
     FlatList,
 } from 'react-native';
+import { Text } from '@/components/ui/text';
 import { Tag, X, Check, Gift } from 'lucide-react-native';
 import { PromoCodeService, PromoCode } from '@/services/PromoCodeService';
 import { useAuth } from '@/contexts/AuthContext';
-
+import { useTheme } from '@/contexts/ThemeContext';
+ 
 interface PromoCodeInputProps {
     orderAmount: number;
     vehicleType?: string;
     onPromoApplied: (discount: number, promoCode: PromoCode) => void;
     onPromoRemoved: () => void;
 }
-
+ 
 export const PromoCodeInput: React.FC<PromoCodeInputProps> = ({
     orderAmount,
     vehicleType,
@@ -26,6 +27,9 @@ export const PromoCodeInput: React.FC<PromoCodeInputProps> = ({
     onPromoRemoved,
 }) => {
     const { user } = useAuth();
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
+ 
     const [promoCode, setPromoCode] = useState('');
     const [loading, setLoading] = useState(false);
     const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(null);
@@ -33,13 +37,13 @@ export const PromoCodeInput: React.FC<PromoCodeInputProps> = ({
     const [error, setError] = useState('');
     const [showAvailable, setShowAvailable] = useState(false);
     const [availablePromos, setAvailablePromos] = useState<PromoCode[]>([]);
-
+ 
     useEffect(() => {
         if (showAvailable && user) {
             loadAvailablePromos();
         }
     }, [showAvailable, user]);
-
+ 
     const loadAvailablePromos = async () => {
         if (!user) return;
         setLoading(true);
@@ -52,19 +56,19 @@ export const PromoCodeInput: React.FC<PromoCodeInputProps> = ({
             setLoading(false);
         }
     };
-
+ 
     const handleApplyPromo = async (code?: string) => {
         if (!user) return;
-
+ 
         const codeToApply = code || promoCode;
         if (!codeToApply.trim()) {
             setError('Please enter a promo code');
             return;
         }
-
+ 
         setLoading(true);
         setError('');
-
+ 
         try {
             const result = await PromoCodeService.validatePromoCode(
                 codeToApply,
@@ -72,7 +76,7 @@ export const PromoCodeInput: React.FC<PromoCodeInputProps> = ({
                 orderAmount,
                 vehicleType
             );
-
+ 
             if (result.valid && result.promoCode) {
                 setAppliedPromo(result.promoCode);
                 setDiscount(result.discount);
@@ -91,7 +95,7 @@ export const PromoCodeInput: React.FC<PromoCodeInputProps> = ({
             setLoading(false);
         }
     };
-
+ 
     const handleRemovePromo = () => {
         setPromoCode('');
         setAppliedPromo(null);
@@ -99,64 +103,66 @@ export const PromoCodeInput: React.FC<PromoCodeInputProps> = ({
         setError('');
         onPromoRemoved();
     };
-
+ 
     const renderPromoItem = ({ item }: { item: PromoCode }) => {
         const discountText =
             item.discount_type === 'percentage'
                 ? `${item.discount_value}% OFF`
                 : `₹${item.discount_value} OFF`;
-
+ 
         return (
             <TouchableOpacity
-                style={styles.promoItem}
+                className="flex-row items-center p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl mb-3 border border-slate-100 dark:border-slate-800/50 active:bg-slate-100 dark:active:bg-slate-800"
                 onPress={() => handleApplyPromo(item.code)}
                 disabled={loading}
             >
-                <View style={styles.promoIcon}>
+                <View className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/30 items-center justify-center mr-4">
                     <Gift size={24} color="#10b981" />
                 </View>
-                <View style={styles.promoDetails}>
-                    <Text style={styles.promoCode}>{item.code}</Text>
-                    <Text style={styles.promoDescription}>{item.description}</Text>
+                <View className="flex-1">
+                    <Text className="text-base font-black text-slate-900 dark:text-white mb-0.5">{item.code}</Text>
+                    <Text className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">{item.description}</Text>
                     {item.min_order_value > 0 && (
-                        <Text style={styles.promoCondition}>
+                        <Text className="text-[10px] font-bold text-slate-400/80 dark:text-slate-500 uppercase">
                             Min. order: ₹{item.min_order_value}
                         </Text>
                     )}
                 </View>
-                <View style={styles.promoDiscount}>
-                    <Text style={styles.discountText}>{discountText}</Text>
-                    <Text style={styles.applyText}>APPLY</Text>
+                <View className="items-end gap-1">
+                    <Text className="text-lg font-black text-emerald-500">{discountText}</Text>
+                    <Text className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">APPLY</Text>
                 </View>
             </TouchableOpacity>
         );
     };
-
+ 
     if (appliedPromo) {
         return (
-            <View style={styles.appliedContainer}>
-                <View style={styles.appliedContent}>
-                    <Check size={20} color="#10b981" />
-                    <View style={styles.appliedInfo}>
-                        <Text style={styles.appliedCode}>{appliedPromo.code} Applied</Text>
-                        <Text style={styles.appliedSavings}>You saved ₹{discount}!</Text>
+            <View className="flex-row items-center justify-between p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-900/30 my-3 shadow-sm">
+                <View className="flex-row items-center gap-4">
+                    <View className="w-10 h-10 rounded-full bg-emerald-500/10 items-center justify-center">
+                        <Check size={20} color="#10b981" />
+                    </View>
+                    <View>
+                        <Text className="text-sm font-black text-emerald-700 dark:text-emerald-400">{appliedPromo.code} Applied</Text>
+                        <Text className="text-xs font-bold text-emerald-600 dark:text-emerald-500/80">You saved ₹{discount}!</Text>
                     </View>
                 </View>
-                <TouchableOpacity onPress={handleRemovePromo} style={styles.removeButton}>
+                <TouchableOpacity onPress={handleRemovePromo} className="w-10 h-10 rounded-full bg-slate-100/50 dark:bg-slate-800 items-center justify-center">
                     <X size={20} color="#ef4444" />
                 </TouchableOpacity>
             </View>
         );
     }
-
+ 
     return (
-        <View style={styles.container}>
-            <View style={styles.inputContainer}>
-                <Tag size={20} color="#6b7280" />
+        <View className="my-3">
+            <View className="flex-row items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-4 h-16 gap-3 shadow-sm focus-within:border-blue-500">
+                <Tag size={20} color={isDark ? "#475569" : "#94a3b8"} />
                 <TextInput
-                    style={styles.input}
+                    className="flex-1 text-base font-bold text-slate-900 dark:text-white"
                     placeholder="Enter promo code"
-                    placeholderTextColor="#9ca3af"
+                    placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                     value={promoCode}
                     onChangeText={(text) => {
                         setPromoCode(text.toUpperCase());
@@ -170,39 +176,36 @@ export const PromoCodeInput: React.FC<PromoCodeInputProps> = ({
                 ) : (
                     <TouchableOpacity
                         onPress={() => handleApplyPromo()}
-                        style={styles.applyButton}
+                        className={`px-5 py-2.5 rounded-xl ${promoCode.trim() ? 'bg-blue-600 shadow-lg shadow-blue-500/20' : 'bg-slate-100 dark:bg-slate-800'}`}
                         disabled={!promoCode.trim()}
                     >
-                        <Text
-                            style={[
-                                styles.applyButtonText,
-                                !promoCode.trim() && styles.applyButtonTextDisabled,
-                            ]}
-                        >
+                        <Text className={`text-sm font-black ${promoCode.trim() ? 'text-white' : 'text-slate-400 dark:text-slate-600'}`}>
                             Apply
                         </Text>
                     </TouchableOpacity>
                 )}
             </View>
-
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
+ 
+            {error ? <Text className="text-xs font-bold text-rose-500 mt-2 ml-4">{error}</Text> : null}
+ 
             <TouchableOpacity
-                style={styles.viewOffersButton}
+                className="flex-row items-center justify-center mt-4 gap-2 active:opacity-70"
                 onPress={() => setShowAvailable(!showAvailable)}
             >
-                <Gift size={16} color="#3b82f6" />
-                <Text style={styles.viewOffersText}>
+                <View className="w-6 h-6 rounded-full bg-blue-50 dark:bg-blue-900/10 items-center justify-center">
+                    <Gift size={12} color="#3b82f6" />
+                </View>
+                <Text className="text-sm font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">
                     {showAvailable ? 'Hide' : 'View'} Available Offers
                 </Text>
             </TouchableOpacity>
-
+ 
             {showAvailable && (
-                <View style={styles.availableContainer}>
+                <View className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
                     {loading ? (
-                        <View style={styles.loadingContainer}>
+                        <View className="flex-row items-center justify-center p-8 gap-3">
                             <ActivityIndicator size="small" color="#3b82f6" />
-                            <Text style={styles.loadingText}>Loading offers...</Text>
+                            <Text className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Loading offers...</Text>
                         </View>
                     ) : availablePromos.length > 0 ? (
                         <FlatList
@@ -212,170 +215,12 @@ export const PromoCodeInput: React.FC<PromoCodeInputProps> = ({
                             scrollEnabled={false}
                         />
                     ) : (
-                        <Text style={styles.noOffersText}>No offers available</Text>
+                        <Text className="text-sm font-bold text-slate-400 dark:text-slate-500 text-center p-8 uppercase tracking-widest">No offers available</Text>
                     )}
                 </View>
             )}
         </View>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        marginVertical: 12,
-    },
-    inputContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#d1d5db',
-        borderRadius: 8,
-        paddingHorizontal: 12,
-        paddingVertical: 10,
-        backgroundColor: '#fff',
-        gap: 8,
-    },
-    input: {
-        flex: 1,
-        fontSize: 14,
-        color: '#1f2937',
-        fontWeight: '600',
-    },
-    applyButton: {
-        paddingHorizontal: 16,
-        paddingVertical: 6,
-        borderRadius: 6,
-        backgroundColor: '#dbeafe',
-    },
-    applyButtonText: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#3b82f6',
-    },
-    applyButtonTextDisabled: {
-        color: '#9ca3af',
-    },
-    errorText: {
-        fontSize: 12,
-        color: '#ef4444',
-        marginTop: 4,
-        marginLeft: 4,
-    },
-    viewOffersButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginTop: 12,
-        gap: 6,
-    },
-    viewOffersText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#3b82f6',
-    },
-    availableContainer: {
-        marginTop: 12,
-        borderTopWidth: 1,
-        borderTopColor: '#e5e7eb',
-        paddingTop: 12,
-    },
-    loadingContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 20,
-        gap: 12,
-    },
-    loadingText: {
-        fontSize: 14,
-        color: '#6b7280',
-    },
-    noOffersText: {
-        fontSize: 14,
-        color: '#6b7280',
-        textAlign: 'center',
-        padding: 20,
-    },
-    promoItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 12,
-        backgroundColor: '#f9fafb',
-        borderRadius: 8,
-        marginBottom: 8,
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-    },
-    promoIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#d1fae5',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 12,
-    },
-    promoDetails: {
-        flex: 1,
-    },
-    promoCode: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#1f2937',
-        marginBottom: 2,
-    },
-    promoDescription: {
-        fontSize: 12,
-        color: '#6b7280',
-        marginBottom: 2,
-    },
-    promoCondition: {
-        fontSize: 11,
-        color: '#9ca3af',
-    },
-    promoDiscount: {
-        alignItems: 'flex-end',
-    },
-    discountText: {
-        fontSize: 16,
-        fontWeight: '800',
-        color: '#10b981',
-        marginBottom: 4,
-    },
-    applyText: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: '#3b82f6',
-    },
-    appliedContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 12,
-        backgroundColor: '#d1fae5',
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#10b981',
-        marginVertical: 12,
-    },
-    appliedContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    appliedInfo: {
-        gap: 2,
-    },
-    appliedCode: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#065f46',
-    },
-    appliedSavings: {
-        fontSize: 12,
-        color: '#047857',
-    },
-    removeButton: {
-        padding: 4,
-    },
-});
+ 
+const styles = StyleSheet.create({});

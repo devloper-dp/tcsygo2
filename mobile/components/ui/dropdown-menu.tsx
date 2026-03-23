@@ -57,9 +57,9 @@ const DropdownMenuContent = ({ className, children, ...props }: any) => {
             <TouchableOpacity
                 activeOpacity={1}
                 onPress={() => onOpenChange(false)}
-                className="flex-1 justify-center items-center bg-black/20"
+                className="flex-1 justify-center items-center bg-black/40"
             >
-                <View className={cn("min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md bg-white", className)} {...props}>
+                <View className={cn("min-w-[8rem] overflow-hidden rounded-[20px] border border-slate-200 dark:border-slate-800 p-2 shadow-2xl bg-white dark:bg-slate-900", className)} {...props}>
                     {children}
                 </View>
             </TouchableOpacity>
@@ -71,14 +71,14 @@ const DropdownMenuItem = ({ className, children, onSelect, ...props }: any) => {
     const { onOpenChange } = React.useContext(DropdownMenuContext);
     return (
         <TouchableOpacity
-            className={cn("relative flex flex-row cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none active:bg-accent active:text-accent-foreground", className)}
+            className={cn("relative flex flex-row cursor-default select-none items-center rounded-xl px-4 py-3 text-sm outline-none active:bg-slate-100 dark:active:bg-slate-800", className)}
             onPress={(e) => {
                 onSelect?.(e);
                 onOpenChange(false);
             }}
             {...props}
         >
-            <Text className="text-sm text-foreground">{children}</Text>
+            <Text className="text-sm font-bold text-slate-900 dark:text-slate-100">{children}</Text>
         </TouchableOpacity>
     )
 }
@@ -90,7 +90,7 @@ const DropdownMenuLabel = ({ className, children, ...props }: any) => (
 )
 
 const DropdownMenuSeparator = ({ className, ...props }: any) => (
-    <View className={cn("-mx-1 my-1 h-px bg-muted", className)} {...props} />
+    <View className={cn("-mx-1 my-1 h-px bg-slate-100 dark:bg-slate-800", className)} {...props} />
 )
 
 const DropdownMenuGroup = View;

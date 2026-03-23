@@ -62,7 +62,7 @@ export function PromoCodesTab() {
         }
     });
 
-    const form = useForm({
+    const form = useForm<z.infer<typeof insertPromoCodeSchema>>({
         resolver: zodResolver(insertPromoCodeSchema),
         defaultValues: {
             code: '',

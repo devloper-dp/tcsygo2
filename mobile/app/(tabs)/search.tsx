@@ -1,8 +1,9 @@
-import { View, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Modal, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Modal, Alert, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect } from 'react';
+import { useTheme } from '@/contexts/ThemeContext';
 
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
@@ -21,6 +22,8 @@ import { useSearchStore } from '@/lib/search-store';
 import { FareEstimation } from '@/components/FareEstimation';
 import { RideService } from '@/services/RideService';
 import { RidePreferences, RidePreference } from '@/components/RidePreferences';
+import { NoTripsFound } from '@/components/EmptyStates';
+import { useResponsive } from '@/hooks/useResponsive';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -36,6 +39,10 @@ interface Filters {
 export default function SearchScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+
+  const { theme, colors } = useTheme();
+  const isDark = theme === 'dark';
+  const { hScale, vScale, spacing, fontSize } = useResponsive();
 
   const [currentPage, setCurrentPage] = useState(1);
   const [sortBy, setSortBy] = useState<SortOption>('time-asc');
@@ -214,27 +221,28 @@ export default function SearchScreen() {
   const hasCoordinates = params.pickupLat && params.dropLat;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView className="flex-1 bg-slate-50 dark:bg-slate-950" edges={['top']}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={isDark ? "#020617" : "#ffffff"} />
       {/* Header */}
-      <View style={styles.header}>
+      <View style={{ paddingHorizontal: spacing.lg, paddingVertical: vScale(16), borderBottomWidth: 1 }} className="flex-row justify-between items-center bg-white dark:bg-slate-900 border-border dark:border-slate-800 shadow-sm z-10">
         <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#1f2937" />
+          <Ionicons name="arrow-back" size={hScale(24)} color={isDark ? "#f8fafc" : "#1f2937"} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Search Results</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={() => setShowSort(true)} style={styles.iconButton}>
-            <Ionicons name="swap-vertical" size={24} color="#1f2937" />
+        <Text variant="h1" style={{ fontSize: fontSize.xl, marginLeft: hScale(16) }} className="flex-1 text-slate-900 dark:text-white">Search Results</Text>
+        <View style={{ flexDirection: 'row', gap: spacing.md }}>
+          <TouchableOpacity onPress={() => setShowSort(true)}>
+            <Ionicons name="swap-vertical" size={hScale(24)} color={isDark ? "#f8fafc" : "#1f2937"} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => setShowFilters(true)} style={styles.iconButton}>
-            <Ionicons name="options-outline" size={24} color="#1f2937" />
+          <TouchableOpacity onPress={() => setShowFilters(true)} className="relative">
+            <Ionicons name="options-outline" size={hScale(24)} color={isDark ? "#f8fafc" : "#1f2937"} />
             {activeFilterCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{activeFilterCount}</Text>
+              <View style={{ top: -vScale(4), right: -hScale(4), width: hScale(16), height: hScale(16) }} className="absolute bg-red-500 rounded-full justify-center items-center">
+                <Text style={{ fontSize: hScale(10) }} className="text-white font-bold">{activeFilterCount}</Text>
               </View>
             )}
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => setShowPreferences(true)} style={styles.iconButton}>
-            <Ionicons name="settings-outline" size={24} color="#1f2937" />
+          <TouchableOpacity onPress={() => setShowPreferences(true)}>
+            <Ionicons name="settings-outline" size={hScale(24)} color={isDark ? "#f8fafc" : "#1f2937"} />
           </TouchableOpacity>
         </View>
       </View>
@@ -248,24 +256,25 @@ export default function SearchScreen() {
 
       {/* Search HistorySection (Only if no params) */}
       {!params.pickup && !params.drop && history.length > 0 && (
-        <View style={styles.historyContainer}>
-          <Text style={styles.sectionTitle}>Recent Searches</Text>
+        <View style={{ padding: spacing.lg, borderBottomWidth: 1 }} className="bg-white dark:bg-slate-900 border-border dark:border-slate-800">
+          <Text variant="h3" style={{ marginBottom: vScale(12) }} className="text-slate-900 dark:text-white">Recent Searches</Text>
           {history.map((item) => (
             <TouchableOpacity
               key={item.id}
-              style={styles.historyItem}
+              style={{ paddingVertical: vScale(12), borderBottomWidth: 1, gap: spacing.md }}
+              className="flex-row items-center border-gray-50 dark:border-slate-800"
               onPress={() => router.push({
                 pathname: '/(tabs)/search',
                 params: { pickup: item.pickup, drop: item.drop }
               })}
             >
-              <Ionicons name="time-outline" size={20} color="#6b7280" />
-              <View style={styles.historyText}>
-                <Text style={styles.historyRoute}>{item.pickup} → {item.drop}</Text>
-                <Text style={styles.historyDate}>{new Date(item.timestamp).toLocaleDateString()}</Text>
+              <Ionicons name="time-outline" size={hScale(20)} color={isDark ? "#94a3b8" : "#6b7280"} />
+              <View className="flex-1">
+                <Text style={{ fontSize: fontSize.base }} className="text-text-primary dark:text-white font-medium">{item.pickup} → {item.drop}</Text>
+                <Text style={{ fontSize: fontSize.xs, marginTop: vScale(2) }} className="text-text-secondary dark:text-slate-400 font-medium">{new Date(item.timestamp).toLocaleDateString()}</Text>
               </View>
               <TouchableOpacity onPress={() => removeSearch(item.id)}>
-                <Ionicons name="close-circle-outline" size={20} color="#9ca3af" />
+                <Ionicons name="close-circle-outline" size={hScale(20)} color={isDark ? "#64748b" : "#9ca3af"} />
               </TouchableOpacity>
             </TouchableOpacity>
           ))}
@@ -273,11 +282,11 @@ export default function SearchScreen() {
       )}
 
       {/* Result Count & Sort Info */}
-      <View style={styles.resultBar}>
-        <Text style={styles.resultText}>
+      <View style={{ padding: spacing.lg, borderBottomWidth: 1 }} className="flex-row justify-between items-center bg-white dark:bg-slate-900 border-border dark:border-slate-800">
+        <Text style={{ fontSize: fontSize.base }} className="font-semibold text-text-primary dark:text-white">
           {trips?.length || 0} trips found
         </Text>
-        <Text style={styles.sortText}>
+        <Text style={{ fontSize: fontSize.xs }} className="text-text-secondary dark:text-slate-400">
           {sortBy === 'price-asc' && '💰 Price: Low to High'}
           {sortBy === 'price-desc' && '💰 Price: High to Low'}
           {sortBy === 'time-asc' && '🕐 Time: Earliest'}
@@ -288,8 +297,8 @@ export default function SearchScreen() {
 
       {/* Trip List */}
       <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.tripList}
+        className="flex-1"
+        contentContainerStyle={{ padding: spacing.lg }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
@@ -310,21 +319,21 @@ export default function SearchScreen() {
         )}
 
         {/* Scheduled Trips */}
-        <Text style={styles.sectionTitle}>Scheduled Pools</Text>
+        <Text variant="h3" style={{ marginBottom: vScale(16), marginTop: vScale(16) }} className="text-slate-900 dark:text-white">Available Rides</Text>
 
         {isLoading ? (
           // Loading Skeletons
           Array.from({ length: 3 }).map((_, i) => (
-            <Card key={i} className="p-4 mb-4">
-              <View style={styles.skeletonCard}>
-                <Skeleton className="w-12 h-12 rounded-full" />
-                <View className="flex-1 ml-3">
-                  <Skeleton className="w-32 h-4 mb-2" />
-                  <Skeleton className="w-24 h-3" />
+            <Card key={i} style={{ padding: spacing.lg, marginBottom: vScale(16), borderRadius: hScale(12) }} className="border-border dark:border-slate-800 shadow-soft bg-white dark:bg-slate-900">
+              <View className="flex-row items-center">
+                <Skeleton style={{ width: hScale(48), height: hScale(48), borderRadius: hScale(24) }} />
+                <View style={{ flex: 1, marginLeft: hScale(12) }}>
+                  <Skeleton style={{ width: hScale(128), height: vScale(16), marginBottom: vScale(8) }} />
+                  <Skeleton style={{ width: hScale(96), height: vScale(12) }} />
                 </View>
-                <Skeleton className="w-16 h-6" />
+                <Skeleton style={{ width: hScale(64), height: vScale(24) }} />
               </View>
-              <Skeleton className="w-full h-20 mt-4" />
+              <Skeleton style={{ width: '100%', height: vScale(80), marginTop: vScale(16) }} />
             </Card>
           ))
         ) : paginatedTrips && paginatedTrips.length > 0 ? (
@@ -339,7 +348,7 @@ export default function SearchScreen() {
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <View style={styles.paginationContainer}>
+              <View style={{ marginTop: vScale(16), marginBottom: vScale(8) }}>
                 <Pagination
                   currentPage={currentPage}
                   totalPages={totalPages}
@@ -349,28 +358,12 @@ export default function SearchScreen() {
             )}
           </>
         ) : (
-          // Empty State
-          <View style={styles.emptyState}>
-            <Ionicons name="car-outline" size={80} color="#d1d5db" />
-            <Text style={styles.emptyTitle}>No scheduled trips found</Text>
-            <Text style={styles.emptyDescription}>
-              Instant booking is available above, or offer your own ride!
-            </Text>
-            <Button
-              variant="outline"
-              onPress={() => {
-                setFilters({
-                  minPrice: 0,
-                  maxPrice: 5000,
-                  vehicleTypes: [],
-                  minRating: 0,
-                });
-                setSortBy('time-asc');
-              }}
-              className="mt-4"
-            >
-              Reset Filters
-            </Button>
+          // Empty State - Using Shared Component
+          <View className="mt-5">
+            <NoTripsFound onSearch={() => {
+              setFilters({ minPrice: 0, maxPrice: 5000, vehicleTypes: [], minRating: 0 });
+              setSortBy('time-asc');
+            }} />
           </View>
         )}
       </ScrollView>
@@ -383,15 +376,15 @@ export default function SearchScreen() {
         onRequestClose={() => setShowSort(false)}
       >
         <TouchableOpacity
-          style={styles.modalOverlay}
+          className="flex-1 bg-black/50 justify-end"
           activeOpacity={1}
           onPress={() => setShowSort(false)}
         >
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Sort By</Text>
+          <View style={{ borderTopLeftRadius: hScale(24), borderTopRightRadius: hScale(24) }} className="bg-white dark:bg-slate-900 max-h-[80%]">
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.xl, borderBottomWidth: 1 }} className="border-border dark:border-slate-800">
+              <Text variant="h2" className="text-slate-900 dark:text-white">Sort By</Text>
               <TouchableOpacity onPress={() => setShowSort(false)}>
-                <Ionicons name="close" size={24} color="#6b7280" />
+                <Ionicons name="close" size={hScale(24)} color={isDark ? "#94a3b8" : "#6b7280"} />
               </TouchableOpacity>
             </View>
 
@@ -404,10 +397,8 @@ export default function SearchScreen() {
             ].map((option) => (
               <TouchableOpacity
                 key={option.value}
-                style={[
-                  styles.sortOption,
-                  sortBy === option.value && styles.sortOptionActive,
-                ]}
+                style={{ padding: spacing.lg, borderBottomWidth: 1, gap: spacing.md }}
+                className={`flex-row items-center border-border dark:border-slate-800 ${sortBy === option.value ? (isDark ? 'bg-blue-900/30' : 'bg-blue-50') : ''}`}
                 onPress={() => {
                   setSortBy(option.value as SortOption);
                   setShowSort(false);
@@ -416,19 +407,17 @@ export default function SearchScreen() {
               >
                 <Ionicons
                   name={option.icon as any}
-                  size={20}
-                  color={sortBy === option.value ? '#3b82f6' : '#6b7280'}
+                  size={hScale(20)}
+                  color={sortBy === option.value ? '#3b82f6' : (isDark ? '#94a3b8' : '#6b7280')}
                 />
                 <Text
-                  style={[
-                    styles.sortOptionText,
-                    sortBy === option.value && styles.sortOptionTextActive,
-                  ]}
+                  style={{ fontSize: fontSize.sm }}
+                  className={`flex-1 ${sortBy === option.value ? 'text-primary dark:text-blue-400 font-semibold' : 'text-text-primary dark:text-slate-300'}`}
                 >
                   {option.label}
                 </Text>
                 {sortBy === option.value && (
-                  <Ionicons name="checkmark" size={20} color="#3b82f6" />
+                  <Ionicons name="checkmark" size={hScale(20)} color="#3b82f6" />
                 )}
               </TouchableOpacity>
             ))}
@@ -469,18 +458,18 @@ export default function SearchScreen() {
         onRequestClose={() => setShowPreferences(false)}
       >
         <TouchableOpacity
-          style={styles.modalOverlay}
+          className="flex-1 bg-black/50 justify-end"
           activeOpacity={1}
           onPress={() => setShowPreferences(false)}
         >
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Ride Preferences</Text>
+          <View style={{ borderTopLeftRadius: hScale(24), borderTopRightRadius: hScale(24) }} className="bg-white dark:bg-slate-900 max-h-[80%]">
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.xl, borderBottomWidth: 1 }} className="border-border dark:border-slate-800">
+              <Text variant="h2" className="text-slate-900 dark:text-white">Ride Preferences</Text>
               <TouchableOpacity onPress={() => setShowPreferences(false)}>
-                <Ionicons name="close" size={24} color="#6b7280" />
+                <Ionicons name="close" size={hScale(24)} color={isDark ? "#94a3b8" : "#6b7280"} />
               </TouchableOpacity>
             </View>
-            <ScrollView style={{ maxHeight: 400 }}>
+            <ScrollView style={{ maxHeight: vScale(400) }}>
               <RidePreferences
                 preferences={preferences}
                 onPreferencesChange={setPreferences}
@@ -488,8 +477,8 @@ export default function SearchScreen() {
                 style={{ elevation: 0, shadowOpacity: 0 }}
               />
             </ScrollView>
-            <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6' }}>
-              <Button onPress={() => setShowPreferences(false)}>Apply Preferences</Button>
+            <View style={{ padding: spacing.lg, borderTopWidth: 1 }} className="border-border dark:border-slate-800">
+              <Button style={{ height: vScale(48), borderRadius: hScale(12) }} onPress={() => setShowPreferences(false)}>Apply Preferences</Button>
             </View>
           </View>
         </TouchableOpacity>
@@ -499,224 +488,4 @@ export default function SearchScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f9fafb',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
-    flex: 1,
-    marginLeft: 16,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  iconButton: {
-    position: 'relative',
-  },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: '#ef4444',
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  badgeText: {
-    color: '#ffffff',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  resultBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  resultText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
-  },
-  sortText: {
-    fontSize: 12,
-    color: '#6b7280',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  tripList: {
-    padding: 16,
-  },
-  skeletonCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  paginationContainer: {
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginTop: 16,
-  },
-  emptyDescription: {
-    fontSize: 14,
-    color: '#6b7280',
-    textAlign: 'center',
-    marginTop: 8,
-    paddingHorizontal: 40,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
-  },
-  sortOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-    gap: 12,
-  },
-  sortOptionActive: {
-    backgroundColor: '#eff6ff',
-  },
-  sortOptionText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#374151',
-  },
-  sortOptionTextActive: {
-    color: '#3b82f6',
-    fontWeight: '600',
-  },
-  filterContent: {
-    padding: 20,
-  },
-  filterSection: {
-    marginBottom: 24,
-  },
-  filterLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 12,
-  },
-  sliderContainer: {
-    paddingHorizontal: 8,
-  },
-  ratingOptions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  ratingOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    backgroundColor: '#ffffff',
-  },
-  ratingOptionActive: {
-    backgroundColor: '#3b82f6',
-    borderColor: '#3b82f6',
-  },
-  ratingOptionText: {
-    fontSize: 12,
-    color: '#374151',
-  },
-  ratingOptionTextActive: {
-    color: '#ffffff',
-  },
-  filterActions: {
-    flexDirection: 'row',
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-  },
-  historyContainer: {
-    padding: 16,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  historyItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f9fafb',
-    gap: 12,
-  },
-  historyText: {
-    flex: 1,
-  },
-  historyRoute: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#374151',
-  },
-  historyDate: {
-    fontSize: 12,
-    color: '#9ca3af',
-    marginTop: 2,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 12,
-    marginTop: 16,
-  },
-});
+

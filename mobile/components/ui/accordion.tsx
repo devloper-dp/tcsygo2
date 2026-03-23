@@ -3,12 +3,6 @@ import { View, Text, TouchableOpacity, LayoutAnimation, Platform, UIManager } fr
 import { cn } from "../../lib/utils";
 import { Feather } from "@expo/vector-icons";
 
-if (
-    Platform.OS === "android" &&
-    UIManager.setLayoutAnimationEnabledExperimental
-) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 const Accordion = React.forwardRef<
     React.ElementRef<typeof View>,

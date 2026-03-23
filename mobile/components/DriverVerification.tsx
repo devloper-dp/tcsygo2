@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Alert, Modal, ScrollView } from 'react-native';
+import { View, StyleSheet, Image, TouchableOpacity, Alert, Modal, ScrollView } from 'react-native';
+import { Text } from '@/components/ui/text';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/ui/card';
-
+import { useTheme } from '@/contexts/ThemeContext';
+ 
 interface DriverProps {
     name: string;
     photoUrl?: string;
@@ -12,16 +14,18 @@ interface DriverProps {
     rating: number;
     trips: number;
 }
-
+ 
 export function DriverVerification({ driver, visible, onClose, onVerified }: { driver: DriverProps, visible: boolean, onClose: () => void, onVerified: () => void }) {
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
     const [step, setStep] = useState(0);
-
+ 
     const steps = [
         { title: 'Check License Plate', desc: `Does the plate match ${driver.plateNumber}?`, icon: 'car-outline' },
         { title: 'Verify Driver Photo', desc: 'Does the driver match the photo?', icon: 'person-outline' },
         { title: 'Confirm Car Details', desc: `Is it a ${driver.vehicleColor} ${driver.vehicleModel}?`, icon: 'information-circle-outline' },
     ];
-
+ 
     const handleNext = () => {
         if (step < steps.length - 1) {
             setStep(step + 1);
@@ -29,57 +33,69 @@ export function DriverVerification({ driver, visible, onClose, onVerified }: { d
             onVerified();
         }
     };
-
+ 
     return (
-        <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-            <View style={styles.container}>
-                <View style={styles.header}>
-                    <Text style={styles.headerTitle}>Verify Your Ride</Text>
-                    <TouchableOpacity onPress={onClose}>
-                        <Ionicons name="close" size={24} color="#1f2937" />
+        <Modal visible={visible} animationType="fade" presentationStyle="pageSheet">
+            <View className="flex-1 bg-slate-50 dark:bg-slate-950">
+                <View className="flex-row justify-between items-center p-6 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 shadow-sm">
+                    <Text className="text-xl font-black text-slate-900 dark:text-white">Verify Your Ride</Text>
+                    <TouchableOpacity 
+                        onPress={onClose}
+                        className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 items-center justify-center"
+                    >
+                        <Ionicons name="close" size={24} color={isDark ? "#94a3b8" : "#475569"} />
                     </TouchableOpacity>
                 </View>
-
-                <ScrollView contentContainerStyle={styles.content}>
-                    <View style={styles.driverCard}>
+ 
+                <ScrollView contentContainerStyle={{ padding: 24 }}>
+                    <View className="flex-row items-center mb-10 bg-white dark:bg-slate-900 p-6 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm">
                         <Image
                             source={{ uri: driver.photoUrl || 'https://via.placeholder.com/150' }}
-                            style={styles.driverPhoto}
+                            className="w-20 h-20 rounded-full mr-6 border-4 border-slate-50 dark:border-slate-800"
                         />
-                        <View style={styles.driverInfo}>
-                            <Text style={styles.driverName}>{driver.name}</Text>
-                            <View style={styles.ratingRow}>
+                        <View className="flex-1">
+                            <Text className="text-2xl font-black text-slate-900 dark:text-white mb-1">{driver.name}</Text>
+                            <View className="flex-row items-center gap-2">
                                 <Ionicons name="star" size={16} color="#f59e0b" />
-                                <Text style={styles.ratingText}>{driver.rating} • {driver.trips} trips</Text>
+                                <Text className="text-sm font-bold text-slate-500 dark:text-slate-400">{driver.rating} • {driver.trips} trips</Text>
                             </View>
                         </View>
                     </View>
-
-                    <Card style={styles.stepCard}>
-                        <View style={styles.stepIconContainer}>
-                            <Ionicons name={steps[step].icon as any} size={48} color="#3b82f6" />
+ 
+                    <Card className="p-10 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[40px] items-center mb-10 shadow-xl shadow-slate-200/50 dark:shadow-slate-950">
+                        <View className="w-32 h-32 rounded-full bg-blue-50 dark:bg-blue-900/10 items-center justify-center mb-10 border-4 border-white dark:border-slate-900 shadow-lg shadow-blue-500/10">
+                            <Ionicons name={steps[step].icon as any} size={64} color="#3b82f6" />
                         </View>
-                        <Text style={styles.stepTitle}>{steps[step].title}</Text>
-                        <Text style={styles.stepDesc}>{steps[step].desc}</Text>
-
-                        <View style={styles.plateContainer}>
-                            <Text style={styles.plateText}>{driver.plateNumber}</Text>
+                        <Text className="text-2xl font-black text-slate-900 dark:text-white mb-3 text-center tracking-tight">{steps[step].title}</Text>
+                        <Text className="text-base font-medium text-slate-500 dark:text-slate-400 text-center mb-10 leading-6">{steps[step].desc}</Text>
+ 
+                        <View className="bg-amber-400 dark:bg-amber-500 px-8 py-4 rounded-2xl border-4 border-slate-900 dark:border-slate-800 shadow-lg shadow-amber-500/20">
+                            <Text className="text-2xl font-black text-slate-900 tracking-[4px] uppercase">{driver.plateNumber}</Text>
                         </View>
                     </Card>
-
-                    <View style={styles.dots}>
+ 
+                    <View className="flex-row justify-center gap-3">
                         {steps.map((_, i) => (
-                            <View key={i} style={[styles.dot, i === step && styles.activeDot]} />
+                            <View 
+                                key={i} 
+                                className={`h-2.5 rounded-full ${i === step ? 'bg-blue-600 w-10' : 'bg-slate-200 dark:bg-slate-800 w-2.5'}`}
+                            />
                         ))}
                     </View>
                 </ScrollView>
-
-                <View style={styles.footer}>
-                    <TouchableOpacity style={styles.reportButton} onPress={() => Alert.alert('Report', 'Details do not match')}>
-                        <Text style={styles.reportText}>Report Mismatch</Text>
+ 
+                <View className="p-6 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex-row gap-4">
+                    <TouchableOpacity 
+                        className="flex-1 h-16 rounded-[24px] bg-rose-50 dark:bg-rose-900/10 items-center justify-center border border-rose-100 dark:border-rose-900/20" 
+                        onPress={() => Alert.alert('Report', 'Details do not match')}
+                    >
+                        <Text className="text-rose-600 dark:text-rose-400 font-bold text-base">Report Mismatch</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.verifyButton} onPress={handleNext}>
-                        <Text style={styles.verifyText}>
+                    <TouchableOpacity 
+                        className="flex-[1.5] h-16 rounded-[24px] bg-emerald-600 active:bg-emerald-700 items-center justify-center shadow-lg shadow-emerald-500/20" 
+                        onPress={handleNext}
+                    >
+                        <Text className="text-white font-black text-lg">
                             {step === steps.length - 1 ? 'Everything Matches' : 'Yes, Matches'}
                         </Text>
                     </TouchableOpacity>
@@ -88,143 +104,5 @@ export function DriverVerification({ driver, visible, onClose, onVerified }: { d
         </Modal>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#f9fafb',
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: 20,
-        backgroundColor: 'white',
-        borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    content: {
-        padding: 20,
-    },
-    driverCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 24,
-    },
-    driverPhoto: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        marginRight: 16,
-    },
-    driverInfo: {
-        flex: 1,
-    },
-    driverName: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1f2937',
-        marginBottom: 4,
-    },
-    ratingRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    ratingText: {
-        fontSize: 14,
-        color: '#6b7280',
-    },
-    stepCard: {
-        padding: 32,
-        alignItems: 'center',
-        marginBottom: 24,
-    },
-    stepIconContainer: {
-        width: 96,
-        height: 96,
-        borderRadius: 48,
-        backgroundColor: '#eff6ff',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 24,
-    },
-    stepTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#1f2937',
-        marginBottom: 8,
-        textAlign: 'center',
-    },
-    stepDesc: {
-        fontSize: 16,
-        color: '#6b7280',
-        textAlign: 'center',
-        marginBottom: 24,
-    },
-    plateContainer: {
-        backgroundColor: '#fbbf24',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 8,
-        borderWidth: 2,
-        borderColor: '#000',
-    },
-    plateText: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        fontFamily: 'monospace',
-    },
-    dots: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        gap: 8,
-    },
-    dot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: '#d1d5db',
-    },
-    activeDot: {
-        backgroundColor: '#3b82f6',
-        width: 24,
-    },
-    footer: {
-        padding: 20,
-        backgroundColor: 'white',
-        borderTopWidth: 1,
-        borderTopColor: '#f3f4f6',
-        flexDirection: 'row',
-        gap: 12,
-    },
-    reportButton: {
-        flex: 1,
-        padding: 16,
-        borderRadius: 12,
-        backgroundColor: '#fee2e2',
-        alignItems: 'center',
-    },
-    reportText: {
-        color: '#ef4444',
-        fontWeight: '600',
-        fontSize: 16,
-    },
-    verifyButton: {
-        flex: 1,
-        padding: 16,
-        borderRadius: 12,
-        backgroundColor: '#10b981',
-        alignItems: 'center',
-    },
-    verifyText: {
-        color: 'white',
-        fontWeight: '600',
-        fontSize: 16,
-    },
-});
+ 
+const styles = StyleSheet.create({});

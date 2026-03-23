@@ -28,7 +28,11 @@ interface MobileFiltersProps {
     onApply: (filters: FilterOptions) => void;
 }
 
+import { useTheme } from '@/contexts/ThemeContext';
+
 export function MobileFilters({ visible, onClose, filters, onApply }: MobileFiltersProps) {
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
     const [localFilters, setLocalFilters] = useState<FilterOptions>(filters);
 
     const handleApply = () => {
@@ -60,159 +64,126 @@ export function MobileFilters({ visible, onClose, filters, onApply }: MobileFilt
             presentationStyle="pageSheet"
             onRequestClose={onClose}
         >
-            <View style={styles.container}>
-                <View style={styles.header}>
+            <View className="flex-1 bg-white dark:bg-slate-900">
+                <View className="flex-row items-center justify-between px-4 py-4 border-b border-slate-100 dark:border-slate-800">
                     <TouchableOpacity onPress={onClose}>
-                        <Ionicons name="close" size={24} color="#000" />
+                        <Ionicons name="close" size={24} color={isDark ? "#f8fafc" : "#0f172a"} />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle} className="font-semibold">
+                    <Text className="text-lg font-bold text-slate-900 dark:text-white">
                         Filters
                     </Text>
                     <TouchableOpacity onPress={handleReset}>
-                        <Text style={styles.resetText} className="text-primary">
+                        <Text className="text-sm font-bold text-primary dark:text-blue-400">
                             Reset
                         </Text>
                     </TouchableOpacity>
                 </View>
 
-                <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+                <ScrollView className="flex-1 px-4" showsVerticalScrollIndicator={false}>
                     {/* Price Range */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle} className="font-semibold">
+                    <View className="py-5 border-b border-slate-50 dark:border-slate-800">
+                        <Text className="text-base font-bold text-slate-900 dark:text-white mb-4">
                             Price Range
                         </Text>
-                        <View style={styles.priceInputs}>
-                            <View style={styles.priceInput}>
-                                <Text style={styles.label} className="text-gray-600">
+                        <View className="flex-row gap-3 mb-4">
+                            <View className="flex-1">
+                                <Text className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
                                     Min (₹)
                                 </Text>
-                                <View style={styles.input}>
-                                    <Text>{localFilters.minPrice || 0}</Text>
+                                <View className="border border-slate-200 dark:border-slate-700 rounded-xl p-3 bg-slate-50 dark:bg-slate-800">
+                                    <Text className="text-slate-900 dark:text-white font-medium">{localFilters.minPrice || 0}</Text>
                                 </View>
                             </View>
-                            <View style={styles.priceInput}>
-                                <Text style={styles.label} className="text-gray-600">
+                            <View className="flex-1">
+                                <Text className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
                                     Max (₹)
                                 </Text>
-                                <View style={styles.input}>
-                                    <Text>{localFilters.maxPrice || 1000}</Text>
+                                <View className="border border-slate-200 dark:border-slate-700 rounded-xl p-3 bg-slate-50 dark:bg-slate-800">
+                                    <Text className="text-slate-900 dark:text-white font-medium">{localFilters.maxPrice || 1000}</Text>
                                 </View>
                             </View>
                         </View>
                         <Slider
-                            style={styles.slider}
+                            style={{ width: '100%', height: 40 }}
                             minimumValue={0}
                             maximumValue={1000}
                             step={50}
                             value={localFilters.minPrice || 0}
                             onValueChange={(value) => setLocalFilters({ ...localFilters, minPrice: value })}
                             minimumTrackTintColor="#3b82f6"
-                            maximumTrackTintColor="#d1d5db"
+                            maximumTrackTintColor={isDark ? "#334155" : "#d1d5db"}
                         />
                     </View>
 
                     {/* Minimum Seats */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle} className="font-semibold">
+                    <View className="py-5 border-b border-slate-50 dark:border-slate-800">
+                        <Text className="text-base font-bold text-slate-900 dark:text-white mb-4">
                             Minimum Seats: {localFilters.minSeats || 1}
                         </Text>
                         <Slider
-                            style={styles.slider}
+                            style={{ width: '100%', height: 40 }}
                             minimumValue={1}
                             maximumValue={7}
                             step={1}
                             value={localFilters.minSeats || 1}
                             onValueChange={(value) => setLocalFilters({ ...localFilters, minSeats: value })}
                             minimumTrackTintColor="#3b82f6"
-                            maximumTrackTintColor="#d1d5db"
+                            maximumTrackTintColor={isDark ? "#334155" : "#d1d5db"}
                         />
                     </View>
 
                     {/* Preferences */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle} className="font-semibold">
+                    <View className="py-5 border-b border-slate-50 dark:border-slate-800">
+                        <Text className="text-base font-bold text-slate-900 dark:text-white mb-4">
                             Preferences
                         </Text>
-                        <View style={styles.preferences}>
-                            <TouchableOpacity
-                                style={styles.preferenceItem}
-                                onPress={() => togglePreference('smoking')}
-                            >
-                                <View style={styles.preferenceLeft}>
-                                    <Ionicons
-                                        name={localFilters.preferences?.smoking ? 'checkmark-circle' : 'ellipse-outline'}
-                                        size={24}
-                                        color={localFilters.preferences?.smoking ? '#3b82f6' : '#9ca3af'}
-                                    />
-                                    <Text style={styles.preferenceText}>Smoking Allowed</Text>
-                                </View>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={styles.preferenceItem}
-                                onPress={() => togglePreference('pets')}
-                            >
-                                <View style={styles.preferenceLeft}>
-                                    <Ionicons
-                                        name={localFilters.preferences?.pets ? 'checkmark-circle' : 'ellipse-outline'}
-                                        size={24}
-                                        color={localFilters.preferences?.pets ? '#3b82f6' : '#9ca3af'}
-                                    />
-                                    <Text style={styles.preferenceText}>Pets Allowed</Text>
-                                </View>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={styles.preferenceItem}
-                                onPress={() => togglePreference('music')}
-                            >
-                                <View style={styles.preferenceLeft}>
-                                    <Ionicons
-                                        name={localFilters.preferences?.music ? 'checkmark-circle' : 'ellipse-outline'}
-                                        size={24}
-                                        color={localFilters.preferences?.music ? '#3b82f6' : '#9ca3af'}
-                                    />
-                                    <Text style={styles.preferenceText}>Music Allowed</Text>
-                                </View>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={styles.preferenceItem}
-                                onPress={() => togglePreference('luggage')}
-                            >
-                                <View style={styles.preferenceLeft}>
-                                    <Ionicons
-                                        name={localFilters.preferences?.luggage ? 'checkmark-circle' : 'ellipse-outline'}
-                                        size={24}
-                                        color={localFilters.preferences?.luggage ? '#3b82f6' : '#9ca3af'}
-                                    />
-                                    <Text style={styles.preferenceText}>Extra Luggage</Text>
-                                </View>
-                            </TouchableOpacity>
+                        <View className="gap-4">
+                            {[
+                                { key: 'smoking', label: 'Smoking Allowed' },
+                                { key: 'pets', label: 'Pets Allowed' },
+                                { key: 'music', label: 'Music Allowed' },
+                                { key: 'luggage', label: 'Extra Luggage' },
+                            ].map((pref) => (
+                                <TouchableOpacity
+                                    key={pref.key}
+                                    className="flex-row items-center justify-between"
+                                    onPress={() => togglePreference(pref.key as any)}
+                                >
+                                    <View className="flex-row items-center gap-3">
+                                        <Ionicons
+                                            name={localFilters.preferences?.[pref.key as keyof NonNullable<FilterOptions['preferences']>] ? 'checkmark-circle' : 'ellipse-outline'}
+                                            size={24}
+                                            color={localFilters.preferences?.[pref.key as keyof NonNullable<FilterOptions['preferences']>] ? '#3b82f6' : (isDark ? '#475569' : '#9ca3af')}
+                                        />
+                                        <Text className="text-sm font-medium text-slate-700 dark:text-slate-300">{pref.label}</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
                         </View>
                     </View>
 
                     {/* Sort By */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle} className="font-semibold">
+                    <View className="py-5">
+                        <Text className="text-base font-bold text-slate-900 dark:text-white mb-4">
                             Sort By
                         </Text>
-                        <View style={styles.sortOptions}>
+                        <View className="flex-row flex-wrap gap-2">
                             {(['price', 'departure', 'duration', 'rating'] as const).map((option) => (
                                 <TouchableOpacity
                                     key={option}
-                                    style={[
-                                        styles.sortOption,
-                                        localFilters.sortBy === option && styles.sortOptionActive,
-                                    ]}
+                                    className={`px-4 py-2 rounded-full border ${
+                                        localFilters.sortBy === option 
+                                            ? 'bg-primary dark:bg-blue-600 border-primary dark:border-blue-600' 
+                                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+                                    }`}
                                     onPress={() => setLocalFilters({ ...localFilters, sortBy: option })}
                                 >
                                     <Text
-                                        style={[
-                                            styles.sortOptionText,
-                                            localFilters.sortBy === option && styles.sortOptionTextActive,
-                                        ]}
-                                        className={localFilters.sortBy === option ? 'font-semibold' : ''}
+                                        className={`text-sm ${
+                                            localFilters.sortBy === option 
+                                                ? 'text-white font-bold' 
+                                                : 'text-slate-600 dark:text-slate-400 font-medium'
+                                        }`}
                                     >
                                         {option.charAt(0).toUpperCase() + option.slice(1)}
                                     </Text>
@@ -222,115 +193,12 @@ export function MobileFilters({ visible, onClose, filters, onApply }: MobileFilt
                     </View>
                 </ScrollView>
 
-                <View style={styles.footer}>
-                    <Button onPress={handleApply} className="flex-1">
-                        <Text className="text-white font-medium">Apply Filters</Text>
+                <View className="p-4 border-t border-slate-100 dark:border-slate-800">
+                    <Button onPress={handleApply} className="w-full h-12 rounded-xl">
+                        <Text className="text-white font-bold text-base">Apply Filters</Text>
                     </Button>
                 </View>
             </View>
         </Modal>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#ffffff',
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#e5e7eb',
-    },
-    headerTitle: {
-        fontSize: 18,
-    },
-    resetText: {
-        fontSize: 14,
-    },
-    content: {
-        flex: 1,
-        paddingHorizontal: 16,
-    },
-    section: {
-        paddingVertical: 20,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
-    },
-    sectionTitle: {
-        fontSize: 16,
-        marginBottom: 16,
-    },
-    priceInputs: {
-        flexDirection: 'row',
-        gap: 12,
-        marginBottom: 16,
-    },
-    priceInput: {
-        flex: 1,
-    },
-    label: {
-        fontSize: 12,
-        marginBottom: 8,
-    },
-    input: {
-        borderWidth: 1,
-        borderColor: '#d1d5db',
-        borderRadius: 8,
-        padding: 12,
-        backgroundColor: '#f9fafb',
-    },
-    slider: {
-        width: '100%',
-        height: 40,
-    },
-    preferences: {
-        gap: 16,
-    },
-    preferenceItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    preferenceLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    preferenceText: {
-        fontSize: 14,
-    },
-    sortOptions: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 8,
-    },
-    sortOption: {
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: '#d1d5db',
-        backgroundColor: '#ffffff',
-    },
-    sortOptionActive: {
-        backgroundColor: '#3b82f6',
-        borderColor: '#3b82f6',
-    },
-    sortOptionText: {
-        fontSize: 14,
-        color: '#374151',
-    },
-    sortOptionTextActive: {
-        color: '#ffffff',
-    },
-    footer: {
-        padding: 16,
-        borderTopWidth: 1,
-        borderTopColor: '#e5e7eb',
-    },
-});

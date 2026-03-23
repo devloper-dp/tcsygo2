@@ -1,25 +1,27 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { Card } from '@/components/ui/card';
 import { Ionicons } from '@expo/vector-icons';
 import { RideService, FareEstimate } from '@/services/RideService';
-
+import { useTheme } from '@/contexts/ThemeContext';
+ 
 interface FareEstimationProps {
     pickupCoords: { lat: number; lng: number };
     dropCoords: { lat: number; lng: number };
     onBook: (vehicleType: string, price: number) => void;
 }
-
+ 
 export function FareEstimation({ pickupCoords, dropCoords, onBook }: FareEstimationProps) {
+    const { isDark } = useTheme();
     const [loading, setLoading] = useState(false);
     const [estimate, setEstimate] = useState<FareEstimate | null>(null);
     const [selectedType, setSelectedType] = useState<string>('bike');
-
+ 
     useEffect(() => {
         fetchEstimate();
     }, [pickupCoords, dropCoords]);
-
+ 
     const fetchEstimate = async () => {
         setLoading(true);
         try {
@@ -31,75 +33,74 @@ export function FareEstimation({ pickupCoords, dropCoords, onBook }: FareEstimat
             setLoading(false);
         }
     };
-
+ 
     if (loading) {
         return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color="#3b82f6" />
-                <Text style={styles.loadingText}>Calculating best fares...</Text>
+            <View className="p-8 items-center gap-4">
+                <ActivityIndicator size="small" color={isDark ? "#ffffff" : "#3b82f6"} />
+                <Text className="text-slate-500 dark:text-slate-500 text-[10px] font-black uppercase tracking-widest text-center">Syncing Terminal Fares...</Text>
             </View>
         );
     }
-
+ 
     if (!estimate) return null;
-
+ 
     const vehicles = [
-        { id: 'bike', name: 'Bike', icon: 'bicycle', multiplier: 0.5, time: estimate.durationMins },
-        { id: 'auto', name: 'Auto', icon: 'bicycle-outline', multiplier: 0.8, time: estimate.durationMins + 2 }, // Auto icon workaround
-        { id: 'cab', name: 'Cab', icon: 'car', multiplier: 1.5, time: estimate.durationMins + 5 },
+        { id: 'bike', name: 'BIKE', icon: 'bicycle', multiplier: 0.5, time: estimate.durationMins },
+        { id: 'auto', name: 'AUTO', icon: 'car-sport', multiplier: 0.8, time: estimate.durationMins + 2 },
+        { id: 'cab', name: 'CAB', icon: 'car', multiplier: 1.5, time: estimate.durationMins + 5 },
     ];
-
+ 
     return (
-        <View style={styles.container}>
-            <Text style={styles.title}>Instant Booking</Text>
-            {estimate.surgeMultiplier > 1 && (
-                <View style={styles.surgeBadge}>
-                    <Ionicons name="flash" size={14} color="white" />
-                    <Text style={styles.surgeText}>
-                        Surge pricing active ({estimate.surgeMultiplier}x) due to high demand
-                    </Text>
-                </View>
-            )}
-
-            <View style={styles.optionsGrid}>
+        <Card className="p-8 bg-white dark:bg-slate-900 rounded-[40px] mb-6 border border-slate-100 dark:border-slate-800 shadow-xl overflow-visible">
+            <View className="flex-row items-center justify-between mb-8">
+                <Text className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tighter">Tactical Deployment</Text>
+                {estimate.surgeMultiplier > 1 && (
+                    <View className="flex-row items-center bg-red-500 dark:bg-red-600 px-3 py-1.5 rounded-full g-1.5">
+                        <Ionicons name="flash" size={12} color="white" />
+                        <Text className="text-[9px] font-black text-white uppercase tracking-widest ml-1">
+                            SURGE ACTIVE {estimate.surgeMultiplier}X
+                        </Text>
+                    </View>
+                )}
+            </View>
+ 
+            <View className="flex-row gap-4 mb-8">
                 {vehicles.map((v) => {
-                    // Adjust price based on base estimate + multiplier
-                    // RideService returns a base estimate which might be car-based or generic
-                    // Let's assume RideService returns a 'Standard' price and we adjust
                     const price = Math.round(estimate.estimatedPrice * v.multiplier);
-
+                    const isActive = selectedType === v.id;
+ 
                     return (
                         <TouchableOpacity
                             key={v.id}
-                            style={[
-                                styles.optionCard,
-                                selectedType === v.id && styles.optionCardActive
-                            ]}
+                            className={`flex-1 p-5 rounded-[24px] items-center border-2 transition-all ${isActive 
+                                ? 'bg-slate-900 dark:bg-white border-slate-900 dark:border-white shadow-lg' 
+                                : 'bg-slate-50 dark:bg-slate-950 border-slate-100 dark:border-slate-800'}`}
                             onPress={() => setSelectedType(v.id)}
                         >
-                            <View style={styles.iconContainer}>
+                            <View className={`mb-3 w-10 h-10 rounded-xl items-center justify-center ${isActive ? 'bg-white/10 dark:bg-slate-900/10' : 'bg-white dark:bg-slate-900'}`}>
                                 <Ionicons
-                                    name={v.id === 'auto' ? 'car-sport' : v.icon as any}
-                                    size={24}
-                                    color={selectedType === v.id ? 'white' : '#374151'}
+                                    name={v.icon as any}
+                                    size={20}
+                                    color={isActive ? (isDark ? '#0f172a' : '#ffffff') : (isDark ? '#475569' : '#94a3b8')}
                                 />
                             </View>
-                            <Text style={[styles.vehicleName, selectedType === v.id && styles.textActive]}>
+                            <Text className={`text-[9px] font-black mb-1 uppercase tracking-widest ${isActive ? 'text-white dark:text-slate-900' : 'text-slate-500 dark:text-slate-500'}`}>
                                 {v.name}
                             </Text>
-                            <Text style={[styles.timeText, selectedType === v.id && { color: '#bfdbfe' }]}>
-                                {v.time} min
+                            <Text className={`text-[10px] font-bold mb-2 uppercase tracking-tight ${isActive ? 'text-blue-200 dark:text-blue-800' : 'text-slate-400 dark:text-slate-600'}`}>
+                                {v.time} MIN
                             </Text>
-                            <Text style={[styles.priceText, selectedType === v.id && styles.textActive]}>
+                            <Text className={`text-sm font-black uppercase tracking-tighter ${isActive ? 'text-white dark:text-slate-900' : 'text-slate-900 dark:text-white'}`}>
                                 ₹{price}
                             </Text>
                         </TouchableOpacity>
                     );
                 })}
             </View>
-
+ 
             <TouchableOpacity
-                style={styles.bookBtn}
+                className="bg-slate-900 dark:bg-white h-16 rounded-[24px] flex-row items-center justify-center gap-3 shadow-2xl active:opacity-90"
                 onPress={() => {
                     const vehicle = vehicles.find(v => v.id === selectedType);
                     if (vehicle) {
@@ -108,108 +109,11 @@ export function FareEstimation({ pickupCoords, dropCoords, onBook }: FareEstimat
                     }
                 }}
             >
-                <Text style={styles.bookBtnText}>Book {vehicles.find(v => v.id === selectedType)?.name}</Text>
-                <Ionicons name="arrow-forward" size={20} color="white" />
+                <Text className="text-white dark:text-slate-900 font-black uppercase tracking-[3px] text-sm">
+                    BOOK {vehicles.find(v => v.id === selectedType)?.name}
+                </Text>
+                <Ionicons name="arrow-forward" size={18} color={isDark ? "#0f172a" : "#ffffff"} />
             </TouchableOpacity>
-        </View>
+        </Card>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        padding: 16,
-        backgroundColor: 'white',
-        borderRadius: 16,
-        marginBottom: 16,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    loadingContainer: {
-        padding: 20,
-        alignItems: 'center',
-        gap: 12,
-    },
-    loadingText: {
-        color: '#6b7280',
-        fontSize: 14,
-    },
-    title: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1f2937',
-        marginBottom: 12,
-    },
-    surgeBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#ef4444',
-        paddingVertical: 6,
-        paddingHorizontal: 10,
-        borderRadius: 20,
-        alignSelf: 'flex-start',
-        marginBottom: 16,
-        gap: 6,
-    },
-    surgeText: {
-        color: 'white',
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    optionsGrid: {
-        flexDirection: 'row',
-        gap: 12,
-        marginBottom: 16,
-    },
-    optionCard: {
-        flex: 1,
-        padding: 12,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-        alignItems: 'center',
-        backgroundColor: '#f9fafb',
-    },
-    optionCardActive: {
-        backgroundColor: '#3b82f6',
-        borderColor: '#3b82f6',
-    },
-    iconContainer: {
-        marginBottom: 8,
-    },
-    vehicleName: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#374151',
-        marginBottom: 4,
-    },
-    timeText: {
-        fontSize: 12,
-        color: '#6b7280',
-        marginBottom: 4,
-    },
-    priceText: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    textActive: {
-        color: 'white',
-    },
-    bookBtn: {
-        backgroundColor: '#1f2937',
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 14,
-        borderRadius: 12,
-        gap: 8,
-    },
-    bookBtnText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-});

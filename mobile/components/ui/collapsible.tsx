@@ -3,12 +3,6 @@ import { View, TouchableOpacity, LayoutAnimation, Platform, UIManager } from "re
 import { cn } from "../../lib/utils";
 import { Feather } from "@expo/vector-icons";
 
-if (
-    Platform.OS === "android" &&
-    UIManager.setLayoutAnimationEnabledExperimental
-) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 const Collapsible = React.forwardRef<
     React.ElementRef<typeof View>,

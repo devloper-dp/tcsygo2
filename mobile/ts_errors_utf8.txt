@@ -1,0 +1,42 @@
+﻿components/ui/calendar.tsx(6,18): error TS2430: Interface 'CalendarProps' incorrectly extends interface 'Partial<CalendarProps>'.
+  Types of property 'minDate' are incompatible.
+    Type 'Date | undefined' is not assignable to type 'string | undefined'.
+      Type 'Date' is not assignable to type 'string'.
+components/ui/dialog.tsx(61,18): error TS2322: Type '{ children: Element; hitSlop?: number | Insets | null | undefined; id?: string | undefined; needsOffscreenAlphaCompositing?: boolean | undefined; onLayout?: ((event: LayoutChangeEvent) => void) | undefined; ... 86 more ...; className: string; }' is not assignable to type 'TouchableOpacityProps'.
+  Types of property 'onBlur' are incompatible.
+    Type '((e: BlurEvent) => void) | null | undefined' is not assignable to type '((e: NativeSyntheticEvent<TargetedEvent>) => void) | undefined'.
+      Type 'null' is not assignable to type '((e: NativeSyntheticEvent<TargetedEvent>) => void) | undefined'.
+components/ui/input-otp.tsx(16,10): error TS2322: Type '{ children: (Element | Element[])[]; hitSlop?: number | Insets | null | undefined; id?: string | undefined; needsOffscreenAlphaCompositing?: boolean | undefined; ... 88 more ...; onPress: () => void | undefined; }' is not assignable to type 'TouchableOpacityProps'.
+  Types of property 'onBlur' are incompatible.
+    Type '((e: BlurEvent) => void) | null | undefined' is not assignable to type '((e: NativeSyntheticEvent<TargetedEvent>) => void) | undefined'.
+      Type 'null' is not assignable to type '((e: NativeSyntheticEvent<TargetedEvent>) => void) | undefined'.
+components/ui/navigation-menu.tsx(5,8): error TS2613: Module '"E:/Downloads/TCSYGO2/mobile/components/ui/collapsible"' has no default export. Did you mean to use 'import { Collapsible } from "E:/Downloads/TCSYGO2/mobile/components/ui/collapsible"' instead?
+components/ui/select.tsx(128,24): error TS2304: Cannot find name 'useTheme'.
+components/ui/sheet.tsx(66,18): error TS2322: Type '{ children: Element; hitSlop?: number | Insets | null | undefined; id?: string | undefined; needsOffscreenAlphaCompositing?: boolean | undefined; onLayout?: ((event: LayoutChangeEvent) => void) | undefined; ... 86 more ...; className: string; }' is not assignable to type 'TouchableOpacityProps'.
+  Types of property 'onBlur' are incompatible.
+    Type '((e: BlurEvent) => void) | null | undefined' is not assignable to type '((e: NativeSyntheticEvent<TargetedEvent>) => void) | undefined'.
+      Type 'null' is not assignable to type '((e: NativeSyntheticEvent<TargetedEvent>) => void) | undefined'.
+components/ui/table.tsx(11,13): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: ViewProps): View', gave the following error.
+    Type 'ForwardedRef<ScrollView>' is not assignable to type 'Ref<View> | undefined'.
+      Type 'RefObject<ScrollView | null>' is not assignable to type 'Ref<View> | undefined'.
+        Type 'RefObject<ScrollView | null>' is not assignable to type 'RefObject<View | null>'.
+          Type 'ScrollView | null' is not assignable to type 'View | null'.
+            Type 'ScrollView' is not assignable to type 'NativeMethods & ViewComponent'.
+              Type 'ScrollView' is missing the following properties from type 'NativeMethods': measure, measureInWindow, measureLayout, focus, blur
+  Overload 2 of 2, '(props: ViewProps, context: any): View', gave the following error.
+    Type 'ForwardedRef<ScrollView>' is not assignable to type 'Ref<View> | undefined'.
+      Type 'RefObject<ScrollView | null>' is not assignable to type 'Ref<View> | undefined'.
+        Type 'RefObject<ScrollView | null>' is not assignable to type 'RefObject<View | null>'.
+          Type 'ScrollView | null' is not assignable to type 'View | null'.
+            Type 'ScrollView' is not assignable to type 'NativeMethods & ViewComponent'.
+              Type 'ScrollView' is missing the following properties from type 'NativeMethods': measure, measureInWindow, measureLayout, focus, blur
+components/WalletSystem.tsx(153,30): error TS2339: Property 'container' does not exist on type '{}'.
+lib/notification-service.ts(26,37): error TS2322: Type 'Promise<{ shouldShowAlert: true; shouldPlaySound: true; shouldSetBadge: true; }>' is not assignable to type 'Promise<NotificationBehavior>'.
+  Type '{ shouldShowAlert: true; shouldPlaySound: true; shouldSetBadge: true; }' is missing the following properties from type 'NotificationBehavior': shouldShowBanner, shouldShowList
+lib/notification-service.ts(111,27): error TS2339: Property 'removeNotificationSubscription' does not exist on type 'typeof import("E:/Downloads/TCSYGO2/mobile/node_modules/expo-notifications/build/index")'.
+lib/notification-service.ts(114,27): error TS2339: Property 'removeNotificationSubscription' does not exist on type 'typeof import("E:/Downloads/TCSYGO2/mobile/node_modules/expo-notifications/build/index")'.
+services/ScheduledRideManager.ts(142,21): error TS2322: Type '{ seconds: number; }' is not assignable to type 'NotificationTriggerInput'.
+  Property 'type' is missing in type '{ seconds: number; }' but required in type 'TimeIntervalTriggerInput'.
+services/ScheduledRideManager.ts(156,21): error TS2322: Type '{ seconds: number; }' is not assignable to type 'NotificationTriggerInput'.
+  Property 'type' is missing in type '{ seconds: number; }' but required in type 'TimeIntervalTriggerInput'.

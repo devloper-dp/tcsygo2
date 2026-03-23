@@ -10,17 +10,17 @@ export interface BadgeProps extends ViewProps {
 
 function Badge({ className, variant = "default", children, ...props }: BadgeProps) {
     const variants = {
-        default: "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
-        secondary: "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        destructive: "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
-        outline: "text-foreground",
+        default: "border-transparent bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-sm",
+        secondary: "border-transparent bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100",
+        destructive: "border-transparent bg-red-100 dark:bg-red-900/10 text-red-600 dark:text-red-400",
+        outline: "border-slate-200 dark:border-slate-800 bg-transparent",
     }
 
     const textVariants = {
-        default: "text-white",
-        secondary: "text-gray-900",
-        destructive: "text-white",
-        outline: "text-gray-900 dark:text-gray-100",
+        default: "text-white dark:text-slate-900",
+        secondary: "text-slate-900 dark:text-slate-100",
+        destructive: "text-red-600 dark:text-red-400",
+        outline: "text-slate-600 dark:text-slate-400",
     }
 
     return (

@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { View, StyleSheet, Modal, TouchableOpacity, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { Text } from '@/components/ui/text';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-
+import { useTheme } from '@/contexts/ThemeContext';
+ 
 interface RateDriverModalProps {
     visible: boolean;
     onClose: () => void;
@@ -11,21 +13,24 @@ interface RateDriverModalProps {
     driverId: string;
     driverName: string;
 }
-
+ 
 export function RateDriverModal({ visible, onClose, tripId, driverId, driverName }: RateDriverModalProps) {
     const { user } = useAuth();
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
+ 
     const [rating, setRating] = useState(0);
     const [review, setReview] = useState('');
     const [tip, setTip] = useState(0);
     const [submitting, setSubmitting] = useState(false);
-
+ 
     const handleSubmit = async () => {
         if (rating === 0) return;
         if (!user) return;
-
+ 
         try {
             setSubmitting(true);
-
+ 
             // 1. Submit Rating
             const { error } = await supabase.from('ratings').insert({
                 trip_id: tripId,
@@ -34,15 +39,15 @@ export function RateDriverModal({ visible, onClose, tripId, driverId, driverName
                 rating,
                 review
             });
-
+ 
             if (error) throw error;
-
+ 
             // 2. Process Tip (Simulated for now, would likely hit an edge function)
             if (tip > 0) {
                 // Example: await supabase.rpc('send_tip', { booking_id: ..., amount: tip })
                 console.log(`Tip of ₹${tip} sent to driver ${driverId}`);
             }
-
+ 
             Alert.alert("Success", tip > 0
                 ? `Rating submitted and ₹${tip} tip sent!`
                 : "Rating submitted successfully");
@@ -53,70 +58,86 @@ export function RateDriverModal({ visible, onClose, tripId, driverId, driverName
             setSubmitting(false);
         }
     };
-
+ 
     return (
-        <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-            <View style={styles.overlay}>
-                <View style={styles.content}>
-                    <Text style={styles.title}>Rate Driver</Text>
-                    <Text style={styles.subtitle}>How was your ride with {driverName}?</Text>
-
-                    <View style={styles.stars}>
+        <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+            <View className="flex-1 bg-black/60 justify-center p-6">
+                <View className="bg-white dark:bg-slate-900 rounded-[32px] p-8 items-center border border-slate-100 dark:border-slate-800 shadow-xl">
+                    <Text className="text-2xl font-black text-slate-900 dark:text-white mb-2">Rate Driver</Text>
+                    <Text className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-8 text-center px-4">How was your ride with {driverName}?</Text>
+ 
+                    <View className="flex-row gap-3 mb-4">
                         {[1, 2, 3, 4, 5].map((star) => (
-                            <TouchableOpacity key={star} onPress={() => setRating(star)}>
+                            <TouchableOpacity key={star} onPress={() => setRating(star)} activeOpacity={0.7}>
                                 <Ionicons
                                     name={star <= rating ? "star" : "star-outline"}
-                                    size={32}
-                                    color={star <= rating ? "#f59e0b" : "#d1d5db"}
+                                    size={40}
+                                    color={star <= rating ? "#f59e0b" : (isDark ? "#334155" : "#e2e8f0")}
                                 />
                             </TouchableOpacity>
                         ))}
                     </View>
-
-                    <Text style={styles.ratingLabel}>
+ 
+                    <Text className="text-sm font-black text-amber-500 h-6 mb-8 uppercase tracking-widest">
                         {rating === 5 ? 'Excellent!' : rating >= 4 ? 'Good' : rating >= 3 ? 'Average' : rating > 0 ? 'Poor' : 'Select a rating'}
                     </Text>
-
+ 
                     {/* Tipping Section */}
-                    <Text style={styles.label}>Add a Tip</Text>
-                    <View style={styles.tipGrid}>
-                        {[0, 10, 20, 50].map((amount) => (
-                            <TouchableOpacity
-                                key={amount}
-                                style={[styles.tipChip, tip === amount && styles.tipChipActive]}
-                                onPress={() => setTip(amount)}
-                            >
-                                <Text style={[styles.tipText, tip === amount && styles.tipTextActive]}>
-                                    {amount === 0 ? 'No Tip' : `₹${amount}`}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
+                    <View className="w-full mb-8">
+                        <Text className="text-xs font-bold text-slate-400 dark:text-slate-600 uppercase tracking-widest mb-4">Add a Tip</Text>
+                        <View className="flex-row gap-3">
+                            {[0, 10, 20, 50].map((amount) => (
+                                <TouchableOpacity
+                                    key={amount}
+                                    className={`flex-1 py-3.5 rounded-2xl border items-center ${
+                                        tip === amount 
+                                            ? 'bg-blue-600 dark:bg-blue-500 border-blue-600 dark:border-blue-500 shadow-sm shadow-blue-500/20' 
+                                            : 'bg-slate-50 dark:bg-slate-800/20 border-slate-100 dark:border-slate-800'
+                                    }`}
+                                    onPress={() => setTip(amount)}
+                                >
+                                    <Text className={`text-xs font-bold ${
+                                        tip === amount ? 'text-white' : 'text-slate-500 dark:text-slate-400'
+                                    }`}>
+                                        {amount === 0 ? 'No Tip' : `₹${amount}`}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
                     </View>
-
+ 
                     <TextInput
-                        style={styles.input}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 h-28 mb-8 text-sm font-medium text-slate-900 dark:text-white"
                         placeholder="Write a review (optional)"
+                        placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                         multiline
                         numberOfLines={4}
                         value={review}
                         onChangeText={setReview}
                         textAlignVertical="top"
                     />
-
-                    <View style={styles.footer}>
-                        <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-                            <Text style={styles.cancelText}>Cancel</Text>
+ 
+                    <View className="flex-row gap-4 w-full">
+                        <TouchableOpacity 
+                            className="flex-1 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 items-center justify-center" 
+                            onPress={onClose}
+                        >
+                            <Text className="text-slate-500 dark:text-slate-400 font-bold">Cancel</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={[styles.submitButton, (rating === 0 || submitting) && styles.disabledButton]}
+                            className={`flex-1 h-14 rounded-2xl items-center justify-center shadow-lg ${
+                                rating === 0 || submitting 
+                                    ? 'bg-slate-200 dark:bg-slate-800 shadow-none' 
+                                    : 'bg-blue-600 shadow-blue-500/20'
+                            }`}
                             onPress={handleSubmit}
                             disabled={rating === 0 || submitting}
                         >
                             {submitting ? (
                                 <ActivityIndicator color="white" size="small" />
                             ) : (
-                                <Text style={styles.submitText}>
-                                    {tip > 0 ? `Submit & Pay ₹${tip}` : 'Submit'}
+                                <Text className={`text-base font-bold ${rating === 0 || submitting ? 'text-slate-400 dark:text-slate-600' : 'text-white'}`}>
+                                    {tip > 0 ? `Pay ₹${tip}` : 'Submit'}
                                 </Text>
                             )}
                         </TouchableOpacity>
@@ -126,121 +147,5 @@ export function RateDriverModal({ visible, onClose, tripId, driverId, driverName
         </Modal>
     );
 }
-
-const styles = StyleSheet.create({
-    overlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'center',
-        padding: 20,
-    },
-    content: {
-        backgroundColor: 'white',
-        borderRadius: 16,
-        padding: 24,
-        alignItems: 'center',
-        width: '100%',
-        maxWidth: 400,
-    },
-    title: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#1f2937',
-        marginBottom: 8,
-    },
-    subtitle: {
-        fontSize: 14,
-        color: '#6b7280',
-        marginBottom: 24,
-        textAlign: 'center',
-    },
-    stars: {
-        flexDirection: 'row',
-        gap: 8,
-        marginBottom: 16,
-    },
-    ratingLabel: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#f59e0b',
-        marginBottom: 24,
-        height: 20,
-    },
-    label: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#374151',
-        marginBottom: 12,
-        alignSelf: 'flex-start',
-    },
-    tipGrid: {
-        flexDirection: 'row',
-        gap: 12,
-        marginBottom: 24,
-        alignSelf: 'stretch',
-    },
-    tipChip: {
-        flex: 1,
-        paddingVertical: 10,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-        alignItems: 'center',
-        backgroundColor: '#f9fafb',
-    },
-    tipChipActive: {
-        backgroundColor: '#eff6ff',
-        borderColor: '#3b82f6',
-    },
-    tipText: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: '#6b7280',
-    },
-    tipTextActive: {
-        color: '#3b82f6',
-        fontWeight: '600',
-    },
-    input: {
-        width: '100%',
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-        borderRadius: 8,
-        padding: 12,
-        height: 100,
-        marginBottom: 24,
-        fontSize: 14,
-        backgroundColor: '#fff',
-    },
-    footer: {
-        flexDirection: 'row',
-        gap: 12,
-        width: '100%',
-    },
-    cancelButton: {
-        flex: 1,
-        padding: 12,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-        alignItems: 'center',
-    },
-    cancelText: {
-        color: '#374151',
-        fontWeight: '600',
-    },
-    submitButton: {
-        flex: 1,
-        padding: 12,
-        borderRadius: 8,
-        backgroundColor: '#3b82f6',
-        alignItems: 'center',
-    },
-    disabledButton: {
-        backgroundColor: '#9ca3af',
-    },
-    submitText: {
-        color: 'white',
-        fontWeight: '600',
-    },
-});
+ 
+const styles = StyleSheet.create({});

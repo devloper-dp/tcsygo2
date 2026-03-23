@@ -25,9 +25,17 @@ const USER_AGENT = 'TCSYGO-Carpooling-App';
 /**
  * Get route between two points using OSRM
  */
-export async function getRoute(start: Coordinates, end: Coordinates): Promise<RouteData> {
+export async function getRoute(
+    start: Coordinates,
+    end: Coordinates,
+    waypoints: Coordinates[] = []
+): Promise<RouteData> {
     try {
-        const coordinates = `${start.lng},${start.lat};${end.lng},${end.lat}`;
+        const coordinates = [
+            `${start.lng},${start.lat}`,
+            ...waypoints.map(wp => `${wp.lng},${wp.lat}`),
+            `${end.lng},${end.lat}`
+        ].join(';');
 
         const response = await fetch(
             `${OSRM_BASE}/route/v1/driving/${coordinates}?overview=full&geometries=geojson`,
@@ -54,8 +62,40 @@ export async function getRoute(start: Coordinates, end: Coordinates): Promise<Ro
         throw new Error('No route found');
     } catch (error) {
         console.error('Error fetching route:', error);
-        throw error;
+        return getStraightLineRoute(start, end);
     }
+}
+
+/**
+ * Calculate the detour impact (time and distance) of adding a stop to a trip.
+ */
+export async function calculateDetour(
+    start: Coordinates,
+    end: Coordinates,
+    currentWaypoints: Coordinates[],
+    newStops: Coordinates[]
+): Promise<{
+    originalDuration: number;
+    newDuration: number;
+    detourDuration: number;
+    originalDistance: number;
+    newDistance: number;
+    detourDistance: number;
+    geometry: Coordinates[];
+}> {
+    const originalRoute = await getRoute(start, end, currentWaypoints);
+    const newWaypoints = [...currentWaypoints, ...newStops];
+    const newRoute = await getRoute(start, end, newWaypoints);
+
+    return {
+        originalDuration: originalRoute.duration,
+        newDuration: newRoute.duration,
+        detourDuration: newRoute.duration - originalRoute.duration,
+        originalDistance: originalRoute.distance,
+        newDistance: newRoute.distance,
+        detourDistance: newRoute.distance - originalRoute.distance,
+        geometry: newRoute.geometry
+    };
 }
 
 /**

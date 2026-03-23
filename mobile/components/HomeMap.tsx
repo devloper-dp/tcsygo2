@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, TouchableOpacity, ActivityIndicator, Alert, ScrollView } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { Ionicons } from '@expo/vector-icons';
 import { Map, Marker } from './Map';
@@ -7,8 +7,10 @@ import * as Location from 'expo-location';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export function HomeMap() {
+    const { isDark } = useTheme();
     const router = useRouter();
     const [location, setLocation] = useState<Location.LocationObject | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -20,11 +22,11 @@ export function HomeMap() {
             const { data, error } = await supabase
                 .from('live_locations')
                 .select('*, driver:profiles(*)')
-                .limit(50); // Show up to 50 nearby drivers
+                .limit(50);
             if (error) throw error;
             return data;
         },
-        refetchInterval: 10000, // Refresh every 10 seconds
+        refetchInterval: 10000,
     });
 
     useEffect(() => {
@@ -61,9 +63,9 @@ export function HomeMap() {
 
     if (loading && !location) {
         return (
-            <View style={styles.centerContainer}>
-                <ActivityIndicator size="large" color="#3b82f6" />
-                <Text style={styles.loadingText}>Initializing Map...</Text>
+            <View className="h-64 justify-center items-center bg-slate-50 dark:bg-slate-900 rounded-3xl mx-4 mb-8 border border-slate-100 dark:border-slate-800">
+                <ActivityIndicator size="small" color={isDark ? "#ffffff" : "#3b82f6"} />
+                <Text className="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-4">Initializing Map...</Text>
             </View>
         );
     }
@@ -74,23 +76,28 @@ export function HomeMap() {
         latitudeDelta: 0.0922,
         longitudeDelta: 0.0421,
     } : {
-        latitude: 12.9716, // Default to Bangalore
+        latitude: 12.9716,
         longitude: 77.5946,
         latitudeDelta: 0.1,
         longitudeDelta: 0.1,
     };
 
     return (
-        <View style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.title}>Explore Nearby Rides</Text>
-                {errorMsg && <Text style={styles.errorText}>{errorMsg}</Text>}
+        <View className="mb-8">
+            <View className="flex-row justify-between items-center mb-4 px-4 overflow-hidden">
+                <Text className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tighter">Tactical Grid</Text>
+                {errorMsg && <Text className="text-[10px] font-black text-red-500 uppercase tracking-widest">{errorMsg}</Text>}
             </View>
 
-            <View style={styles.mapWrapper}>
+            <View className="h-72 bg-slate-100 dark:bg-slate-950 rounded-[40px] overflow-hidden mx-4 relative border border-slate-100 dark:border-slate-800 shadow-2xl">
                 <Map
-                    style={styles.map}
+                    className="flex-1"
                     initialRegion={initialRegion}
+                    region={location ? {
+                        ...initialRegion,
+                        latitude: location.coords.latitude,
+                        longitude: location.coords.longitude,
+                    } : undefined}
                 >
                     {location && (
                         <Marker
@@ -98,10 +105,9 @@ export function HomeMap() {
                                 latitude: location.coords.latitude,
                                 longitude: location.coords.longitude,
                             }}
-                            title="You are here"
                         >
-                            <View style={styles.userMarker}>
-                                <View style={styles.userMarkerInner} />
+                            <View className="w-10 h-10 rounded-full bg-blue-500/20 items-center justify-center">
+                                <View className="w-4 h-4 rounded-full bg-blue-500 border-2 border-white dark:border-slate-900" />
                             </View>
                         </Marker>
                     )}
@@ -114,148 +120,38 @@ export function HomeMap() {
                                 longitude: driver.longitude,
                             }}
                         >
-                            <View style={styles.driverMarker}>
-                                <Ionicons name="car" size={20} color="white" />
+                            <View className="bg-slate-900 dark:bg-white p-2.5 rounded-full border-2 border-white dark:border-slate-900 shadow-lg">
+                                <Ionicons name="car" size={16} color={isDark ? "#0f172a" : "#ffffff"} />
                             </View>
                         </Marker>
                     ))}
                 </Map>
 
                 <TouchableOpacity
-                    style={styles.locateBtn}
+                    className="absolute right-6 bottom-6 bg-white dark:bg-slate-900 w-14 h-14 rounded-3xl justify-center items-center shadow-2xl border border-slate-100 dark:border-slate-800 active:opacity-90"
                     onPress={centerOnUser}
                 >
-                    <Ionicons name="locate" size={24} color="#3b82f6" />
+                    <Ionicons name="locate" size={24} color={isDark ? "#ffffff" : "#3b82f6"} />
                 </TouchableOpacity>
 
-                <View style={styles.mapOverlay}>
-                    <View style={styles.chipScroll}>
-                        <TouchableOpacity style={styles.chip} onPress={() => router.push('/search')}>
-                            <Ionicons name="options-outline" size={16} color="#374151" />
-                            <Text style={styles.chipText}>Filters</Text>
+                <View className="absolute top-6 left-6 right-6">
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row gap-3">
+                        <TouchableOpacity
+                            onPress={() => router.push('/search')}
+                            className="flex-row items-center bg-white/90 dark:bg-slate-900/90 py-3 px-5 rounded-2xl gap-2.5 border border-slate-100 dark:border-slate-800 shadow-sm"
+                        >
+                            <Ionicons name="options-outline" size={16} color={isDark ? "#ffffff" : "#1f2937"} />
+                            <Text className="text-[10px] font-black uppercase tracking-widest text-slate-900 dark:text-white">Filters</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.chip}>
-                            <Text style={styles.chipText}>Price: Low to High</Text>
+
+                        <TouchableOpacity
+                            className="bg-white/90 dark:bg-slate-900/90 py-3 px-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm"
+                        >
+                            <Text className="text-[10px] font-black uppercase tracking-widest text-slate-900 dark:text-white">Price: Entry Level</Text>
                         </TouchableOpacity>
-                    </View>
+                    </ScrollView>
                 </View>
             </View>
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        marginBottom: 24,
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        marginBottom: 12,
-    },
-    title: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    errorText: {
-        fontSize: 12,
-        color: '#ef4444',
-    },
-    mapWrapper: {
-        height: 300,
-        backgroundColor: '#f3f4f6',
-        borderRadius: 16,
-        overflow: 'hidden',
-        marginHorizontal: 16,
-        position: 'relative',
-    },
-    map: {
-        ...StyleSheet.absoluteFillObject,
-    },
-    centerContainer: {
-        height: 300,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: '#f9fafb',
-        borderRadius: 16,
-        margin: 16,
-    },
-    loadingText: {
-        marginTop: 12,
-        color: '#6b7280',
-    },
-    userMarker: {
-        width: 20,
-        height: 20,
-        borderRadius: 10,
-        backgroundColor: 'rgba(59, 130, 246, 0.3)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    userMarkerInner: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        backgroundColor: '#3b82f6',
-        borderWidth: 2,
-        borderColor: 'white',
-    },
-    driverMarker: {
-        backgroundColor: '#3b82f6',
-        padding: 6,
-        borderRadius: 20,
-        borderWidth: 2,
-        borderColor: 'white',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    locateBtn: {
-        position: 'absolute',
-        right: 16,
-        bottom: 16,
-        backgroundColor: 'white',
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        justifyContent: 'center',
-        alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 4,
-    },
-    mapOverlay: {
-        position: 'absolute',
-        top: 16,
-        left: 0,
-        right: 0,
-        paddingHorizontal: 16,
-    },
-    chipScroll: {
-        flexDirection: 'row',
-        gap: 8,
-    },
-    chip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(255, 255, 255, 0.9)',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
-        gap: 6,
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-    },
-    chipText: {
-        fontSize: 12,
-        fontWeight: '500',
-        color: '#374151',
-    },
-});

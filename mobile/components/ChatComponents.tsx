@@ -1,8 +1,10 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, ScrollView, TextInput, TouchableOpacity, Text, ActivityIndicator } from 'react-native';
+import { Send, ArrowLeft, Check, CheckCheck, Clock, MessageSquare, Hourglass } from 'lucide-react-native';
 import { format } from 'date-fns';
 import { useRef, useEffect } from 'react';
-
+import { useTheme } from '@/contexts/ThemeContext';
+import { useResponsive } from '@/hooks/useResponsive';
+ 
 interface Message {
     id: string;
     senderId: string;
@@ -10,55 +12,66 @@ interface Message {
     createdAt: string;
     isRead?: boolean;
 }
-
+ 
 interface ChatMessageBubbleProps {
     message: Message;
     isMe: boolean;
     senderName?: string;
 }
-
+ 
 export function ChatMessageBubble({ message, isMe, senderName }: ChatMessageBubbleProps) {
+    const { isDark } = useTheme();
+    const { hScale, vScale, spacing } = useResponsive();
+    
     return (
-        <View style={[styles.messageContainer, isMe ? styles.myMessageContainer : styles.theirMessageContainer]}>
+        <View style={{ marginBottom: vScale(24), maxWidth: '85%', alignSelf: isMe ? 'flex-end' : 'flex-start' }}>
             {!isMe && senderName && (
-                <Text style={styles.senderName}>{senderName}</Text>
+                <Text style={{ fontSize: hScale(9), marginBottom: vScale(8), marginLeft: hScale(16) }} className="text-slate-400 dark:text-slate-500 font-black uppercase tracking-widest">{senderName}</Text>
             )}
-            <View style={[styles.messageBubble, isMe ? styles.myMessage : styles.theirMessage]}>
-                <Text style={[styles.messageText, isMe ? styles.myMessageText : styles.theirMessageText]}>
+            <View
+                style={{ padding: spacing.xl, borderRadius: hScale(28), shadowOpacity: 0.1, shadowRadius: 4 }}
+                className={`${isMe
+                        ? 'bg-slate-900 dark:bg-blue-600 rounded-br-sm shadow-slate-900/10'
+                        : 'bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-bl-sm shadow-slate-900/5'
+                    }`}
+            >
+                <Text style={{ fontSize: hScale(15), lineHeight: vScale(24) }} className={`font-bold tracking-tight ${isMe ? 'text-white' : 'text-slate-800 dark:text-slate-200'}`}>
                     {message.message}
                 </Text>
-                <View style={styles.timestampContainer}>
-                    <Text style={[styles.timestamp, isMe ? styles.myTimestamp : styles.theirTimestamp]}>
-                        {format(new Date(message.createdAt), 'hh:mm a')}
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: vScale(12), alignSelf: 'flex-end', gap: spacing.xs, opacity: 0.6 }}>
+                    <Clock size={hScale(10)} color={isMe ? "#ffffff" : (isDark ? "#94a3b8" : "#64748b")} />
+                    <Text style={{ fontSize: hScale(9) }} className={`font-black uppercase tracking-widest ${isMe ? 'text-blue-100' : 'text-slate-500 dark:text-slate-500'}`}>
+                        {format(new Date(message.createdAt), 'h:mm a')}
                     </Text>
                     {isMe && (
-                        <Ionicons
-                            name={message.isRead ? "checkmark-done" : "checkmark"}
-                            size={14}
-                            color="rgba(255, 255, 255, 0.7)"
-                            style={{ marginLeft: 4 }}
-                        />
+                        message.isRead
+                            ? <CheckCheck size={hScale(12)} color="#4ade80" />
+                            : <Check size={hScale(12)} color="rgba(255,255,255,0.6)" />
                     )}
                 </View>
             </View>
         </View>
     );
 }
-
+ 
 interface ChatInputProps {
     value: string;
     onChangeText: (text: string) => void;
     onSend: () => void;
     disabled?: boolean;
 }
-
+ 
 export function ChatInput({ value, onChangeText, onSend, disabled }: ChatInputProps) {
+    const { isDark } = useTheme();
+    const { hScale, vScale, spacing } = useResponsive();
+ 
     return (
-        <View style={styles.inputContainer}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', padding: spacing.xl, borderTopWidth: 1 }} className="bg-white dark:bg-slate-950 border-slate-100 dark:border-slate-800/50 shadow-2xl">
             <TextInput
-                style={styles.input}
-                placeholder="Type a message..."
-                placeholderTextColor="#9ca3af"
+                style={{ flex: 1, paddingHorizontal: spacing.xl, paddingVertical: vScale(16), marginRight: spacing.lg, fontSize: hScale(16), maxHeight: vScale(140), borderRadius: hScale(28), borderWidth: 1 }}
+                className="bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 tracking-tight text-slate-900 dark:text-white shadow-inner"
+                placeholder="Type your message..."
+                placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                 value={value}
                 onChangeText={onChangeText}
                 multiline
@@ -66,83 +79,105 @@ export function ChatInput({ value, onChangeText, onSend, disabled }: ChatInputPr
                 editable={!disabled}
             />
             <TouchableOpacity
-                style={[styles.sendButton, (!value.trim() || disabled) && styles.sendButtonDisabled]}
+                style={{ width: hScale(56), height: hScale(56), borderRadius: hScale(16) }}
+                className={`justify-center items-center shadow-lg ${(!value.trim() || disabled) ? 'bg-slate-100 dark:bg-slate-900 opacity-50' : 'bg-slate-900 dark:bg-blue-600 shadow-slate-900/10'
+                    }`}
                 onPress={onSend}
                 disabled={!value.trim() || disabled}
             >
-                <Ionicons name="send" size={20} color="white" />
+                {disabled ? (
+                    <ActivityIndicator size="small" color={isDark ? "#3b82f6" : "#64748b"} />
+                ) : (
+                    <Send size={hScale(24)} color={(!value.trim() || disabled) ? (isDark ? "#334155" : "#cbd5e1") : "white"} strokeWidth={3} style={{ marginLeft: hScale(3) }} />
+                )}
             </TouchableOpacity>
         </View>
     );
 }
-
+ 
 interface ChatHeaderProps {
     userName: string;
-    userPhoto?: string;
     onBack: () => void;
 }
-
-export function ChatHeader({ userName, userPhoto, onBack }: ChatHeaderProps) {
+ 
+export function ChatHeader({ userName, onBack }: ChatHeaderProps) {
+    const { isDark } = useTheme();
+    const { hScale, vScale, spacing } = useResponsive();
+ 
     return (
-        <View style={styles.header}>
-            <TouchableOpacity onPress={onBack} style={styles.backButton}>
-                <Ionicons name="arrow-back" size={24} color="#1f2937" />
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: vScale(20), borderBottomWidth: 1 }} className="bg-white dark:bg-slate-950 border-slate-100 dark:border-slate-800 shadow-sm z-20">
+            <TouchableOpacity 
+                onPress={onBack} 
+                style={{ width: hScale(48), height: hScale(48), borderRadius: hScale(24), marginRight: spacing.lg, borderWidth: 1 }}
+                className="bg-slate-50 dark:bg-slate-900 items-center justify-center border-slate-100 dark:border-slate-800 active:bg-slate-100 dark:active:bg-slate-800"
+            >
+                <ArrowLeft size={hScale(24)} color={isDark ? "#f8fafc" : "#1e293b"} strokeWidth={3} />
             </TouchableOpacity>
-            <View style={styles.headerInfo}>
-                <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>{userName.charAt(0).toUpperCase()}</Text>
+            <View className="flex-row items-center flex-1">
+                <View style={{ width: hScale(48), height: hScale(48), borderRadius: hScale(20), marginRight: spacing.lg, borderWidth: 1 }} className="bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 justify-center items-center relative">
+                    <Text style={{ fontSize: hScale(18) }} className="text-slate-900 dark:text-slate-100 font-black">{userName.charAt(0).toUpperCase()}</Text>
+                    <View style={{ position: 'absolute', bottom: -hScale(0.5), right: -hScale(0.5), width: hScale(14), height: hScale(14), borderRadius: hScale(7), borderWidth: 2 }} className="bg-green-500 border-white dark:border-slate-950 shadow-sm" />
                 </View>
                 <View>
-                    <Text style={styles.headerName}>{userName}</Text>
-                    <Text style={styles.headerSubtitle}>Trip Chat</Text>
+                    <Text style={{ fontSize: hScale(18) }} className="font-black text-slate-900 dark:text-white tracking-tighter uppercase">{userName}</Text>
+                    <Text style={{ fontSize: hScale(10) }} className="text-green-600 dark:text-green-500 font-black uppercase tracking-widest">Secure Link Active</Text>
                 </View>
             </View>
+            <TouchableOpacity style={{ width: hScale(48), height: hScale(48), borderRadius: hScale(24), borderWidth: 1 }} className="bg-slate-50 dark:bg-slate-900 items-center justify-center border-slate-100 dark:border-slate-800">
+                <Clock size={hScale(22)} color={isDark ? "#475569" : "#94a3b8"} strokeWidth={2.5} />
+            </TouchableOpacity>
         </View>
     );
 }
-
+ 
 interface ChatMessagesListProps {
     messages: Message[];
     currentUserId: string;
     otherUserName?: string;
     isLoading?: boolean;
 }
-
+ 
 export function ChatMessagesList({ messages, currentUserId, otherUserName, isLoading }: ChatMessagesListProps) {
     const scrollViewRef = useRef<ScrollView>(null);
-
+    const { isDark } = useTheme();
+    const { hScale, vScale, spacing } = useResponsive();
+ 
     useEffect(() => {
-        // Auto-scroll to bottom when new messages arrive
         if (scrollViewRef.current && messages.length > 0) {
             scrollViewRef.current.scrollToEnd({ animated: true });
         }
     }, [messages]);
-
+ 
     if (isLoading) {
         return (
-            <View style={styles.emptyContainer}>
-                <Ionicons name="hourglass-outline" size={64} color="#d1d5db" />
-                <Text style={styles.emptyText}>Loading messages...</Text>
+            <View style={{ padding: spacing.xl, paddingVertical: vScale(32) }} className="flex-1 justify-center items-center bg-slate-50 dark:bg-slate-950">
+                <ActivityIndicator size="large" color={isDark ? "#ffffff" : "#3b82f6"} />
+                <Text style={{ fontSize: hScale(10), marginTop: vScale(24) }} className="font-black text-slate-400 dark:text-slate-600 uppercase tracking-[2px]">Syncing Encrypted Feed...</Text>
             </View>
         );
     }
-
+ 
     if (!messages || messages.length === 0) {
         return (
-            <View style={styles.emptyContainer}>
-                <Ionicons name="chatbubbles-outline" size={64} color="#d1d5db" />
-                <Text style={styles.emptyText}>No messages yet</Text>
-                <Text style={styles.emptySubtext}>Start the conversation!</Text>
+            <View style={{ padding: spacing.xl, paddingVertical: vScale(48), opacity: 0.4 }} className="flex-1 justify-center items-center bg-slate-50 dark:bg-slate-950">
+                <View style={{ width: hScale(96), height: hScale(96), borderRadius: hScale(48), marginBottom: vScale(32) }} className="bg-slate-100 dark:bg-slate-900 rounded-full items-center justify-center">
+                    <MessageSquare size={hScale(40)} color={isDark ? "#334155" : "#94a3b8"} strokeWidth={2.5} />
+                </View>
+                <Text style={{ fontSize: hScale(24) }} className="font-black text-slate-900 dark:text-white text-center uppercase tracking-tighter">Silence in Hangar</Text>
+                <Text style={{ fontSize: hScale(12), marginTop: vScale(12), maxWidth: hScale(240), lineHeight: vScale(20) }} className="font-medium text-slate-500 dark:text-slate-400 text-center uppercase tracking-widest">
+                    Start a secure channel with <Text className="font-black text-slate-900 dark:text-white">{otherUserName || 'Driver'}</Text>
+                </Text>
             </View>
         );
     }
-
+ 
     return (
         <ScrollView
             ref={scrollViewRef}
-            style={styles.messagesList}
-            contentContainerStyle={styles.messagesContent}
+            className="flex-1 bg-slate-50 dark:bg-slate-950"
+            contentContainerStyle={{ padding: spacing.xl, paddingBottom: vScale(60) }}
             onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+            showsVerticalScrollIndicator={false}
         >
             {messages.map((message) => (
                 <ChatMessageBubble
@@ -155,152 +190,3 @@ export function ChatMessagesList({ messages, currentUserId, otherUserName, isLoa
         </ScrollView>
     );
 }
-
-const styles = StyleSheet.create({
-    messageContainer: {
-        marginBottom: 16,
-        maxWidth: '75%',
-    },
-    myMessageContainer: {
-        alignSelf: 'flex-end',
-    },
-    theirMessageContainer: {
-        alignSelf: 'flex-start',
-    },
-    senderName: {
-        fontSize: 12,
-        color: '#6b7280',
-        marginBottom: 4,
-        marginLeft: 12,
-    },
-    messageBubble: {
-        borderRadius: 16,
-        padding: 12,
-    },
-    myMessage: {
-        backgroundColor: '#3b82f6',
-        borderBottomRightRadius: 4,
-    },
-    theirMessage: {
-        backgroundColor: '#f3f4f6',
-        borderBottomLeftRadius: 4,
-    },
-    messageText: {
-        fontSize: 15,
-        lineHeight: 20,
-    },
-    myMessageText: {
-        color: 'white',
-    },
-    theirMessageText: {
-        color: '#1f2937',
-    },
-    timestampContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 4,
-    },
-    timestamp: {
-        fontSize: 10,
-    },
-    myTimestamp: {
-        color: 'rgba(255, 255, 255, 0.7)',
-        textAlign: 'right',
-    },
-    theirTimestamp: {
-        color: '#9ca3af',
-    },
-    inputContainer: {
-        flexDirection: 'row',
-        alignItems: 'flex-end',
-        padding: 16,
-        borderTopWidth: 1,
-        borderTopColor: '#f3f4f6',
-        backgroundColor: 'white',
-    },
-    input: {
-        flex: 1,
-        backgroundColor: '#f9fafb',
-        borderRadius: 24,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        marginRight: 8,
-        maxHeight: 100,
-        fontSize: 15,
-        color: '#1f2937',
-    },
-    sendButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: '#3b82f6',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    sendButtonDisabled: {
-        backgroundColor: '#d1d5db',
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
-        backgroundColor: 'white',
-    },
-    backButton: {
-        marginRight: 12,
-    },
-    headerInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-    },
-    avatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#3b82f6',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
-    avatarText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-    headerName: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#1f2937',
-    },
-    headerSubtitle: {
-        fontSize: 12,
-        color: '#6b7280',
-    },
-    emptyContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 32,
-    },
-    emptyText: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: '#6b7280',
-        marginTop: 16,
-    },
-    emptySubtext: {
-        fontSize: 14,
-        color: '#9ca3af',
-        marginTop: 4,
-    },
-    messagesList: {
-        flex: 1,
-        backgroundColor: 'white',
-    },
-    messagesContent: {
-        padding: 16,
-    },
-});

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, Share, Platform, Linking, ActivityIndicator } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, Share, Platform, Linking, ActivityIndicator } from 'react-native';
 import Animated, { FadeIn, FadeInDown, SlideInDown, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -27,14 +27,19 @@ import { DriverVerificationModal } from '@/components/DriverVerificationModal';
 import { SafetyService } from '@/services/SafetyService';
 import { logger } from '@/services/LoggerService';
 import { NotificationService } from '@/services/NotificationService';
-import { useRef } from 'react';
 import { DriverArrivalTimer } from '../../components/DriverArrivalTimer';
 import { TripReplay } from '../../components/TripReplay';
+import { Text } from '@/components/ui/text';
+import { Card } from '@/components/ui/card';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useResponsive } from '@/hooks/useResponsive';
 
 const TripDetailsScreen = () => {
+    // ... (Hooks remain same)
     const router = useRouter();
     const { id } = useLocalSearchParams();
     const { user } = useAuth();
+    const { hScale, vScale, spacing } = useResponsive();
     const [seatsToBook, setSeatsToBook] = useState(1);
     const [isSaved, setIsSaved] = useState(false);
 
@@ -46,7 +51,6 @@ const TripDetailsScreen = () => {
     const [showTipModal, setShowTipModal] = useState(false);
     const [showDriverVerification, setShowDriverVerification] = useState(false);
     const [isDriverVerified, setIsDriverVerified] = useState(false);
-    // ... rest of state
 
     // For Driver Rating Passengers
     const [ratePassengerModalVisible, setRatePassengerModalVisible] = useState(false);
@@ -396,68 +400,73 @@ const TripDetailsScreen = () => {
             Alert.alert('Error', 'Failed to update saved status');
         }
     };
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
 
     if (isLoading) {
         return (
-            <View style={styles.loading}>
-                <Text>Loading trip details...</Text>
+            <View className="flex-1 justify-center items-center bg-white dark:bg-slate-950">
+                <ActivityIndicator size="large" color="#3b82f6" />
+                <Text style={{ fontSize: hScale(14), marginTop: vScale(16) }} className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">Loading trip details...</Text>
             </View>
         );
     }
 
     if (isError || !trip) {
         return (
-            <View style={styles.errorContainer}>
-                <Ionicons name="alert-circle" size={48} color="#ef4444" />
-                <Text style={styles.errorTitle}>Oops! Something went wrong</Text>
-                <Text style={styles.errorText}>
+            <View style={{ padding: spacing.xl }} className="flex-1 justify-center items-center bg-white dark:bg-slate-950">
+                <View style={{ width: hScale(80), height: hScale(80), borderRadius: hScale(32), marginBottom: vScale(24) }} className="bg-rose-50 dark:bg-rose-900/20 items-center justify-center">
+                    <Ionicons name="alert-circle" size={hScale(40)} color="#ef4444" />
+                </View>
+                <Text style={{ fontSize: hScale(24), marginBottom: vScale(8) }} className="font-black text-slate-900 dark:text-white text-center tracking-tight">Oops! Something went wrong</Text>
+                <Text style={{ fontSize: hScale(16), marginBottom: vScale(32), paddingHorizontal: hScale(16), lineHeight: vScale(24) }} className="text-slate-500 dark:text-slate-400 text-center">
                     {error instanceof Error ? error.message : "Failed to load trip details. Please check your connection."}
                 </Text>
                 <TouchableOpacity
-                    style={styles.retryBtn}
+                    style={{ height: vScale(64), borderRadius: hScale(24) }}
+                    className="bg-blue-600 w-full justify-center items-center shadow-lg shadow-blue-500/20 active:bg-blue-700"
                     onPress={() => router.back()}
                 >
-                    <Text style={styles.retryBtnText}>Go Back</Text>
+                    <Text style={{ fontSize: hScale(18) }} className="text-white font-black">Go Back</Text>
                 </TouchableOpacity>
             </View>
         );
     }
 
     // isDriver is already defined at the top of the component
-
     return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()}>
-                    <Ionicons name="arrow-back" size={24} color="#1f2937" />
+        <SafeAreaView className="flex-1 bg-slate-50 dark:bg-slate-950">
+            <View style={{ paddingHorizontal: spacing.xl, paddingVertical: vScale(16), borderBottomWidth: 1 }} className="flex-row justify-between items-center border-slate-50 dark:border-slate-800 bg-white dark:bg-slate-900 z-10 shadow-sm">
+                <TouchableOpacity onPress={() => router.back()} style={{ padding: hScale(8), borderRadius: hScale(20) }} className="bg-slate-100 dark:bg-slate-800">
+                    <Ionicons name="arrow-back" size={hScale(20)} color={isDark ? "#94a3b8" : "#1f2937"} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Trip Details</Text>
-                <View style={styles.headerActions}>
-                    <TouchableOpacity onPress={handleShare} style={styles.iconBtn}>
-                        <Ionicons name="share-outline" size={24} color="#1f2937" />
+                <Text style={{ fontSize: hScale(18) }} className="font-black text-slate-900 dark:text-white tracking-tight">Trip Details</Text>
+                <View style={{ flexDirection: 'row', gap: hScale(12) }}>
+                    <TouchableOpacity onPress={handleShare} style={{ padding: hScale(8), borderRadius: hScale(20) }} className="bg-slate-100 dark:bg-slate-800">
+                        <Ionicons name="share-outline" size={hScale(20)} color={isDark ? "#94a3b8" : "#1f2937"} />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={handleSaveToggle} style={styles.iconBtn}>
+                    <TouchableOpacity onPress={handleSaveToggle} style={{ padding: hScale(8), borderRadius: hScale(20) }} className="bg-slate-100 dark:bg-slate-800">
                         <Ionicons
                             name={isSaved ? "bookmark" : "bookmark-outline"}
-                            size={24}
-                            color={isSaved ? "#3b82f6" : "#1f2937"}
+                            size={hScale(20)}
+                            color={isSaved ? "#3b82f6" : (isDark ? "#94a3b8" : "#1f2937")}
                         />
                     </TouchableOpacity>
                 </View>
             </View>
-
-            <ScrollView style={styles.scrollView}>
-                <View style={styles.mapContainer}>
+ 
+            <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+                <View style={{ height: vScale(280) }} className="bg-slate-200 dark:bg-slate-800 relative">
                     {trip.status === 'completed' && trip.route ? (
                         <TripReplay
                             route={trip.route.map((p: any) => ({ latitude: p.lat, longitude: p.lng }))}
                             pickup={{ latitude: parseFloat(trip.pickup_lat), longitude: parseFloat(trip.pickup_lng) }}
                             drop={{ latitude: parseFloat(trip.drop_lat), longitude: parseFloat(trip.drop_lng) }}
-                            style={styles.map}
+                            style={StyleSheet.absoluteFillObject}
                         />
                     ) : (
                         <Map
-                            style={styles.map}
+                            style={StyleSheet.absoluteFillObject}
                             initialRegion={{
                                 latitude: parseFloat(trip.pickup_lat),
                                 longitude: parseFloat(trip.pickup_lng),
@@ -479,32 +488,32 @@ const TripDetailsScreen = () => {
                                 <Polyline
                                     coordinates={trip.route.map((p: any) => ({ latitude: p.lat, longitude: p.lng }))}
                                     strokeColor="#3b82f6"
-                                    strokeWidth={4}
+                                    strokeWidth={hScale(4)}
                                 />
                             ) : null}
-
+ 
                             {driverLocation && (
                                 <Marker
                                     coordinate={{ latitude: driverLocation.lat, longitude: driverLocation.lng }}
                                     title={`${trip.driver?.full_name || 'Driver'}`}
                                 >
-                                    <View style={styles.driverMarker}>
-                                        <Ionicons name="car" size={24} color="#3b82f6" />
+                                    <View style={{ padding: hScale(6), borderRadius: hScale(20), borderWidth: 2 }} className="bg-white dark:bg-slate-900 border-blue-600 shadow-lg">
+                                        <Ionicons name="car" size={hScale(24)} color="#3b82f6" />
                                     </View>
                                 </Marker>
                             )}
                             {trip.route_polyline && (
                                 <Polyline
                                     coordinates={JSON.parse(trip.route_polyline)}
-                                    strokeWidth={4}
+                                    strokeWidth={hScale(4)}
                                     strokeColor="#3b82f6"
                                 />
                             )}
                         </Map>
                     )}
-
+ 
                     {eta && !isDriver && (
-                        <Animated.View entering={FadeInDown} style={styles.arrivalOverlay}>
+                        <Animated.View entering={FadeInDown} style={{ position: 'absolute', top: vScale(16), left: hScale(16), right: hScale(16), alignItems: 'center' }}>
                             {driverLocation && (
                                 <DriverArrivalTimer
                                     driverLocation={driverLocation}
@@ -517,92 +526,112 @@ const TripDetailsScreen = () => {
                                 />
                             )}
                             {!driverLocation && (
-                                <View style={styles.arrivalBadge}>
-                                    <Text style={styles.arrivalTitle}>Driver</Text>
-                                    <Text style={styles.arrivalTime}>{eta}</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(8), paddingHorizontal: hScale(20), paddingVertical: vScale(10), borderRadius: hScale(16), borderWidth: 1 }} className="bg-slate-900 dark:bg-slate-800 shadow-xl border-white/10">
+                                    <Text style={{ fontSize: hScale(12) }} className="text-white font-black uppercase tracking-widest">Driver</Text>
+                                    <View style={{ width: hScale(4), height: hScale(4), borderRadius: hScale(2), marginHorizontal: hScale(4) }} className="bg-slate-500" />
+                                    <Text style={{ fontSize: hScale(14) }} className="text-blue-400 font-black">{eta}</Text>
                                 </View>
                             )}
                         </Animated.View>
                     )}
                 </View>
 
-                <Animated.View entering={FadeInDown.delay(100)} style={styles.content}>
-                    <View style={styles.driverCard}>
-                        <View style={styles.driverInfo}>
-                            <View style={styles.avatar}>
+                <Animated.View entering={FadeInDown.delay(100)} style={{ padding: spacing.xl }}>
+                    <Card style={{ padding: hScale(20), borderRadius: hScale(28), marginBottom: vScale(32), borderWidth: 1 }} className="flex-row justify-between items-center bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-none">
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(16) }}>
+                            <View style={{ width: hScale(56), height: hScale(56), borderRadius: hScale(16), borderWidth: 1 }} className="bg-blue-100 dark:bg-blue-900/30 justify-center items-center overflow-hidden border-blue-200 dark:border-blue-800">
                                 {trip.driver?.avatar_url ? (
-                                    <Image source={{ uri: trip.driver.avatar_url }} style={styles.avatar} />
+                                    <Image source={{ uri: trip.driver.avatar_url }} className="w-full h-full" />
                                 ) : (
-                                    <Text style={styles.avatarText}>{trip.driver?.full_name?.charAt(0) || 'D'}</Text>
+                                    <Text style={{ fontSize: hScale(20) }} className="text-blue-600 dark:text-blue-400 font-black">{trip.driver?.full_name?.charAt(0) || 'D'}</Text>
                                 )}
                             </View>
                             <View>
-                                <Text style={styles.driverName}>{trip.driver?.full_name || 'Verified Driver'}</Text>
-                                <View style={styles.rating}>
-                                    <Ionicons name="star" size={14} color="#fbbf24" />
-                                    <Text style={styles.ratingText}>4.8 (120 rides)</Text>
+                                <Text style={{ fontSize: hScale(18) }} className="font-black text-slate-900 dark:text-white tracking-tight">{trip.driver?.full_name || 'Verified Driver'}</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(8), marginTop: vScale(2) }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: hScale(8), paddingVertical: vScale(2), borderRadius: hScale(6), gap: hScale(4) }} className="bg-amber-100 dark:bg-amber-900/40">
+                                        <Ionicons name="star" size={hScale(12)} color="#f59e0b" />
+                                        <Text style={{ fontSize: hScale(10) }} className="font-black text-amber-700 dark:text-amber-400">4.8</Text>
+                                    </View>
+                                    <Text style={{ fontSize: hScale(10) }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">120 Rides</Text>
                                 </View>
                             </View>
                         </View>
-                        <View style={styles.priceContainer}>
-                            <Text style={styles.priceLabel}>Price per seat</Text>
-                            <Text style={styles.price}>₹{trip.price_per_seat}</Text>
+                        <View style={{ paddingHorizontal: hScale(16), paddingVertical: vScale(8), borderRadius: hScale(16), borderWidth: 1 }} className="items-end bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50">
+                            <Text style={{ fontSize: hScale(10), marginBottom: vScale(2) }} className="font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Fare</Text>
+                            <Text style={{ fontSize: hScale(20) }} className="font-black text-blue-600 dark:text-blue-400 tracking-tighter">₹{trip.price_per_seat}</Text>
                         </View>
-                    </View>
-
-                    <View style={styles.detailsList}>
-                        <View style={styles.detailItem}>
-                            <Ionicons name="location-outline" size={24} color="#6b7280" />
-                            <View style={styles.detailTextContainer}>
-                                <Text style={styles.detailLabel}>Pickup</Text>
+                    </Card>
+ 
+                    <View style={{ padding: hScale(24), borderRadius: hScale(32), marginBottom: vScale(40), borderWidth: 1, gap: vScale(24) }} className="bg-white dark:bg-slate-900/50 border-slate-100 dark:border-slate-800">
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: hScale(20) }}>
+                            <View style={{ width: hScale(40), height: hScale(40), borderRadius: hScale(16), borderWidth: 1 }} className="items-center justify-center bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800">
+                                <Ionicons name="location" size={hScale(20)} color="#10b981" />
+                            </View>
+                            <View className="flex-1">
+                                <Text style={{ fontSize: hScale(10), marginBottom: vScale(4) }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Pickup</Text>
                                 <TouchableOpacity onPress={() => openMap(parseFloat(trip.pickup_lat), parseFloat(trip.pickup_lng), 'Pickup')}>
-                                    <Text style={styles.detailValue}>{trip.pickup_location}</Text>
+                                    <Text style={{ fontSize: hScale(16), lineHeight: vScale(20) }} className="font-black text-slate-900 dark:text-white" numberOfLines={2}>{trip.pickup_location}</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
-
-                        <View style={styles.detailItem}>
-                            <Ionicons name="flag-outline" size={24} color="#6b7280" />
-                            <View style={styles.detailTextContainer}>
-                                <Text style={styles.detailLabel}>Drop-off</Text>
+ 
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: hScale(20) }}>
+                            <View style={{ width: hScale(40), height: hScale(40), borderRadius: hScale(16), borderWidth: 1 }} className="items-center justify-center bg-rose-50 dark:bg-rose-900/20 border-rose-100 dark:border-rose-800">
+                                <Ionicons name="flag" size={hScale(20)} color="#ef4444" />
+                            </View>
+                            <View className="flex-1">
+                                <Text style={{ fontSize: hScale(10), marginBottom: vScale(4) }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Drop-off</Text>
                                 <TouchableOpacity onPress={() => openMap(parseFloat(trip.drop_lat), parseFloat(trip.drop_lng), 'Drop')}>
-                                    <Text style={styles.detailValue}>{trip.drop_location}</Text>
+                                    <Text style={{ fontSize: hScale(16), lineHeight: vScale(20) }} className="font-black text-slate-900 dark:text-white" numberOfLines={2}>{trip.drop_location}</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
-
-                        <View style={styles.detailItem}>
-                            <Ionicons name="time-outline" size={24} color="#6b7280" />
-                            <View style={styles.detailTextContainer}>
-                                <Text style={styles.detailLabel}>Departure</Text>
-                                <Text style={styles.detailValue}>
+ 
+                        <View style={{ height: 1, marginVertical: vScale(4) }} className="bg-slate-100 dark:bg-slate-800 w-full" />
+ 
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(20) }}>
+                            <View style={{ width: hScale(40), height: hScale(40), borderRadius: hScale(16), borderWidth: 1 }} className="items-center justify-center bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800">
+                                <Ionicons name="time" size={hScale(20)} color="#3b82f6" />
+                            </View>
+                            <View className="flex-1">
+                                <Text style={{ fontSize: hScale(10), marginBottom: vScale(4) }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Departure</Text>
+                                <Text style={{ fontSize: hScale(16) }} className="font-black text-slate-900 dark:text-white">
                                     {new Date(trip.departure_time).toLocaleDateString()} at {new Date(trip.departure_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </Text>
                             </View>
                         </View>
-
-                        <View style={styles.detailItem}>
-                            <Ionicons name="car-outline" size={24} color="#6b7280" />
-                            <View style={styles.detailTextContainer}>
-                                <Text style={styles.detailLabel}>Vehicle</Text>
-                                <Text style={styles.detailValue}>{trip.vehicle_model} • {trip.vehicle_number}</Text>
+ 
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(20) }}>
+                            <View style={{ width: hScale(40), height: hScale(40), borderRadius: hScale(16), borderWidth: 1 }} className="items-center justify-center bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                                <Ionicons name="car" size={hScale(20)} color={isDark ? "#94a3b8" : "#475569"} />
+                            </View>
+                            <View className="flex-1">
+                                <Text style={{ fontSize: hScale(10), marginBottom: vScale(4) }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Vehicle</Text>
+                                <Text style={{ fontSize: hScale(16) }} className="font-black text-slate-900 dark:text-white">{trip.vehicle_model} • {trip.vehicle_number}</Text>
                             </View>
                         </View>
                     </View>
-
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Ride Preferences</Text>
-                        <View style={styles.badgeContainer}>
+ 
+                    <View style={{ marginBottom: vScale(40) }}>
+                        <Text style={{ fontSize: hScale(16), marginBottom: vScale(16), marginLeft: hScale(4) }} className="font-black text-slate-900 dark:text-white">Ride Preferences</Text>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: hScale(12) }}>
                             {trip.preferences?.smoking_allowed && (
-                                <View style={styles.badge}><Text style={styles.badgeText}>Smoking Allowed</Text></View>
+                                <View style={{ paddingHorizontal: hScale(16), paddingVertical: vScale(8), borderRadius: hScale(16), borderWidth: 1 }} className="bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50">
+                                    <Text style={{ fontSize: hScale(12) }} className="font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider">Smoking Allowed</Text>
+                                </View>
                             )}
                             {trip.preferences?.pets_allowed && (
-                                <View style={styles.badge}><Text style={styles.badgeText}>Pets Allowed</Text></View>
+                                <View style={{ paddingHorizontal: hScale(16), paddingVertical: vScale(8), borderRadius: hScale(16), borderWidth: 1 }} className="bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50">
+                                    <Text style={{ fontSize: hScale(12) }} className="font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider">Pets Allowed</Text>
+                                </View>
                             )}
                             {trip.preferences?.music_choice && (
-                                <View style={styles.badge}><Text style={styles.badgeText}>{trip.preferences.music_choice}</Text></View>
+                                <View style={{ paddingHorizontal: hScale(16), paddingVertical: vScale(8), borderRadius: hScale(16), borderWidth: 1 }} className="bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50">
+                                    <Text style={{ fontSize: hScale(12) }} className="font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider">{trip.preferences.music_choice}</Text>
+                                </View>
                             )}
-                            {!trip.preferences && <Text style={styles.detailLabel}>No special preferences</Text>}
+                            {!trip.preferences && <Text style={{ fontSize: hScale(14), marginLeft: hScale(8) }} className="font-bold text-slate-400 dark:text-slate-500 italic">No special preferences recorded</Text>}
                         </View>
                     </View>
 
@@ -614,39 +643,41 @@ const TripDetailsScreen = () => {
                             tripStatus={trip.status}
                         />
                     )}
-
+ 
                     {isDriver && bookings && bookings.length > 0 && (
                         <Animated.View
                             entering={FadeInDown.delay(200)}
-                            style={styles.section}
+                            style={{ marginBottom: vScale(40) }}
                         >
-                            <Text style={styles.sectionTitle}>Passengers ({bookings.length})</Text>
+                            <Text style={{ fontSize: hScale(16), marginBottom: vScale(16), marginLeft: hScale(4) }} className="font-black text-slate-900 dark:text-white">Passengers ({bookings.length})</Text>
                             {bookings.map((booking: any, index: number) => (
                                 <Animated.View
                                     key={booking.id}
                                     entering={FadeInDown.delay(300 + index * 100)}
-                                    style={styles.passengerCard}
+                                    style={{ padding: hScale(16), borderRadius: hScale(24), marginBottom: vScale(12), borderWidth: 1 }}
+                                    className="flex-row justify-between items-center bg-white dark:bg-slate-900/50 border-slate-100 dark:border-slate-800 shadow-sm"
                                 >
-                                    <View style={styles.passengerInfo}>
-                                        <View style={styles.passengerAvatar}>
-                                            <Text style={styles.passengerAvatarText}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(16) }}>
+                                        <View style={{ width: hScale(48), height: hScale(48), borderRadius: hScale(16), borderWidth: 1 }} className="bg-slate-100 dark:bg-slate-800 justify-center items-center border-slate-200 dark:border-slate-700">
+                                            <Text style={{ fontSize: hScale(16) }} className="font-black text-slate-600 dark:text-slate-300">
                                                 {booking.passenger?.full_name?.charAt(0) || 'P'}
                                             </Text>
                                         </View>
                                         <View>
-                                            <Text style={styles.passengerName}>{booking.passenger?.full_name || 'Passenger'}</Text>
-                                            <Text style={styles.passengerSeats}>{booking.seats_booked} seats • {booking.status}</Text>
+                                            <Text style={{ fontSize: hScale(16) }} className="font-black text-slate-900 dark:text-white">{booking.passenger?.full_name || 'Passenger'}</Text>
+                                            <Text style={{ fontSize: hScale(10) }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{booking.seats_booked} seats • {booking.status}</Text>
                                         </View>
                                     </View>
-
-                                    <View style={styles.passengerActions}>
+ 
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(12) }}>
                                         <TouchableOpacity
                                             onPress={() => router.push(`/chat/${id}?userId=${booking.passenger_id}&userName=${booking.passenger?.full_name}` as any)}
-                                            style={styles.actionIcon}
+                                            style={{ width: hScale(40), height: hScale(40), borderRadius: hScale(12), borderWidth: 1 }}
+                                            className="bg-blue-50 dark:bg-blue-900/20 items-center justify-center border-blue-100 dark:border-blue-800/50"
                                         >
-                                            <Ionicons name="chatbubble-outline" size={20} color="#3b82f6" />
+                                            <Ionicons name="chatbubble" size={hScale(18)} color={isDark ? "#60a5fa" : "#2563eb"} />
                                         </TouchableOpacity>
-
+ 
                                         {trip.status === 'completed' && (
                                             <TouchableOpacity
                                                 onPress={() => {
@@ -656,9 +687,10 @@ const TripDetailsScreen = () => {
                                                     });
                                                     setRatePassengerModalVisible(true);
                                                 }}
-                                                style={styles.rateButton}
+                                                style={{ paddingHorizontal: hScale(16), paddingVertical: vScale(8), borderRadius: hScale(12), borderWidth: 1 }}
+                                                className="bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800/50"
                                             >
-                                                <Text style={styles.rateButtonText}>Rate</Text>
+                                                <Text style={{ fontSize: hScale(12) }} className="font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Rate</Text>
                                             </TouchableOpacity>
                                         )}
                                     </View>
@@ -666,44 +698,46 @@ const TripDetailsScreen = () => {
                             ))}
                         </Animated.View>
                     )}
-
+ 
                     <Animated.View
                         entering={FadeInDown.delay(500)}
-                        style={styles.actionButtons}
+                        style={{ gap: vScale(16), marginBottom: vScale(40) }}
                     >
                         <TouchableOpacity
-                            style={styles.chatButton}
+                            style={{ height: vScale(64), borderRadius: hScale(24), gap: hScale(12) }}
+                            className="flex-row items-center justify-center bg-blue-600 active:bg-blue-700 shadow-lg shadow-blue-500/20"
                             onPress={() => router.push(`/chat/${id}?userId=${isDriver ? 'passenger' : trip.driver_id}&userName=${isDriver ? 'Passenger' : trip.driver?.full_name}` as any)}
                         >
-                            <Ionicons name="chatbubble-outline" size={20} color="#3b82f6" />
-                            <Text style={styles.chatButtonText}>
+                            <Ionicons name="chatbubble" size={hScale(20)} color="white" />
+                            <Text style={{ fontSize: hScale(18) }} className="font-black text-white">
                                 Chat with {isDriver ? 'Passenger' : 'Driver'}
                             </Text>
                         </TouchableOpacity>
-
+ 
                         {(trip.status === 'ongoing' || trip.status === 'confirmed') && (
-                            <EmergencyButton tripId={id as string} style={styles.emergencyBtn} />
+                            <EmergencyButton tripId={id as string} style={{ marginTop: 0 }} />
                         )}
                     </Animated.View>
 
                     {(trip.status === 'ongoing' || trip.status === 'confirmed') && (
-                        <SafetyCheckIn tripId={id as string} style={{ marginBottom: 20 }} />
+                        <SafetyCheckIn tripId={id as string} style={{ marginBottom: vScale(20) }} />
                     )}
-
+ 
                     <SimilarTripsMobile
                         trips={similarTrips || []}
                         onSelect={(newId) => router.push(`/trip/${newId}`)}
                     />
-
-                    <View style={{ marginTop: 20, gap: 16 }}>
+ 
+                    <View style={{ marginTop: vScale(32), gap: vScale(20) }}>
                         <RideInsuranceCard />
-
+ 
                         <TouchableOpacity
-                            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, backgroundColor: '#eff6ff', borderRadius: 8, gap: 8 }}
+                            style={{ height: vScale(56), borderRadius: hScale(20), gap: hScale(12), borderWidth: 1 }}
+                            className="flex-row items-center justify-center bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
                             onPress={() => setShowSafetyTips(true)}
                         >
-                            <Ionicons name="shield-checkmark-outline" size={20} color="#3b82f6" />
-                            <Text style={{ color: '#3b82f6', fontWeight: '600' }}>Read Safety Guidelines</Text>
+                            <Ionicons name="shield-checkmark" size={hScale(20)} color={isDark ? "#60a5fa" : "#2563eb"} />
+                            <Text style={{ fontSize: hScale(12) }} className="text-blue-600 dark:text-blue-400 font-black uppercase tracking-widest">Read Safety Guidelines</Text>
                         </TouchableOpacity>
                     </View>
                 </Animated.View>
@@ -715,7 +749,7 @@ const TripDetailsScreen = () => {
             />
 
             <SplitFareModal
-                visible={showSplitFare}
+                isVisible={showSplitFare}
                 onClose={() => setShowSplitFare(false)}
                 bookingId={bookings?.find((b: any) => b.passenger_id === user?.id)?.id || ''}
                 totalAmount={trip?.price_per_seat * seatsToBook || 0}
@@ -747,9 +781,8 @@ const TripDetailsScreen = () => {
 
             {showDriverVerification && trip && (
                 <DriverVerificationModal
-                    visible={showDriverVerification}
+                    isVisible={showDriverVerification}
                     onClose={() => setShowDriverVerification(false)}
-                    bookingId={bookings?.find((b: any) => b.passenger_id === user?.id)?.id || ''}
                     driver={{
                         id: trip.driver_id,
                         name: trip.driver?.full_name || 'Driver',
@@ -758,7 +791,7 @@ const TripDetailsScreen = () => {
                         vehicle_model: trip.driver_details?.vehicle_model || '',
                         vehicle_plate: trip.driver_details?.vehicle_plate || 'N/A'
                     }}
-                    onVerified={() => {
+                    onVerify={() => {
                         setIsDriverVerified(true);
                         // Trigger auto-share only if not already shared
                         SafetyService.shareTripWithContacts(
@@ -802,445 +835,96 @@ const TripDetailsScreen = () => {
             />
 
             {!isDriver && trip.status === 'upcoming' && (
-                <View style={styles.footer}>
-                    <SeatSelector
-                        availableSeats={trip.available_seats}
-                        selectedSeats={seatsToBook}
-                        onSelectSeats={setSeatsToBook}
-                    />
+                <View style={{ padding: hScale(24), borderTopWidth: 1, gap: hScale(16) }} className="border-slate-100 dark:border-slate-800 flex-row items-center bg-white dark:bg-slate-900 shadow-2xl">
+                    <View className="flex-[0.8]">
+                        <SeatSelector
+                            availableSeats={trip.available_seats}
+                            selectedSeats={seatsToBook}
+                            onSelectSeats={setSeatsToBook}
+                        />
+                    </View>
                     <TouchableOpacity
-                        style={styles.bookBtn}
+                        style={{ height: vScale(64), borderRadius: hScale(24) }}
+                        className="flex-1 bg-blue-600 justify-center items-center shadow-lg shadow-blue-500/20 active:bg-blue-700"
                         onPress={() => setShowBookingConfirmation(true)}
                     >
-                        <Text style={styles.bookBtnText}>
-                            Book for ₹{trip.price_per_seat * seatsToBook}
+                        <Text style={{ fontSize: hScale(18) }} className="text-white font-black tracking-tight">
+                            Book • ₹{trip.price_per_seat * seatsToBook}
                         </Text>
                     </TouchableOpacity>
                 </View>
             )}
 
             {isDriver && (
-                <View style={styles.footer}>
+                <View style={{ padding: hScale(24), borderTopWidth: 1, gap: hScale(16) }} className="border-slate-100 dark:border-slate-800 flex-row items-center bg-white dark:bg-slate-900 shadow-2xl">
                     {trip.status === 'upcoming' || trip.status === 'confirmed' ? (
                         <>
                             <TouchableOpacity
-                                style={[styles.bookBtn, { backgroundColor: 'white', borderWidth: 1, borderColor: '#e5e7eb', flex: 0.3 }]}
+                                style={{ width: hScale(64), height: hScale(64), borderRadius: hScale(24), borderWidth: 1 }}
+                                className="bg-slate-100 dark:bg-slate-800 justify-center items-center border-slate-200 dark:border-slate-700"
                                 onPress={() => setShowEditTripModal(true)}
                             >
-                                <Ionicons name="create-outline" size={24} color="#1f2937" />
+                                <Ionicons name="create-outline" size={hScale(24)} color={isDark ? "#94a3b8" : "#1f2937"} />
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.bookBtn, { backgroundColor: '#22c55e' }]}
+                                style={{ height: vScale(64), borderRadius: hScale(24), gap: hScale(12) }}
+                                className="flex-1 bg-emerald-600 flex-row justify-center items-center shadow-lg shadow-emerald-500/20 active:bg-emerald-700"
                                 onPress={() => updateStatusMutation.mutate('ongoing')}
                             >
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                    <Ionicons name="play" size={20} color="white" />
-                                    <Text style={styles.bookBtnText}>Start Trip</Text>
-                                </View>
+                                <Ionicons name="play" size={hScale(24)} color="white" fill="white" />
+                                <Text style={{ fontSize: hScale(18) }} className="text-white font-black tracking-tight">Start Trip</Text>
                             </TouchableOpacity>
                         </>
                     ) : trip.status === 'ongoing' ? (
-                        <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+                        <View style={{ flexDirection: 'row', gap: hScale(16), width: '100%' }}>
                             <TouchableOpacity
-                                style={[styles.bookBtn, { backgroundColor: '#3b82f6', flex: 1 }]}
+                                style={{ height: vScale(64), borderRadius: hScale(24), gap: hScale(12) }}
+                                className="flex-1 bg-blue-600 flex-row justify-center items-center shadow-lg shadow-blue-500/20 active:bg-blue-700"
                                 onPress={() => openMap(parseFloat(trip.drop_lat), parseFloat(trip.drop_lng), 'Destination')}
                             >
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                    <Ionicons name="navigate" size={20} color="white" />
-                                    <Text style={styles.bookBtnText}>Navigate</Text>
-                                </View>
+                                <Ionicons name="navigate" size={hScale(24)} color="white" />
+                                <Text style={{ fontSize: hScale(18) }} className="text-white font-black tracking-tight">Navigate</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.bookBtn, { backgroundColor: '#ef4444', flex: 1 }]}
+                                style={{ height: vScale(64), borderRadius: hScale(24), gap: hScale(12) }}
+                                className="flex-1 bg-rose-600 flex-row justify-center items-center shadow-lg shadow-rose-500/20 active:bg-rose-700"
                                 onPress={() => updateStatusMutation.mutate('completed')}
                             >
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                    <Ionicons name="stop" size={20} color="white" />
-                                    <Text style={styles.bookBtnText}>End Trip</Text>
-                                </View>
+                                <Ionicons name="stop" size={hScale(24)} color="white" fill="white" />
+                                <Text style={{ fontSize: hScale(18) }} className="text-white font-black tracking-tight">End Trip</Text>
                             </TouchableOpacity>
                         </View>
                     ) : (
-                        <View style={[styles.bookBtn, { backgroundColor: '#9ca3af' }]}>
-                            <Text style={styles.bookBtnText}>Trip {trip.status}</Text>
+                        <View style={{ height: vScale(64), borderRadius: hScale(24), borderWidth: 1 }} className="flex-1 bg-slate-100 dark:bg-slate-800 justify-center items-center border-slate-200 dark:border-slate-700">
+                            <Text style={{ fontSize: hScale(18) }} className="text-slate-500 dark:text-slate-400 font-black uppercase tracking-widest">Trip {trip.status}</Text>
                         </View>
                     )}
                 </View>
             )}
 
             {!isDriver && trip.status === 'completed' && (
-                <View style={styles.footer}>
+                <View style={{ padding: hScale(24), borderTopWidth: 1, gap: hScale(16) }} className="border-slate-100 dark:border-slate-800 flex-row items-center bg-white dark:bg-slate-900 shadow-2xl">
                     <TouchableOpacity
-                        style={[styles.bookBtn, { backgroundColor: 'white', borderWidth: 1, borderColor: '#3b82f6' }]}
+                        style={{ height: vScale(56), borderRadius: hScale(16), borderWidth: 1 }}
+                        className="flex-1 bg-white dark:bg-slate-900 border-blue-500 dark:border-blue-400 justify-center items-center active:bg-blue-50 dark:active:bg-blue-900/20"
                         onPress={() => setShowReceipt(true)}
                     >
-                        <Text style={[styles.bookBtnText, { color: '#3b82f6' }]}>
+                        <Text style={{ fontSize: hScale(14) }} className="text-blue-600 dark:text-blue-400 font-black uppercase tracking-widest">
                             Receipt
                         </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                        style={[styles.bookBtn, { backgroundColor: '#3b82f6' }]}
+                        style={{ height: vScale(56), borderRadius: hScale(16), gap: hScale(8) }}
+                        className="flex-1 bg-blue-600 flex-row justify-center items-center shadow-lg shadow-blue-500/20 active:bg-blue-700"
                         onPress={() => setShowTipModal(true)}
                     >
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                            <Ionicons name="heart" size={20} color="white" />
-                            <Text style={styles.bookBtnText}>Tip Driver</Text>
-                        </View>
+                        <Ionicons name="heart" size={hScale(18)} color="white" />
+                        <Text style={{ fontSize: hScale(14) }} className="text-white font-black uppercase tracking-widest">Tip Driver</Text>
                     </TouchableOpacity>
                 </View>
             )}
         </SafeAreaView>
     );
 };
-
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: 'white',
-    },
-    loading: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    errorContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
-        backgroundColor: 'white',
-    },
-    errorTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#1f2937',
-        marginTop: 16,
-        marginBottom: 8,
-    },
-    errorText: {
-        fontSize: 16,
-        color: '#6b7280',
-        textAlign: 'center',
-        marginBottom: 24,
-    },
-    retryBtn: {
-        backgroundColor: '#3b82f6',
-        paddingHorizontal: 24,
-        paddingVertical: 12,
-        borderRadius: 8,
-    },
-    retryBtnText: {
-        color: 'white',
-        fontWeight: '600',
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    headerActions: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    iconBtn: {
-        padding: 4,
-    },
-    scrollView: {
-        flex: 1,
-    },
-    mapContainer: {
-        height: 200,
-        backgroundColor: '#f3f4f6',
-    },
-    map: {
-        ...StyleSheet.absoluteFillObject,
-    },
-    content: {
-        padding: 20,
-    },
-    driverCard: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: 16,
-        backgroundColor: '#f9fafb',
-        borderRadius: 16,
-        marginBottom: 24,
-    },
-    driverInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    avatar: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: '#3b82f6',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    avatarText: {
-        color: 'white',
-        fontSize: 20,
-        fontWeight: 'bold',
-    },
-    driverName: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    rating: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    ratingText: {
-        fontSize: 12,
-        color: '#6b7280',
-    },
-    priceContainer: {
-        alignItems: 'flex-end',
-    },
-    price: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#3b82f6',
-    },
-    priceLabel: {
-        fontSize: 12,
-        color: '#6b7280',
-    },
-    detailsList: {
-        gap: 20,
-        marginBottom: 24,
-    },
-    detailItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 16,
-    },
-    detailTextContainer: {
-        flex: 1,
-    },
-    detailLabel: {
-        fontSize: 12,
-        color: '#6b7280',
-        marginBottom: 2,
-    },
-    detailValue: {
-        fontSize: 16,
-        color: '#1f2937',
-        fontWeight: '500',
-    },
-    preferences: {
-        marginTop: 8,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#1f2937',
-        marginBottom: 12,
-    },
-    badgeContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 8,
-    },
-    badge: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        backgroundColor: '#eff6ff',
-        borderRadius: 20,
-    },
-    badgeText: {
-        color: '#3b82f6',
-        fontSize: 12,
-        fontWeight: '500',
-    },
-    footer: {
-        padding: 20,
-        borderTopWidth: 1,
-        borderTopColor: '#f3f4f6',
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 16,
-    },
-    seatsPicker: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    seatsLabel: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: '#1f2937',
-    },
-    navBtn: {
-        padding: 4,
-    },
-    arrivalOverlay: {
-        position: 'absolute',
-        top: 16,
-        left: 16,
-        right: 16,
-        alignItems: 'center',
-    },
-    arrivalBadge: {
-        backgroundColor: '#1f2937',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 24,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-        elevation: 5,
-    },
-    arrivalTitle: {
-        color: 'white',
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    arrivalTime: {
-        color: '#60a5fa',
-        fontSize: 14,
-        fontWeight: 'bold',
-    },
-    stepper: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-        borderRadius: 8,
-    },
-    stepBtn: {
-        padding: 8,
-    },
-    seatsCount: {
-        paddingHorizontal: 12,
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    bookBtn: {
-        flex: 1,
-        backgroundColor: '#3b82f6',
-        height: 52,
-        borderRadius: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    bookBtnText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-    driverMarker: {
-        backgroundColor: 'white',
-        padding: 5,
-        borderRadius: 20,
-        borderWidth: 2,
-        borderColor: '#3b82f6',
-    },
-    actionButtons: {
-        marginTop: 24,
-        marginBottom: 24,
-        gap: 12,
-    },
-    chatButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#eff6ff',
-        padding: 16,
-        borderRadius: 12,
-        gap: 8,
-        borderWidth: 1,
-        borderColor: '#3b82f6',
-    },
-    chatButtonText: {
-        color: '#3b82f6',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    emergencyBtn: {
-        marginTop: 0,
-    },
-    section: {
-        marginBottom: 24,
-    },
-    passengerCard: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        backgroundColor: '#f9fafb',
-        padding: 12,
-        borderRadius: 12,
-        marginBottom: 8,
-        borderWidth: 1,
-        borderColor: '#f3f4f6',
-    },
-    passengerInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    passengerAvatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#e5e7eb',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    passengerAvatarText: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#6b7280',
-    },
-    passengerName: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#1f2937',
-    },
-    passengerSeats: {
-        fontSize: 12,
-        color: '#6b7280',
-    },
-    passengerActions: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    actionIcon: {
-        padding: 4,
-    },
-    rateButton: {
-        backgroundColor: '#eff6ff',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#3b82f6',
-    },
-    rateButtonText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: '#3b82f6',
-    },
-});
 
 export default TripDetailsScreen;

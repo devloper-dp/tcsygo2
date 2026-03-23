@@ -2,7 +2,8 @@ import { View, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef } from 'react';
-
+import { useTheme } from '@/contexts/ThemeContext';
+ 
 interface NotificationBannerProps {
     type: 'success' | 'error' | 'warning' | 'info';
     message: string;
@@ -10,7 +11,7 @@ interface NotificationBannerProps {
     onDismiss: () => void;
     duration?: number;
 }
-
+ 
 export function NotificationBanner({
     type,
     message,
@@ -20,7 +21,7 @@ export function NotificationBanner({
 }: NotificationBannerProps) {
     const slideAnim = useRef(new Animated.Value(-100)).current;
     const opacityAnim = useRef(new Animated.Value(0)).current;
-
+ 
     useEffect(() => {
         if (visible) {
             // Slide in
@@ -36,16 +37,16 @@ export function NotificationBanner({
                     useNativeDriver: true,
                 }),
             ]).start();
-
+ 
             // Auto dismiss
             const timer = setTimeout(() => {
                 handleDismiss();
             }, duration);
-
+ 
             return () => clearTimeout(timer);
         }
     }, [visible]);
-
+ 
     const handleDismiss = () => {
         Animated.parallel([
             Animated.timing(slideAnim, {
@@ -62,9 +63,9 @@ export function NotificationBanner({
             onDismiss();
         });
     };
-
+ 
     if (!visible) return null;
-
+ 
     const getConfig = () => {
         switch (type) {
             case 'success':
@@ -89,9 +90,9 @@ export function NotificationBanner({
                 };
         }
     };
-
+ 
     const config = getConfig();
-
+ 
     return (
         <Animated.View
             style={[
@@ -105,7 +106,7 @@ export function NotificationBanner({
         >
             <View style={styles.content}>
                 <Ionicons name={config.icon} size={24} color="#ffffff" />
-                <Text style={styles.message} className="text-white font-medium">
+                <Text style={styles.message} className="text-white font-black">
                     {message}
                 </Text>
                 <TouchableOpacity onPress={handleDismiss} style={styles.closeButton}>
@@ -115,14 +116,16 @@ export function NotificationBanner({
         </Animated.View>
     );
 }
-
+ 
 interface PullToRefreshIndicatorProps {
     refreshing: boolean;
 }
-
+ 
 export function PullToRefreshIndicator({ refreshing }: PullToRefreshIndicatorProps) {
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
     const rotateAnim = useRef(new Animated.Value(0)).current;
-
+ 
     useEffect(() => {
         if (refreshing) {
             Animated.loop(
@@ -136,41 +139,41 @@ export function PullToRefreshIndicator({ refreshing }: PullToRefreshIndicatorPro
             rotateAnim.setValue(0);
         }
     }, [refreshing]);
-
+ 
     const spin = rotateAnim.interpolate({
         inputRange: [0, 1],
         outputRange: ['0deg', '360deg'],
     });
-
+ 
     if (!refreshing) return null;
-
+ 
     return (
-        <View style={styles.refreshContainer}>
+        <View className="flex-row items-center justify-center gap-3 py-6">
             <Animated.View style={{ transform: [{ rotate: spin }] }}>
                 <Ionicons name="sync" size={24} color="#3b82f6" />
             </Animated.View>
-            <Text style={styles.refreshText} className="text-gray-600">
+            <Text className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
                 Refreshing...
             </Text>
         </View>
     );
 }
-
+ 
 const styles = StyleSheet.create({
     container: {
         position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
-        zIndex: 1000,
+        zIndex: 2000,
         paddingTop: 50,
         paddingHorizontal: 16,
         paddingBottom: 16,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-        elevation: 5,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 10,
     },
     content: {
         flexDirection: 'row',
@@ -183,15 +186,5 @@ const styles = StyleSheet.create({
     },
     closeButton: {
         padding: 4,
-    },
-    refreshContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        paddingVertical: 16,
-    },
-    refreshText: {
-        fontSize: 14,
     },
 });

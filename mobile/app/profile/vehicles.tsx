@@ -1,18 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, ScrollView, TouchableOpacity, Alert, ActivityIndicator, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-
+import { Text } from '@/components/ui/text';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useResponsive } from '@/hooks/useResponsive';
+ 
 export default function MyVehiclesScreen() {
     const router = useRouter();
     const { user } = useAuth();
+    const { theme, isDark } = useTheme();
+    const { hScale, vScale, spacing, fontSize } = useResponsive();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [driverProfile, setDriverProfile] = useState<any>(null);
-
+ 
     const [formData, setFormData] = useState({
         vehicleMake: '',
         vehicleModel: '',
@@ -20,13 +28,13 @@ export default function MyVehiclesScreen() {
         vehicleColor: '',
         vehiclePlate: '',
     });
-
+ 
     useEffect(() => {
         if (user) {
             fetchDriverProfile();
         }
     }, [user]);
-
+ 
     const fetchDriverProfile = async () => {
         try {
             setLoading(true);
@@ -35,7 +43,7 @@ export default function MyVehiclesScreen() {
                 .select('*')
                 .eq('userId', user?.id)
                 .single();
-
+ 
             if (data) {
                 setDriverProfile(data);
                 setFormData({
@@ -52,13 +60,13 @@ export default function MyVehiclesScreen() {
             setLoading(false);
         }
     };
-
+ 
     const handleSave = async () => {
         if (!formData.vehicleMake || !formData.vehicleModel || !formData.vehiclePlate) {
-            Alert.alert('Error', 'Please fill in required vehicle details (Make, Model, License Plate)');
+            Alert.alert('Error', 'Please fill in required vehicle details');
             return;
         }
-
+ 
         try {
             setSaving(true);
             const { error } = await supabase
@@ -71,9 +79,8 @@ export default function MyVehiclesScreen() {
                     vehiclePlate: formData.vehiclePlate,
                 })
                 .eq('userId', user?.id);
-
+ 
             if (error) throw error;
-
             Alert.alert('Success', 'Vehicle information updated successfully');
         } catch (error: any) {
             Alert.alert('Error', error.message || 'Failed to update vehicle information');
@@ -81,279 +88,170 @@ export default function MyVehiclesScreen() {
             setSaving(false);
         }
     };
-
+ 
     if (loading) {
         return (
-            <View style={styles.centered}>
-                <ActivityIndicator size="large" color="#3b82f6" />
-            </View>
-        );
-    }
-
-    if (!driverProfile && user?.role === 'passenger') {
-        return (
-            <SafeAreaView style={styles.container}>
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                        <Ionicons name="arrow-back" size={24} color="#1f2937" />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>My Vehicles</Text>
-                    <View style={{ width: 40 }} />
-                </View>
-                <View style={[styles.centered, { padding: 40 }]}>
-                    <Ionicons name="car-outline" size={80} color="#d1d5db" />
-                    <Text style={styles.noDriverTitle}>Not a Driver Yet</Text>
-                    <Text style={styles.noDriverText}>
-                        You need to register as a driver to manage vehicle information.
-                    </Text>
-                    <TouchableOpacity
-                        style={styles.registerButton}
-                        onPress={() => router.push('/become-driver')}
-                    >
-                        <Text style={styles.registerButtonText}>Become a Driver</Text>
-                    </TouchableOpacity>
-                </View>
+            <SafeAreaView style={{ gap: spacing.lg }} className="flex-1 bg-white dark:bg-slate-950 justify-center items-center">
+                <ActivityIndicator size="large" color={isDark ? "#ffffff" : "#3b82f6"} />
+                <Text style={{ fontSize: hScale(10) }} className="text-slate-500 dark:text-slate-500 font-black uppercase tracking-widest">Accessing Hangar State...</Text>
             </SafeAreaView>
         );
     }
-
-    return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color="#1f2937" />
+ 
+    if (!driverProfile && user?.role === 'passenger') {
+        return (
+            <SafeAreaView className="flex-1 bg-slate-50 dark:bg-slate-950" edges={['top']}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+            <View style={{ paddingHorizontal: spacing.xl, paddingVertical: vScale(16), borderBottomWidth: 1 }} className="flex-row items-center justify-between border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-sm z-10">
+                <TouchableOpacity onPress={() => router.back()} style={{ width: hScale(40), height: hScale(40) }} className="rounded-full bg-slate-50 dark:bg-slate-900 items-center justify-center">
+                    <Ionicons name="arrow-back" size={hScale(24)} color={isDark ? "#f8fafc" : "#1e293b"} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>My Vehicle</Text>
-                <View style={{ width: 40 }} />
+                <Text style={{ fontSize: fontSize.xl }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter">My Vehicles</Text>
+                <View style={{ width: hScale(40) }} />
             </View>
-
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-                <View style={styles.statusCard}>
-                    <View style={styles.statusInfo}>
-                        <Text style={styles.statusLabel}>Verification Status</Text>
-                        <View style={[
-                            styles.badge,
-                            driverProfile?.verificationStatus === 'verified' ? styles.badgeSuccess : styles.badgeWarning
-                        ]}>
-                            <Text style={[
-                                styles.badgeText,
-                                driverProfile?.verificationStatus === 'verified' ? styles.badgeTextSuccess : styles.badgeTextWarning
-                            ]}>
-                                {driverProfile?.verificationStatus?.toUpperCase() || 'PENDING'}
+            <View style={{ padding: spacing.xxl }} className="flex-1 justify-center items-center opacity-40">
+                <View style={{ width: hScale(96), height: hScale(96), marginBottom: vScale(32) }} className="bg-slate-100 dark:bg-slate-900 rounded-full items-center justify-center">
+                    <Ionicons name="car" size={hScale(48)} color={isDark ? "#94a3b8" : "#64748b"} />
+                </View>
+                <Text style={{ fontSize: fontSize.xxl }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter text-center">Registration Required</Text>
+                <Text style={{ fontSize: fontSize.xs, marginTop: vScale(12), lineHeight: vScale(20), maxWidth: hScale(240) }} className="font-medium text-slate-500 dark:text-slate-500 text-center uppercase tracking-widest">
+                    You need to elevate your account to Driver status to manage vehicle assets.
+                </Text>
+                <TouchableOpacity 
+                    style={{ marginTop: vScale(48), height: vScale(64), borderRadius: hScale(24) }}
+                    className="bg-slate-900 dark:bg-white w-full items-center justify-center shadow-lg shadow-slate-900/10" 
+                    onPress={() => router.push('/become-driver')}
+                >
+                    <Text style={{ fontSize: fontSize.base }} className="text-white dark:text-slate-900 font-black uppercase tracking-widest">Upgrade to Driver</Text>
+                </TouchableOpacity>
+            </View>
+            </SafeAreaView>
+        );
+    }
+ 
+    return (
+        <SafeAreaView className="flex-1 bg-slate-50 dark:bg-slate-950" edges={['top']}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+            
+            <View style={{ paddingHorizontal: spacing.xl, paddingVertical: vScale(16), borderBottomWidth: 1 }} className="flex-row items-center justify-between border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-sm z-10">
+                <TouchableOpacity 
+                    onPress={() => router.back()} 
+                    style={{ width: hScale(40), height: hScale(40) }}
+                    className="rounded-full bg-slate-50 dark:bg-slate-900 items-center justify-center active:bg-slate-100 dark:active:bg-slate-800"
+                >
+                    <Ionicons name="arrow-back" size={hScale(24)} color={isDark ? "#f8fafc" : "#1e293b"} />
+                </TouchableOpacity>
+                <Text style={{ fontSize: fontSize.xl }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter">My Vehicle</Text>
+                <View style={{ width: hScale(40) }} />
+            </View>
+ 
+            <ScrollView 
+                contentContainerStyle={{ padding: spacing.xl, paddingBottom: vScale(100) }}
+                showsVerticalScrollIndicator={false}
+            >
+                <Card style={{ padding: spacing.xl, borderRadius: hScale(32), marginBottom: vScale(40), borderWidth: 1 }} className="flex-row items-center justify-between bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm">
+                    <View style={{ gap: spacing.xs }}>
+                        <Text style={{ fontSize: hScale(10) }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Asset Integrity</Text>
+                        <View style={{ alignSelf: 'flex-start', paddingHorizontal: spacing.lg, paddingVertical: vScale(6), borderRadius: hScale(12), borderWidth: 1 }} className={`${driverProfile?.verificationStatus === 'verified' ? 'bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-900/30' : 'bg-amber-50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-900/30'}`}>
+                            <Text style={{ fontSize: hScale(10) }} className={`font-black uppercase tracking-widest ${driverProfile?.verificationStatus === 'verified' ? 'text-green-600 dark:text-green-500' : 'text-amber-600 dark:text-amber-500'}`}>
+                                {driverProfile?.verificationStatus?.toUpperCase() || 'PENDING VERIFICATION'}
                             </Text>
                         </View>
                     </View>
-                    <Ionicons
-                        name={driverProfile?.verificationStatus === 'verified' ? "shield-checkmark" : "time-outline"}
-                        size={32}
-                        color={driverProfile?.verificationStatus === 'verified' ? "#22c55e" : "#f59e0b"}
-                    />
-                </View>
-
-                <View style={styles.form}>
-                    <View style={styles.inputRow}>
-                        <View style={[styles.inputGroup, { flex: 1 }]}>
-                            <Text style={styles.label}>Make</Text>
-                            <TextInput
-                                style={styles.input}
+                    <View style={{ width: hScale(56), height: hScale(56), borderRadius: hScale(16) }} className="bg-slate-50 dark:bg-slate-800 items-center justify-center">
+                        <Ionicons
+                            name={driverProfile?.verificationStatus === 'verified' ? "shield-checkmark" : "time"}
+                            size={hScale(32)}
+                            color={driverProfile?.verificationStatus === 'verified' ? "#22c55e" : "#f59e0b"}
+                        />
+                    </View>
+                </Card>
+ 
+                <View style={{ gap: spacing.lg }}>
+                    <View style={{ flexDirection: 'row', gap: spacing.lg }}>
+                        <View style={{ flex: 1, gap: spacing.xs }}>
+                            <Text style={{ fontSize: hScale(10), marginLeft: spacing.xs }} className="font-black text-slate-500 dark:text-slate-500 uppercase tracking-widest">Make</Text>
+                            <Input
                                 value={formData.vehicleMake}
                                 onChangeText={(text) => setFormData({ ...formData, vehicleMake: text })}
-                                placeholder="e.g. Toyota"
+                                placeholder="TOYOTA"
+                                style={{ height: vScale(56), borderRadius: hScale(20), paddingHorizontal: spacing.xl }}
+                                className="font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm"
+                                placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                             />
                         </View>
-                        <View style={[styles.inputGroup, { flex: 1 }]}>
-                            <Text style={styles.label}>Model</Text>
-                            <TextInput
-                                style={styles.input}
+                        <View style={{ flex: 1, gap: spacing.xs }}>
+                            <Text style={{ fontSize: hScale(10), marginLeft: spacing.xs }} className="font-black text-slate-500 dark:text-slate-500 uppercase tracking-widest">Model</Text>
+                            <Input
                                 value={formData.vehicleModel}
                                 onChangeText={(text) => setFormData({ ...formData, vehicleModel: text })}
-                                placeholder="e.g. Corolla"
+                                placeholder="COROLLA"
+                                style={{ height: vScale(56), borderRadius: hScale(20), paddingHorizontal: spacing.xl }}
+                                className="font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm"
+                                placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                             />
                         </View>
                     </View>
-
-                    <View style={styles.inputRow}>
-                        <View style={[styles.inputGroup, { flex: 1 }]}>
-                            <Text style={styles.label}>Year</Text>
-                            <TextInput
-                                style={styles.input}
+ 
+                    <View style={{ flexDirection: 'row', gap: spacing.lg }}>
+                        <View style={{ flex: 1, gap: spacing.xs }}>
+                            <Text style={{ fontSize: hScale(10), marginLeft: spacing.xs }} className="font-black text-slate-500 dark:text-slate-500 uppercase tracking-widest">Year</Text>
+                            <Input
                                 value={formData.vehicleYear}
                                 onChangeText={(text) => setFormData({ ...formData, vehicleYear: text })}
-                                placeholder="2020"
+                                placeholder="2024"
                                 keyboardType="numeric"
+                                style={{ height: vScale(56), borderRadius: hScale(20), paddingHorizontal: spacing.xl }}
+                                className="font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm"
+                                placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                             />
                         </View>
-                        <View style={[styles.inputGroup, { flex: 1 }]}>
-                            <Text style={styles.label}>Color</Text>
-                            <TextInput
-                                style={styles.input}
+                        <View style={{ flex: 1, gap: spacing.xs }}>
+                            <Text style={{ fontSize: hScale(10), marginLeft: spacing.xs }} className="font-black text-slate-500 dark:text-slate-500 uppercase tracking-widest">Color</Text>
+                            <Input
                                 value={formData.vehicleColor}
                                 onChangeText={(text) => setFormData({ ...formData, vehicleColor: text })}
-                                placeholder="White"
+                                placeholder="METALLIC GREY"
+                                style={{ height: vScale(56), borderRadius: hScale(20), paddingHorizontal: spacing.xl }}
+                                className="font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm"
+                                placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                             />
                         </View>
                     </View>
-
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>License Plate</Text>
-                        <TextInput
-                            style={styles.input}
+ 
+                    <View style={{ gap: spacing.xs }}>
+                        <Text style={{ fontSize: hScale(10), marginLeft: spacing.xs }} className="font-black text-slate-500 dark:text-slate-500 uppercase tracking-widest">Secure Plate Registry</Text>
+                        <Input
                             value={formData.vehiclePlate}
                             onChangeText={(text) => setFormData({ ...formData, vehiclePlate: text })}
                             placeholder="KA-01-AB-1234"
                             autoCapitalize="characters"
+                            style={{ height: vScale(56), borderRadius: hScale(20), paddingHorizontal: spacing.xl }}
+                            className="font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm"
+                            placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                         />
                     </View>
-
+ 
                     <TouchableOpacity
-                        style={[styles.saveButton, saving && styles.disabledButton]}
+                        style={{ height: vScale(64), borderRadius: hScale(24), marginTop: vScale(24) }}
+                        className={`items-center justify-center ${saving ? 'bg-slate-100 dark:bg-slate-800' : 'bg-slate-900 dark:bg-white shadow-lg shadow-slate-900/10'}`}
                         onPress={handleSave}
                         disabled={saving}
                     >
                         {saving ? (
-                            <ActivityIndicator color="white" />
+                            <ActivityIndicator color={isDark ? "#3b82f6" : "#64748b"} />
                         ) : (
-                            <Text style={styles.saveButtonText}>Update Vehicle Details</Text>
+                            <Text style={{ fontSize: fontSize.base }} className="text-white dark:text-slate-900 font-black uppercase tracking-widest">Update Registry</Text>
                         )}
                     </TouchableOpacity>
+ 
+                    <View style={{ borderRadius: hScale(28), padding: spacing.xl, marginTop: vScale(16), borderWidth: 1 }} className="bg-slate-100 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800/50 opacity-40">
+                        <Text style={{ fontSize: hScale(9), lineHeight: vScale(16) }} className="font-black text-slate-500 text-center uppercase tracking-widest">
+                            Changes to vehicle details may trigger a manual audit of your professional documents.
+                        </Text>
+                    </View>
                 </View>
             </ScrollView>
         </SafeAreaView>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#f9fafb',
-    },
-    centered: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        backgroundColor: '#fff',
-        borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
-    },
-    backButton: {
-        padding: 4,
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    scrollContent: {
-        padding: 20,
-    },
-    statusCard: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        backgroundColor: '#fff',
-        padding: 20,
-        borderRadius: 12,
-        marginBottom: 24,
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-    },
-    statusInfo: {
-        gap: 8,
-    },
-    statusLabel: {
-        fontSize: 14,
-        color: '#6b7280',
-    },
-    badge: {
-        alignSelf: 'flex-start',
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-    },
-    badgeSuccess: {
-        backgroundColor: '#dcfce7',
-    },
-    badgeWarning: {
-        backgroundColor: '#fef3c7',
-    },
-    badgeText: {
-        fontSize: 12,
-        fontWeight: 'bold',
-    },
-    badgeTextSuccess: {
-        color: '#166534',
-    },
-    badgeTextWarning: {
-        color: '#92400e',
-    },
-    form: {
-        gap: 20,
-    },
-    inputRow: {
-        flexDirection: 'row',
-        gap: 16,
-    },
-    inputGroup: {
-        gap: 8,
-    },
-    label: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#4b5563',
-    },
-    input: {
-        backgroundColor: '#fff',
-        borderWidth: 1,
-        borderColor: '#d1d5db',
-        borderRadius: 8,
-        padding: 12,
-        fontSize: 16,
-        color: '#1f2937',
-    },
-    saveButton: {
-        backgroundColor: '#3b82f6',
-        padding: 16,
-        borderRadius: 8,
-        alignItems: 'center',
-        marginTop: 10,
-    },
-    disabledButton: {
-        opacity: 0.7,
-    },
-    saveButtonText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-    noDriverTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#1f2937',
-        marginTop: 16,
-    },
-    noDriverText: {
-        fontSize: 16,
-        color: '#6b7280',
-        textAlign: 'center',
-        marginTop: 8,
-        marginBottom: 24,
-    },
-    registerButton: {
-        backgroundColor: '#3b82f6',
-        paddingVertical: 12,
-        paddingHorizontal: 24,
-        borderRadius: 8,
-    },
-    registerButtonText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-});

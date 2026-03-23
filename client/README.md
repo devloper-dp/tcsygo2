@@ -34,7 +34,7 @@ Required environment variables:
 npm run dev
 ```
 
-The app will be available at http://localhost:5173
+The app will be available at http://localhost:5000
 
 ## 📜 Available Scripts
 
@@ -174,7 +174,7 @@ The build output will be in `../dist/public/` directory.
 ## 🐛 Troubleshooting
 
 ### Port already in use
-If port 5173 is already in use, you can change it in `vite.config.ts`:
+If port 5000 is already in use, you can change it in `vite.config.ts`:
 ```typescript
 server: {
   port: 3000, // Change to your preferred port

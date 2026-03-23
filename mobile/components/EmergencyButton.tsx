@@ -1,25 +1,27 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Text, TouchableOpacity, Alert } from 'react-native';
+import { AlertTriangle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { SafetyService } from '@/services/SafetyService';
-
+import { useTheme } from '@/contexts/ThemeContext';
+ 
 interface EmergencyButtonProps {
     tripId: string;
     style?: any;
 }
-
+ 
 export function EmergencyButton({ tripId, style }: EmergencyButtonProps) {
     const { user } = useAuth();
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
     const [sending, setSending] = useState(false);
-
+ 
     const handleEmergency = async () => {
         // Haptic feedback
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-
+ 
         Alert.alert(
             '🚨 Emergency SOS',
             'This will immediately alert emergency services and share your live location.\n\nAre you sure you want to proceed?',
@@ -36,34 +38,34 @@ export function EmergencyButton({ tripId, style }: EmergencyButtonProps) {
             ]
         );
     };
-
+ 
     const sendEmergencyAlert = async () => {
         setSending(true);
-
+ 
         try {
             // Strong haptic feedback
             await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-
+ 
             // Get current location
             const { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
                 Alert.alert('Permission denied', 'Location permission is required for emergency alerts.');
                 return;
             }
-
+ 
             const location = await Location.getCurrentPositionAsync({});
-
+ 
             // Trigger emergency protocol via service
-            await SafetyService.triggerEmergencyProtocol(tripId, user!.id, {
-                lat: location.coords.latitude,
-                lng: location.coords.longitude,
-            });
-
-            // Notification to admin is handled by Database Trigger (server-side)
-
+            if (user) {
+                await SafetyService.triggerEmergencyProtocol(tripId, user.id, {
+                    lat: location.coords.latitude,
+                    lng: location.coords.longitude,
+                });
+            }
+ 
             // Success feedback
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
+ 
             Alert.alert(
                 'Emergency Alert Sent',
                 'Your location has been shared with emergency services and trip admin.',
@@ -76,44 +78,21 @@ export function EmergencyButton({ tripId, style }: EmergencyButtonProps) {
             setSending(false);
         }
     };
-
+ 
     return (
         <TouchableOpacity
-            style={[styles.emergencyButton, style]}
+            style={style}
             onPress={handleEmergency}
             disabled={sending}
             activeOpacity={0.8}
+            className={`bg-red-600 dark:bg-red-500 rounded-2xl p-4 shadow-lg ${isDark ? 'shadow-red-900/40' : 'shadow-red-200'} ${sending ? 'opacity-70' : ''}`}
         >
-            <View style={styles.buttonContent}>
-                <Ionicons name="warning" size={24} color="white" />
-                <Text style={styles.buttonText}>
+            <View className="flex-row items-center justify-center gap-3">
+                <AlertTriangle size={24} color="white" strokeWidth={2.5} />
+                <Text className="text-white text-base font-black uppercase tracking-wider">
                     {sending ? 'Sending Alert...' : 'SOS Emergency'}
                 </Text>
             </View>
         </TouchableOpacity>
     );
 }
-
-const styles = StyleSheet.create({
-    emergencyButton: {
-        backgroundColor: '#ef4444',
-        borderRadius: 12,
-        padding: 16,
-        elevation: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 4,
-    },
-    buttonContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-    },
-    buttonText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-});

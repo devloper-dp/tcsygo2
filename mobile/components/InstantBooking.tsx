@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { Text } from '@/components/ui/text';
 import { MapPin, Clock, Zap, IndianRupee } from 'lucide-react-native';
 import { RideService, FareEstimate } from '@/services/RideService';
 import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
-
+import { useTheme } from '@/contexts/ThemeContext';
+ 
 interface InstantBookingProps {
     pickup: {
         lat: number;
@@ -18,23 +20,25 @@ interface InstantBookingProps {
     };
     onBookingComplete?: (bookingId: string) => void;
 }
-
+ 
 export const InstantBooking: React.FC<InstantBookingProps> = ({
     pickup,
     drop,
     onBookingComplete
 }) => {
     const { user } = useAuth();
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
     const [loading, setLoading] = useState(false);
     const [estimating, setEstimating] = useState(true);
     const [fareEstimate, setFareEstimate] = useState<FareEstimate | null>(null);
     const [driversNearby, setDriversNearby] = useState<number>(0);
-
+ 
     useEffect(() => {
         loadFareEstimate();
         checkDriverAvailability();
     }, [pickup, drop]);
-
+ 
     const loadFareEstimate = async () => {
         try {
             setEstimating(true);
@@ -47,7 +51,7 @@ export const InstantBooking: React.FC<InstantBookingProps> = ({
             setEstimating(false);
         }
     };
-
+ 
     const checkDriverAvailability = async () => {
         try {
             // Check for nearby drivers within 5km radius
@@ -58,19 +62,19 @@ export const InstantBooking: React.FC<InstantBookingProps> = ({
             console.error('Error checking driver availability:', error);
         }
     };
-
+ 
     const handleInstantBook = async () => {
         if (!user) {
             Alert.alert('Authentication Required', 'Please login to book a ride.');
             router.push('/login');
             return;
         }
-
+ 
         if (!fareEstimate) {
             Alert.alert('Error', 'Fare estimate not available. Please try again.');
             return;
         }
-
+ 
         if (driversNearby === 0) {
             Alert.alert(
                 'No Drivers Available',
@@ -96,10 +100,10 @@ export const InstantBooking: React.FC<InstantBookingProps> = ({
             );
             return;
         }
-
+ 
         try {
             setLoading(true);
-
+ 
             // Create instant booking
             const booking = await RideService.bookRide({
                 pickup_location: pickup.address,
@@ -112,14 +116,14 @@ export const InstantBooking: React.FC<InstantBookingProps> = ({
                 total_amount: fareEstimate.estimatedPrice,
                 status: 'pending'
             });
-
+ 
             // Navigate to trip details
             if (onBookingComplete) {
                 onBookingComplete(booking.id);
             } else {
                 router.push(`/trip/${booking.id}`);
             }
-
+ 
             Alert.alert(
                 'Booking Confirmed!',
                 'Finding a driver near you...',
@@ -132,104 +136,103 @@ export const InstantBooking: React.FC<InstantBookingProps> = ({
             setLoading(false);
         }
     };
-
+ 
     if (estimating) {
         return (
-            <View style={styles.container}>
+            <View className="p-10 items-center justify-center bg-white dark:bg-slate-900 rounded-t-[32px]">
                 <ActivityIndicator size="large" color="#6366f1" />
-                <Text style={styles.loadingText}>Calculating fare...</Text>
+                <Text className="mt-4 text-sm font-bold text-slate-500 dark:text-slate-400 text-center">Calculating premium fare...</Text>
             </View>
         );
     }
-
+ 
     return (
-        <View style={styles.container}>
+        <View className="p-8 bg-white dark:bg-slate-900 rounded-t-[32px] shadow-2xl">
             {/* Fare Estimate Card */}
-            <View style={styles.fareCard}>
-                <View style={styles.fareHeader}>
-                    <Zap size={24} color="#f59e0b" fill="#f59e0b" />
-                    <Text style={styles.fareTitle}>Instant Booking</Text>
+            <View className="bg-slate-50 dark:bg-slate-800/40 rounded-[28px] p-6 mb-8 border border-slate-100 dark:border-slate-800/30">
+                <View className="flex-row items-center mb-6">
+                    <View className="w-10 h-10 rounded-2xl bg-amber-500/10 items-center justify-center border border-amber-500/20">
+                        <Zap size={24} color="#f59e0b" fill="#f59e0b" />
+                    </View>
+                    <Text className="text-xl font-black text-slate-900 dark:text-white ml-3 tracking-tight">Instant Booking</Text>
                 </View>
-
+ 
                 {fareEstimate && (
                     <>
-                        <View style={styles.priceContainer}>
-                            <IndianRupee size={32} color="#1f2937" />
-                            <Text style={styles.priceText}>{fareEstimate.estimatedPrice}</Text>
+                        <View className="flex-row items-end mb-6">
+                            <Text className="text-2xl font-black text-slate-900 dark:text-white mb-2 mr-1">₹</Text>
+                            <Text className="text-5xl font-black text-slate-900 dark:text-white tracking-tighter">{fareEstimate.estimatedPrice}</Text>
                             {fareEstimate.surgeMultiplier > 1 && (
-                                <View style={styles.surgeBadge}>
-                                    <Text style={styles.surgeText}>
-                                        {fareEstimate.surgeMultiplier}x
+                                <View className="bg-amber-100 dark:bg-amber-900/30 px-3 py-1 rounded-full ml-4 mb-2">
+                                    <Text className="text-sm font-black text-amber-700 dark:text-amber-400">
+                                        {fareEstimate.surgeMultiplier}x Surge
                                     </Text>
                                 </View>
                             )}
                         </View>
-
-                        <View style={styles.detailsRow}>
-                            <View style={styles.detailItem}>
-                                <MapPin size={16} color="#6b7280" />
-                                <Text style={styles.detailText}>
+ 
+                        <View className="flex-row gap-6 mb-6">
+                            <View className="flex-row items-center gap-2">
+                                <View className="w-8 h-8 rounded-full bg-slate-200/50 dark:bg-slate-700/50 items-center justify-center">
+                                    <MapPin size={14} color={isDark ? "#94a3b8" : "#64748b"} />
+                                </View>
+                                <Text className="text-sm font-black text-slate-600 dark:text-slate-400">
                                     {fareEstimate.distanceKm} km
                                 </Text>
                             </View>
-                            <View style={styles.detailItem}>
-                                <Clock size={16} color="#6b7280" />
-                                <Text style={styles.detailText}>
+                            <View className="flex-row items-center gap-2">
+                                <View className="w-8 h-8 rounded-full bg-slate-200/50 dark:bg-slate-700/50 items-center justify-center">
+                                    <Clock size={14} color={isDark ? "#94a3b8" : "#64748b"} />
+                                </View>
+                                <Text className="text-sm font-black text-slate-600 dark:text-slate-400">
                                     ~{fareEstimate.durationMins} mins
                                 </Text>
                             </View>
                         </View>
-
+ 
                         {fareEstimate.surgeMultiplier > 1 && (
-                            <View style={styles.surgeAlert}>
-                                <Text style={styles.surgeAlertText}>
-                                    ⚡ High demand - {fareEstimate.surgeMultiplier}x surge pricing active
+                            <View className="bg-amber-50 dark:bg-amber-950/20 p-4 rounded-2xl mb-2 border border-amber-100 dark:border-amber-900/20">
+                                <Text className="text-xs font-black text-amber-700 dark:text-amber-500 leading-4">
+                                    ⚡ High demand period - surge pricing applied for faster driver allocation
                                 </Text>
                             </View>
                         )}
                     </>
                 )}
-
+ 
                 {/* Driver Availability */}
-                <View style={styles.availabilityContainer}>
-                    <View style={[
-                        styles.availabilityDot,
-                        { backgroundColor: driversNearby > 0 ? '#10b981' : '#ef4444' }
-                    ]} />
-                    <Text style={styles.availabilityText}>
+                <View className="flex-row items-center mt-6 pt-6 border-t border-slate-200 dark:border-slate-700/50">
+                    <View className={`w-2 h-2 rounded-full mr-3 ${driversNearby > 0 ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                    <Text className="text-sm font-bold text-slate-500 dark:text-slate-400">
                         {driversNearby > 0
-                            ? `${driversNearby} driver${driversNearby > 1 ? 's' : ''} nearby`
-                            : 'No drivers available nearby'
+                            ? `${driversNearby} Driver${driversNearby > 1 ? 's' : ''} available nearby`
+                            : 'No drivers available in your vicinity'
                         }
                     </Text>
                 </View>
             </View>
-
-            {/* Book Now Button */}
-            <TouchableOpacity
-                style={[
-                    styles.bookButton,
-                    (loading || driversNearby === 0) && styles.bookButtonDisabled
-                ]}
-                onPress={handleInstantBook}
-                disabled={loading || !fareEstimate}
-            >
-                {loading ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                    <>
-                        <Zap size={20} color="#fff" fill="#fff" />
-                        <Text style={styles.bookButtonText}>
-                            {driversNearby > 0 ? 'Book Instantly' : 'Schedule Ride'}
-                        </Text>
-                    </>
-                )}
-            </TouchableOpacity>
-
-            {/* Alternative: Schedule for Later */}
-            {driversNearby > 0 && (
+ 
+            {/* Action Buttons */}
+            <View className="gap-4">
                 <TouchableOpacity
-                    style={styles.scheduleButton}
+                    className={`flex-row h-16 rounded-[24px] items-center justify-center gap-3 shadow-lg shadow-blue-500/20 ${(loading || driversNearby === 0) ? 'bg-slate-200 dark:bg-slate-800 opacity-50 shadow-none' : 'bg-blue-600 active:bg-blue-700'}`}
+                    onPress={handleInstantBook}
+                    disabled={loading || !fareEstimate}
+                >
+                    {loading ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                        <>
+                            <Zap size={20} color="#fff" fill="#fff" />
+                            <Text className="text-white font-black text-lg">
+                                {driversNearby > 0 ? 'Book Instantly' : 'No Drivers Available'}
+                            </Text>
+                        </>
+                    )}
+                </TouchableOpacity>
+ 
+                <TouchableOpacity
+                    className="flex-row h-16 rounded-[24px] items-center justify-center gap-3 border-2 border-blue-600 dark:border-blue-500 bg-white dark:bg-slate-900"
                     onPress={() => router.push({
                         pathname: '/create-trip',
                         params: {
@@ -243,148 +246,12 @@ export const InstantBooking: React.FC<InstantBookingProps> = ({
                         }
                     })}
                 >
-                    <Clock size={18} color="#6366f1" />
-                    <Text style={styles.scheduleButtonText}>Schedule for Later</Text>
+                    <Clock size={20} color={isDark ? "#3b82f6" : "#2563eb"} />
+                    <Text className="text-blue-600 dark:text-blue-500 font-black text-lg">Schedule for Later</Text>
                 </TouchableOpacity>
-            )}
+            </View>
         </View>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        padding: 16,
-        backgroundColor: '#fff',
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 5,
-    },
-    loadingText: {
-        marginTop: 12,
-        fontSize: 14,
-        color: '#6b7280',
-        textAlign: 'center',
-    },
-    fareCard: {
-        backgroundColor: '#f9fafb',
-        borderRadius: 16,
-        padding: 16,
-        marginBottom: 16,
-    },
-    fareHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    fareTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#1f2937',
-        marginLeft: 8,
-    },
-    priceContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    priceText: {
-        fontSize: 40,
-        fontWeight: '800',
-        color: '#1f2937',
-        marginLeft: 4,
-    },
-    surgeBadge: {
-        backgroundColor: '#fef3c7',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-        marginLeft: 12,
-    },
-    surgeText: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#f59e0b',
-    },
-    detailsRow: {
-        flexDirection: 'row',
-        gap: 24,
-        marginBottom: 12,
-    },
-    detailItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-    },
-    detailText: {
-        fontSize: 14,
-        color: '#6b7280',
-        fontWeight: '500',
-    },
-    surgeAlert: {
-        backgroundColor: '#fef3c7',
-        padding: 12,
-        borderRadius: 8,
-        marginTop: 8,
-    },
-    surgeAlertText: {
-        fontSize: 13,
-        color: '#92400e',
-        fontWeight: '600',
-    },
-    availabilityContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 12,
-        paddingTop: 12,
-        borderTopWidth: 1,
-        borderTopColor: '#e5e7eb',
-    },
-    availabilityDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        marginRight: 8,
-    },
-    availabilityText: {
-        fontSize: 14,
-        color: '#4b5563',
-        fontWeight: '500',
-    },
-    bookButton: {
-        backgroundColor: '#6366f1',
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        paddingVertical: 16,
-        borderRadius: 12,
-        marginBottom: 12,
-    },
-    bookButtonDisabled: {
-        backgroundColor: '#9ca3af',
-    },
-    bookButtonText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '700',
-    },
-    scheduleButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        paddingVertical: 12,
-        borderRadius: 12,
-        borderWidth: 2,
-        borderColor: '#6366f1',
-    },
-    scheduleButtonText: {
-        color: '#6366f1',
-        fontSize: 15,
-        fontWeight: '600',
-    },
-});
+ 
+const styles = StyleSheet.create({});

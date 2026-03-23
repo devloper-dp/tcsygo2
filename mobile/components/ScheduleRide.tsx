@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
+import { Text } from '@/components/ui/text';
 import { Calendar, Clock, MapPin, IndianRupee, Check } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { RideService, FareEstimate } from '@/services/RideService';
 import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
-
+import { useTheme } from '@/contexts/ThemeContext';
+ 
 interface ScheduleRideProps {
     pickup: {
         lat: number;
@@ -20,7 +22,7 @@ interface ScheduleRideProps {
     fareEstimate: FareEstimate;
     onScheduleComplete?: (bookingId: string) => void;
 }
-
+ 
 export const ScheduleRide: React.FC<ScheduleRideProps> = ({
     pickup,
     drop,
@@ -28,42 +30,44 @@ export const ScheduleRide: React.FC<ScheduleRideProps> = ({
     onScheduleComplete
 }) => {
     const { user } = useAuth();
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [selectedTime, setSelectedTime] = useState<Date>(new Date());
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showTimePicker, setShowTimePicker] = useState(false);
     const [loading, setLoading] = useState(false);
-
+ 
     const minDate = new Date();
     const maxDate = new Date();
     maxDate.setDate(maxDate.getDate() + 7); // Allow scheduling up to 7 days in advance
-
+ 
     const handleDateChange = (event: any, date?: Date) => {
         setShowDatePicker(Platform.OS === 'ios');
         if (date) {
             setSelectedDate(date);
         }
     };
-
+ 
     const handleTimeChange = (event: any, time?: Date) => {
         setShowTimePicker(Platform.OS === 'ios');
         if (time) {
             setSelectedTime(time);
         }
     };
-
+ 
     const getScheduledDateTime = (): Date => {
         const scheduled = new Date(selectedDate);
         scheduled.setHours(selectedTime.getHours());
         scheduled.setMinutes(selectedTime.getMinutes());
         return scheduled;
     };
-
+ 
     const formatDate = (date: Date): string => {
         const today = new Date();
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
-
+ 
         if (date.toDateString() === today.toDateString()) {
             return 'Today';
         } else if (date.toDateString() === tomorrow.toDateString()) {
@@ -76,7 +80,7 @@ export const ScheduleRide: React.FC<ScheduleRideProps> = ({
             });
         }
     };
-
+ 
     const formatTime = (time: Date): string => {
         return time.toLocaleTimeString('en-IN', {
             hour: '2-digit',
@@ -84,12 +88,12 @@ export const ScheduleRide: React.FC<ScheduleRideProps> = ({
             hour12: true
         });
     };
-
+ 
     const validateScheduleTime = (): boolean => {
         const scheduledDateTime = getScheduledDateTime();
         const now = new Date();
         const minScheduleTime = new Date(now.getTime() + 30 * 60000); // 30 minutes from now
-
+ 
         if (scheduledDateTime < minScheduleTime) {
             Alert.alert(
                 'Invalid Time',
@@ -97,7 +101,7 @@ export const ScheduleRide: React.FC<ScheduleRideProps> = ({
             );
             return false;
         }
-
+ 
         if (scheduledDateTime > maxDate) {
             Alert.alert(
                 'Invalid Date',
@@ -105,23 +109,23 @@ export const ScheduleRide: React.FC<ScheduleRideProps> = ({
             );
             return false;
         }
-
+ 
         return true;
     };
-
+ 
     const handleScheduleRide = async () => {
         if (!user) {
             Alert.alert('Authentication Required', 'Please login to schedule a ride.');
             router.push('/login');
             return;
         }
-
+ 
         if (!validateScheduleTime()) {
             return;
         }
-
+ 
         const scheduledDateTime = getScheduledDateTime();
-
+ 
         Alert.alert(
             'Confirm Schedule',
             `Schedule ride for ${formatDate(selectedDate)} at ${formatTime(selectedTime)}?`,
@@ -132,7 +136,7 @@ export const ScheduleRide: React.FC<ScheduleRideProps> = ({
                     onPress: async () => {
                         try {
                             setLoading(true);
-
+ 
                             const booking = await RideService.bookRide({
                                 pickup_location: pickup.address,
                                 pickup_lat: pickup.lat,
@@ -145,16 +149,16 @@ export const ScheduleRide: React.FC<ScheduleRideProps> = ({
                                 status: 'scheduled',
                                 scheduled_time: scheduledDateTime.toISOString()
                             });
-
+ 
                             // Schedule notification reminder
                             await scheduleRideReminder(booking.id, scheduledDateTime);
-
+ 
                             if (onScheduleComplete) {
                                 onScheduleComplete(booking.id);
                             } else {
                                 router.push(`/trip/${booking.id}`);
                             }
-
+ 
                             Alert.alert(
                                 'Ride Scheduled!',
                                 `Your ride is scheduled for ${formatDate(selectedDate)} at ${formatTime(selectedTime)}. We'll notify you 15 minutes before.`,
@@ -171,14 +175,14 @@ export const ScheduleRide: React.FC<ScheduleRideProps> = ({
             ]
         );
     };
-
+ 
     const scheduleRideReminder = async (bookingId: string, scheduledTime: Date) => {
         try {
             const { NotificationService } = await import('@/services/NotificationService');
-
+ 
             // Schedule notification 15 minutes before ride
             const reminderTime = new Date(scheduledTime.getTime() - 15 * 60000);
-
+ 
             await NotificationService.scheduleNotification(
                 'Ride Reminder',
                 'Your scheduled ride is in 15 minutes. Get ready!',
@@ -189,67 +193,65 @@ export const ScheduleRide: React.FC<ScheduleRideProps> = ({
             console.error('Error scheduling reminder:', error);
         }
     };
-
+ 
     return (
-        <View style={styles.container}>
+        <View className="p-4 bg-white dark:bg-slate-950 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm">
             {/* Header */}
-            <View style={styles.header}>
-                <Calendar size={24} color="#6366f1" />
-                <Text style={styles.headerTitle}>Schedule Your Ride</Text>
+            <View className="flex-row items-center mb-8 bg-indigo-50 dark:bg-indigo-900/10 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/20">
+                <View className="w-10 h-10 rounded-full bg-indigo-500/10 items-center justify-center">
+                    <Calendar size={20} color="#6366f1" />
+                </View>
+                <Text className="text-xl font-black text-indigo-900 dark:text-indigo-400 ml-4 tracking-tight">Schedule Your Ride</Text>
             </View>
-
+ 
             {/* Route Summary */}
-            <View style={styles.routeCard}>
-                <View style={styles.routeItem}>
-                    <View style={[styles.routeDot, { backgroundColor: '#10b981' }]} />
-                    <Text style={styles.routeText} numberOfLines={1}>
+            <View className="bg-slate-50 dark:bg-slate-900/50 rounded-[28px] p-6 mb-8 border border-slate-100 dark:border-slate-800/30">
+                <View className="flex-row items-center gap-4">
+                    <View className="w-3 h-3 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-900" />
+                    <Text className="flex-1 text-sm font-black text-slate-700 dark:text-slate-300" numberOfLines={1}>
                         {pickup.address}
                     </Text>
                 </View>
-                <View style={styles.routeLine} />
-                <View style={styles.routeItem}>
-                    <View style={[styles.routeDot, { backgroundColor: '#ef4444' }]} />
-                    <Text style={styles.routeText} numberOfLines={1}>
+                <View className="ml-1 w-0.5 h-6 bg-slate-200 dark:bg-slate-700 my-2" />
+                <View className="flex-row items-center gap-4">
+                    <View className="w-3 h-3 rounded-full bg-rose-500 border-2 border-white dark:border-slate-900" />
+                    <Text className="flex-1 text-sm font-black text-slate-700 dark:text-slate-300" numberOfLines={1}>
                         {drop.address}
                     </Text>
                 </View>
             </View>
-
+ 
             {/* Date & Time Selection */}
-            <View style={styles.selectionContainer}>
+            <View className="flex-row gap-4 mb-8">
                 {/* Date Selector */}
                 <TouchableOpacity
-                    style={styles.selectorButton}
+                    className="flex-1 rounded-3xl p-5 border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 active:bg-slate-50 dark:active:bg-slate-800"
                     onPress={() => setShowDatePicker(true)}
                 >
-                    <View style={styles.selectorIcon}>
+                    <View className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 items-center justify-center mb-4">
                         <Calendar size={20} color="#6366f1" />
                     </View>
-                    <View style={styles.selectorContent}>
-                        <Text style={styles.selectorLabel}>Date</Text>
-                        <Text style={styles.selectorValue}>
-                            {formatDate(selectedDate)}
-                        </Text>
-                    </View>
+                    <Text className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Date</Text>
+                    <Text className="text-base font-black text-slate-900 dark:text-white">
+                        {formatDate(selectedDate)}
+                    </Text>
                 </TouchableOpacity>
-
+ 
                 {/* Time Selector */}
                 <TouchableOpacity
-                    style={styles.selectorButton}
+                    className="flex-1 rounded-3xl p-5 border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 active:bg-slate-50 dark:active:bg-slate-800"
                     onPress={() => setShowTimePicker(true)}
                 >
-                    <View style={styles.selectorIcon}>
-                        <Clock size={20} color="#6366f1" />
+                    <View className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/30 items-center justify-center mb-4">
+                        <Clock size={20} color="#f59e0b" />
                     </View>
-                    <View style={styles.selectorContent}>
-                        <Text style={styles.selectorLabel}>Time</Text>
-                        <Text style={styles.selectorValue}>
-                            {formatTime(selectedTime)}
-                        </Text>
-                    </View>
+                    <Text className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Time</Text>
+                    <Text className="text-base font-black text-slate-900 dark:text-white">
+                        {formatTime(selectedTime)}
+                    </Text>
                 </TouchableOpacity>
             </View>
-
+ 
             {/* Date Picker */}
             {showDatePicker && (
                 <DateTimePicker
@@ -261,7 +263,7 @@ export const ScheduleRide: React.FC<ScheduleRideProps> = ({
                     maximumDate={maxDate}
                 />
             )}
-
+ 
             {/* Time Picker */}
             {showTimePicker && (
                 <DateTimePicker
@@ -271,189 +273,44 @@ export const ScheduleRide: React.FC<ScheduleRideProps> = ({
                     onChange={handleTimeChange}
                 />
             )}
-
+ 
             {/* Fare Summary */}
-            <View style={styles.fareCard}>
-                <View style={styles.fareRow}>
-                    <Text style={styles.fareLabel}>Estimated Fare</Text>
-                    <View style={styles.fareAmount}>
-                        <IndianRupee size={18} color="#1f2937" />
-                        <Text style={styles.fareValue}>{fareEstimate.estimatedPrice}</Text>
+            <View className="bg-slate-50 dark:bg-slate-900/50 rounded-[28px] p-6 mb-8 border border-slate-100 dark:border-slate-800/30">
+                <View className="flex-row justify-between items-center mb-3">
+                    <Text className="text-sm font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Estimated Fare</Text>
+                    <View className="flex-row items-center">
+                        <Text className="text-base font-black text-slate-900 dark:text-white mr-1">₹</Text>
+                        <Text className="text-2xl font-black text-slate-900 dark:text-white">{fareEstimate.estimatedPrice}</Text>
                     </View>
                 </View>
-                <View style={styles.fareRow}>
-                    <Text style={styles.fareSubtext}>
-                        {fareEstimate.distanceKm} km • ~{fareEstimate.durationMins} mins
-                    </Text>
-                </View>
-            </View>
-
-            {/* Info Banner */}
-            <View style={styles.infoBanner}>
-                <Check size={16} color="#059669" />
-                <Text style={styles.infoText}>
-                    We'll find a driver for you 30 minutes before your scheduled time
+                <Text className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tighter">
+                    {fareEstimate.distanceKm} km • ~{fareEstimate.durationMins} mins travel time
                 </Text>
             </View>
-
+ 
+            {/* Info Banner */}
+            <View className="flex-row items-center gap-3 bg-emerald-50 dark:bg-emerald-950/20 p-5 rounded-2xl mb-8 border border-emerald-100 dark:border-emerald-900/20">
+                <View className="w-8 h-8 rounded-full bg-emerald-500/10 items-center justify-center">
+                    <Check size={16} color="#10b981" />
+                </View>
+                <Text className="flex-1 text-xs font-medium text-emerald-700 dark:text-emerald-400 leading-4">
+                    We'll find a driver for you 15 minutes before your scheduled pickup time
+                </Text>
+            </View>
+ 
             {/* Schedule Button */}
             <TouchableOpacity
-                style={[styles.scheduleButton, loading && styles.scheduleButtonDisabled]}
+                className={`flex-row items-center justify-center gap-3 h-16 rounded-[24px] shadow-lg shadow-indigo-500/20 ${loading ? 'bg-slate-200 dark:bg-slate-800 opacity-50 shadow-none' : 'bg-indigo-600 active:bg-indigo-700'}`}
                 onPress={handleScheduleRide}
                 disabled={loading}
             >
                 <Calendar size={20} color="#fff" />
-                <Text style={styles.scheduleButtonText}>
+                <Text className="text-white font-black text-lg">
                     {loading ? 'Scheduling...' : 'Schedule Ride'}
                 </Text>
             </TouchableOpacity>
         </View>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        padding: 16,
-        backgroundColor: '#fff',
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    headerTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: '#1f2937',
-        marginLeft: 12,
-    },
-    routeCard: {
-        backgroundColor: '#f9fafb',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 20,
-    },
-    routeItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    routeDot: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        marginRight: 12,
-    },
-    routeLine: {
-        width: 2,
-        height: 20,
-        backgroundColor: '#d1d5db',
-        marginLeft: 5,
-        marginVertical: 4,
-    },
-    routeText: {
-        flex: 1,
-        fontSize: 14,
-        color: '#4b5563',
-        fontWeight: '500',
-    },
-    selectionContainer: {
-        flexDirection: 'row',
-        gap: 12,
-        marginBottom: 20,
-    },
-    selectorButton: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#f9fafb',
-        borderRadius: 12,
-        padding: 16,
-        borderWidth: 2,
-        borderColor: '#e5e7eb',
-    },
-    selectorIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#eef2ff',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 12,
-    },
-    selectorContent: {
-        flex: 1,
-    },
-    selectorLabel: {
-        fontSize: 12,
-        color: '#6b7280',
-        marginBottom: 4,
-    },
-    selectorValue: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#1f2937',
-    },
-    fareCard: {
-        backgroundColor: '#f9fafb',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 16,
-    },
-    fareRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    fareLabel: {
-        fontSize: 14,
-        color: '#6b7280',
-        fontWeight: '500',
-    },
-    fareAmount: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    fareValue: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: '#1f2937',
-        marginLeft: 4,
-    },
-    fareSubtext: {
-        fontSize: 13,
-        color: '#9ca3af',
-    },
-    infoBanner: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#d1fae5',
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 20,
-        gap: 8,
-    },
-    infoText: {
-        flex: 1,
-        fontSize: 13,
-        color: '#065f46',
-        fontWeight: '500',
-    },
-    scheduleButton: {
-        backgroundColor: '#6366f1',
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        paddingVertical: 16,
-        borderRadius: 12,
-    },
-    scheduleButtonDisabled: {
-        backgroundColor: '#9ca3af',
-    },
-    scheduleButtonText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '700',
-    },
-});
+ 
+const styles = StyleSheet.create({});

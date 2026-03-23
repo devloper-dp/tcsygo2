@@ -9,21 +9,25 @@ import { supabase } from '@/lib/supabase';
 import { RideService } from '@/services/RideService';
 import { logger } from '@/services/LoggerService';
 import { useRouter } from 'expo-router';
-
+import { useTheme } from '@/contexts/ThemeContext';
+ 
 export function DriverAcceptanceModal() {
     const { user } = useAuth();
     const router = useRouter();
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
+ 
     const [visible, setVisible] = useState(false);
     const [bookingDetails, setBookingDetails] = useState<any>(null);
     const [loading, setLoading] = useState(false);
     const [isDriver, setIsDriver] = useState(false);
-
+ 
     useEffect(() => {
         if (user) {
             checkIfDriver();
         }
     }, [user]);
-
+ 
     const checkIfDriver = async () => {
         try {
             const { data, error } = await supabase
@@ -31,7 +35,7 @@ export function DriverAcceptanceModal() {
                 .select('id, verification_status, is_available')
                 .eq('user_id', user?.id)
                 .single();
-
+ 
             if (data && data.verification_status === 'verified') {
                 setIsDriver(true);
             }
@@ -39,10 +43,10 @@ export function DriverAcceptanceModal() {
             logger.error('Error checking driver status:', error);
         }
     };
-
+ 
     useEffect(() => {
         if (!isDriver || !user) return;
-
+ 
         // Subscribe to real-time notifications
         const channel = supabase
             .channel(`driver-notifications-${user.id}`)
@@ -62,12 +66,12 @@ export function DriverAcceptanceModal() {
                 }
             )
             .subscribe();
-
+ 
         return () => {
             supabase.removeChannel(channel);
         };
     }, [isDriver, user]);
-
+ 
     const fetchBookingDetails = async (bookingId: string) => {
         try {
             const { data: booking, error } = await supabase
@@ -75,13 +79,13 @@ export function DriverAcceptanceModal() {
                 .select('*, passenger:users(full_name, rating)')
                 .eq('id', bookingId)
                 .single();
-
+ 
             if (error) throw error;
             if (booking.status !== 'pending') return; // Already taken or cancelled
-
+ 
             setBookingDetails(booking);
             setVisible(true);
-
+ 
             // Auto close after 30 seconds if no action
             setTimeout(() => {
                 setVisible(prev => {
@@ -89,12 +93,12 @@ export function DriverAcceptanceModal() {
                     return prev;
                 });
             }, 30000);
-
+ 
         } catch (error) {
             logger.error('Error fetching booking details:', error);
         }
     };
-
+ 
     const handleAccept = async () => {
         if (!bookingDetails || !user) return;
         setLoading(true);
@@ -104,9 +108,9 @@ export function DriverAcceptanceModal() {
                 .select('id')
                 .eq('user_id', user.id)
                 .single();
-
+ 
             if (!driver) throw new Error('Driver profile not found');
-
+ 
             const result = await RideService.matchDriver(bookingDetails.id, driver.id);
             if (result.success) {
                 setVisible(false);
@@ -122,235 +126,87 @@ export function DriverAcceptanceModal() {
             setLoading(false);
         }
     };
-
+ 
     const handleDecline = () => {
         setVisible(false);
         setBookingDetails(null);
     };
-
+ 
     if (!visible || !bookingDetails) return null;
-
+ 
     return (
         <Modal
             visible={visible}
             transparent={true}
             animationType="slide"
         >
-            <View style={styles.overlay}>
-                <Card style={styles.content}>
-                    <View style={styles.header}>
-                        <View style={styles.titleRow}>
-                            <View style={styles.pulseContainer}>
-                                <View style={styles.pulseDot} />
+            <View className="flex-1 bg-black/60 justify-end p-5">
+                <Card className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
+                    <View className="flex-row justify-between items-center mb-6">
+                        <View className="flex-row items-center gap-2.5">
+                            <View className="w-3 h-3 rounded-full bg-red-100 dark:bg-red-900/40 justify-center items-center">
+                                <View className="w-2 h-2 rounded-full bg-red-500" />
                             </View>
-                            <Text variant="h3" style={styles.title}>New Ride Request</Text>
+                            <Text className="text-lg font-bold text-slate-900 dark:text-white">New Ride Request</Text>
                         </View>
-                        <Text style={styles.timer}>30s</Text>
+                        <Text className="text-sm font-bold text-red-500">30s</Text>
                     </View>
-
-                    <View style={styles.passengerInfo}>
-                        <View style={styles.avatar}>
-                            <Text style={styles.avatarText}>
+ 
+                    <View className="flex-row items-center bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl mb-6">
+                        <View className="w-11 h-11 rounded-full bg-blue-600 justify-center items-center mr-3">
+                            <Text className="text-white text-lg font-bold">
                                 {bookingDetails.passenger?.full_name?.charAt(0) || 'P'}
                             </Text>
                         </View>
-                        <View>
-                            <Text style={styles.passengerName}>{bookingDetails.passenger?.full_name || 'Passenger'}</Text>
-                            <View style={styles.ratingRow}>
+                        <View className="flex-1">
+                            <Text className="text-base font-bold text-slate-900 dark:text-white">{bookingDetails.passenger?.full_name || 'Passenger'}</Text>
+                            <View className="flex-row items-center gap-1 mt-0.5">
                                 <Ionicons name="star" size={14} color="#f59e0b" />
-                                <Text style={styles.ratingText}>{bookingDetails.passenger?.rating || 'New'}</Text>
+                                <Text className="text-xs text-slate-500 dark:text-slate-400">{bookingDetails.passenger?.rating || 'New'}</Text>
                             </View>
                         </View>
-                        <View style={styles.priceContainer}>
-                            <Text style={styles.priceLabel}>You Earn</Text>
-                            <Text style={styles.price}>₹{Math.round(bookingDetails.total_amount * 0.8)}</Text>
+                        <View className="items-end">
+                            <Text className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">You Earn</Text>
+                            <Text className="text-xl font-bold text-emerald-600 dark:text-emerald-400">₹{Math.round(bookingDetails.total_amount * 0.8)}</Text>
                         </View>
                     </View>
-
-                    <View style={styles.routeContainer}>
-                        <View style={styles.routeRow}>
-                            <View style={[styles.dot, { backgroundColor: '#10b981' }]} />
-                            <Text style={styles.address} numberOfLines={1}>{bookingDetails.pickup_location}</Text>
+ 
+                    <View className="mb-8">
+                        <View className="flex-row items-center gap-3">
+                            <View className="w-2 h-2 rounded-full bg-emerald-500" />
+                            <Text className="text-sm text-slate-600 dark:text-slate-400 font-medium flex-1" numberOfLines={1}>{bookingDetails.pickup_location}</Text>
                         </View>
-                        <View style={styles.line} />
-                        <View style={styles.routeRow}>
-                            <View style={[styles.dot, { backgroundColor: '#ef4444' }]} />
-                            <Text style={styles.address} numberOfLines={1}>{bookingDetails.drop_location}</Text>
+                        <View className="w-[1px] h-3 bg-slate-200 dark:bg-slate-800 ml-1 my-1" />
+                        <View className="flex-row items-center gap-3">
+                            <View className="w-2 h-2 rounded-full bg-red-500" />
+                            <Text className="text-sm text-slate-600 dark:text-slate-400 font-medium flex-1" numberOfLines={1}>{bookingDetails.drop_location}</Text>
                         </View>
                     </View>
-
-                    <View style={styles.footer}>
+ 
+                    <View className="flex-row gap-3">
                         <TouchableOpacity
-                            style={styles.declineButton}
+                            className="flex-1 h-14 justify-center items-center rounded-2xl bg-slate-100 dark:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700"
                             onPress={handleDecline}
                             disabled={loading}
                         >
-                            <Text style={styles.declineText}>Decline</Text>
+                            <Text className="text-base font-bold text-slate-600 dark:text-slate-400">Decline</Text>
                         </TouchableOpacity>
-                        <Button
-                            style={styles.acceptButton}
+                        <TouchableOpacity
+                            className="flex-[2] h-14 justify-center items-center rounded-2xl bg-blue-600 active:bg-blue-700 shadow-lg shadow-blue-500/20"
                             onPress={handleAccept}
                             disabled={loading}
                         >
                             {loading ? (
                                 <ActivityIndicator color="white" />
                             ) : (
-                                <Text style={styles.acceptText}>Accept Ride</Text>
+                                <Text className="text-white font-bold text-base">Accept Ride</Text>
                             )}
-                        </Button>
+                        </TouchableOpacity>
                     </View>
                 </Card>
             </View>
         </Modal>
     );
 }
-
-const styles = StyleSheet.create({
-    overlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        justifyContent: 'flex-end',
-        padding: 20,
-    },
-    content: {
-        padding: 20,
-        borderRadius: 24,
-        backgroundColor: 'white',
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    titleRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 10,
-    },
-    title: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    pulseContainer: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: '#fee2e2',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    pulseDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: '#ef4444',
-    },
-    timer: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        color: '#ef4444',
-    },
-    passengerInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#f9fafb',
-        padding: 12,
-        borderRadius: 16,
-        marginBottom: 20,
-    },
-    avatar: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: '#3b82f6',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
-    avatarText: {
-        color: 'white',
-        fontSize: 18,
-        fontWeight: 'bold',
-    },
-    passengerName: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#1f2937',
-    },
-    ratingRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    ratingText: {
-        fontSize: 12,
-        color: '#6b7280',
-    },
-    priceContainer: {
-        marginLeft: 'auto',
-        alignItems: 'flex-end',
-    },
-    priceLabel: {
-        fontSize: 10,
-        color: '#6b7280',
-        textTransform: 'uppercase',
-    },
-    price: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#10b981',
-    },
-    routeContainer: {
-        marginBottom: 24,
-    },
-    routeRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    dot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-    },
-    line: {
-        width: 1,
-        height: 12,
-        backgroundColor: '#e5e7eb',
-        marginLeft: 3,
-        marginVertical: 4,
-    },
-    address: {
-        fontSize: 14,
-        color: '#4b5563',
-        flex: 1,
-    },
-    footer: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    declineButton: {
-        flex: 1,
-        height: 52,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderRadius: 12,
-        backgroundColor: '#f3f4f6',
-    },
-    declineText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#4b5563',
-    },
-    acceptButton: {
-        flex: 2,
-        height: 52,
-    },
-    acceptText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: 'bold',
-    }
-});
+ 
+const styles = StyleSheet.create({});

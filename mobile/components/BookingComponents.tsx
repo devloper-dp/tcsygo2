@@ -1,8 +1,11 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, Alert, TextInput } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Modal, ScrollView, Alert, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/ui/card';
-
+import { Text } from '@/components/ui/text';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useResponsive } from '@/hooks/useResponsive';
+ 
 interface BookingConfirmationProps {
     visible: boolean;
     onClose: () => void;
@@ -16,7 +19,7 @@ interface BookingConfirmationProps {
     seatsToBook: number;
     totalAmount: number;
 }
-
+ 
 export function BookingConfirmationModal({
     visible,
     onClose,
@@ -25,13 +28,16 @@ export function BookingConfirmationModal({
     seatsToBook,
     totalAmount,
 }: BookingConfirmationProps) {
+    const { theme, isDark } = useTheme();
+    const { hScale, vScale, spacing } = useResponsive();
+    
     // Import RidePreferences dynamically or assume it is imported
     const RidePreferences = require('./RidePreferences').RidePreferences;
-
+ 
     const [promoCode, setPromoCode] = useState('');
     const [discount, setDiscount] = useState(0);
     const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
-
+ 
     const handleApplyPromo = () => {
         if (promoCode.toUpperCase() === 'FIRST50') {
             const disc = Math.min(totalAmount * 0.5, 100);
@@ -49,9 +55,9 @@ export function BookingConfirmationModal({
             setAppliedPromo(null);
         }
     };
-
+ 
     const finalAmount = totalAmount - discount;
-
+ 
     return (
         <Modal
             visible={visible}
@@ -59,110 +65,114 @@ export function BookingConfirmationModal({
             animationType="slide"
             onRequestClose={onClose}
         >
-            <View style={styles.modalOverlay}>
-                <View style={styles.modalContent}>
-                    <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>Confirm Booking</Text>
+            <View className="flex-1 bg-black/50 justify-end">
+                <View className="bg-white dark:bg-slate-900 border-t-24 border-white dark:border-slate-900 rounded-t-3xl max-h-[85%]">
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: hScale(20), borderBottomWidth: 1 }} className="border-slate-100 dark:border-slate-800">
+                        <Text style={{ fontSize: hScale(20) }} className="font-bold text-slate-900 dark:text-white">Confirm Booking</Text>
                         <TouchableOpacity onPress={onClose}>
-                            <Ionicons name="close" size={24} color="#6b7280" />
+                            <Ionicons name="close" size={hScale(24)} color={isDark ? "#94a3b8" : "#64748b"} />
                         </TouchableOpacity>
                     </View>
-
-                    <ScrollView style={styles.modalBody}>
-                        <Card style={styles.summaryCard}>
-                            <View style={styles.routeInfo}>
-                                <View style={styles.locationRow}>
-                                    <Ionicons name="location" size={20} color="#10b981" />
-                                    <Text style={styles.locationText}>{trip.pickupLocation}</Text>
+ 
+                    <ScrollView style={{ padding: hScale(20) }}>
+                        <Card style={{ padding: hScale(16), marginBottom: vScale(16), borderWidth: 1 }} className="bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800">
+                            <View style={{ marginBottom: vScale(16) }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(12), marginBottom: vScale(8) }}>
+                                    <Ionicons name="location" size={hScale(20)} color="#10b981" />
+                                    <Text style={{ fontSize: hScale(14) }} className="font-bold text-slate-800 dark:text-slate-200">{trip.pickupLocation}</Text>
                                 </View>
-                                <View style={styles.divider} />
-                                <View style={styles.locationRow}>
-                                    <Ionicons name="flag" size={20} color="#ef4444" />
-                                    <Text style={styles.locationText}>{trip.dropLocation}</Text>
+                                <View style={{ height: 1, marginVertical: vScale(12), marginLeft: hScale(32) }} className="bg-slate-100 dark:bg-slate-800" />
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(12) }}>
+                                    <Ionicons name="flag" size={hScale(20)} color="#ef4444" />
+                                    <Text style={{ fontSize: hScale(14) }} className="font-bold text-slate-800 dark:text-slate-200">{trip.dropLocation}</Text>
                                 </View>
                             </View>
-
-                            <View style={styles.detailRow}>
-                                <Ionicons name="calendar-outline" size={18} color="#6b7280" />
-                                <Text style={styles.detailText}>
+ 
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(12), marginBottom: vScale(8) }}>
+                                <Ionicons name="calendar-outline" size={hScale(18)} color={isDark ? "#94a3b8" : "#64748b"} />
+                                <Text style={{ fontSize: hScale(12) }} className="text-slate-500 dark:text-slate-400">
                                     {new Date(trip.departureTime).toLocaleString()}
                                 </Text>
                             </View>
-
-                            <View style={styles.detailRow}>
-                                <Ionicons name="people-outline" size={18} color="#6b7280" />
-                                <Text style={styles.detailText}>
+ 
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(12) }}>
+                                <Ionicons name="people-outline" size={hScale(18)} color={isDark ? "#94a3b8" : "#64748b"} />
+                                <Text style={{ fontSize: hScale(12) }} className="text-slate-500 dark:text-slate-400">
                                     {seatsToBook} {seatsToBook === 1 ? 'seat' : 'seats'}
                                 </Text>
                             </View>
                         </Card>
-
+ 
                         {/* Ride Preferences Integration */}
                         <RidePreferences
-                            style={{ marginBottom: 16 }}
+                            style={{ marginBottom: vScale(16) }}
                             showSaveButton={false}
-                            userId={null} // Pass user ID if available in context
+                            userId={null}
                         />
-
+ 
                         {/* Promo Code Section */}
-                        <View style={styles.promoContainer}>
-                            <Ionicons name="pricetag-outline" size={20} color="#3b82f6" />
+                        <View style={{ flexDirection: 'row', alignItems: 'center', padding: hScale(12), borderRadius: hScale(12), marginBottom: vScale(16), gap: hScale(12), borderWidth: 1 }} className="bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900/30">
+                            <Ionicons name="pricetag-outline" size={hScale(20)} color="#3b82f6" />
                             <TextInput
-                                style={styles.promoInput}
+                                style={{ flex: 1, fontSize: hScale(14) }}
+                                className="text-slate-900 dark:text-white font-bold"
                                 placeholder="Enter Promo Code"
+                                placeholderTextColor={isDark ? "#475569" : "#94a3b8"}
                                 value={promoCode}
                                 onChangeText={setPromoCode}
                                 autoCapitalize="characters"
                             />
                             <TouchableOpacity onPress={handleApplyPromo} disabled={!!appliedPromo}>
-                                <Text style={[styles.applyText, appliedPromo && { color: 'green' }]}>
+                                <Text style={{ fontSize: hScale(12) }} className={`font-black ${appliedPromo ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'}`}>
                                     {appliedPromo ? 'APPLIED' : 'APPLY'}
                                 </Text>
                             </TouchableOpacity>
                         </View>
-
-                        <Card style={styles.priceCard}>
-                            <View style={styles.priceRow}>
-                                <Text style={styles.priceLabel}>Price per seat</Text>
-                                <Text style={styles.priceValue}>₹{trip.pricePerSeat}</Text>
+ 
+                        <Card style={{ padding: hScale(16), marginBottom: vScale(16), borderWidth: 1 }} className="bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800">
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vScale(12) }}>
+                                <Text style={{ fontSize: hScale(12) }} className="text-slate-500 dark:text-slate-400">Price per seat</Text>
+                                <Text style={{ fontSize: hScale(12) }} className="font-bold text-slate-800 dark:text-slate-200">₹{trip.pricePerSeat}</Text>
                             </View>
-                            <View style={styles.priceRow}>
-                                <Text style={styles.priceLabel}>Number of seats</Text>
-                                <Text style={styles.priceValue}>×{seatsToBook}</Text>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vScale(12) }}>
+                                <Text style={{ fontSize: hScale(12) }} className="text-slate-500 dark:text-slate-400">Number of seats</Text>
+                                <Text style={{ fontSize: hScale(12) }} className="font-bold text-slate-800 dark:text-slate-200">×{seatsToBook}</Text>
                             </View>
                             {discount > 0 && (
-                                <View style={styles.priceRow}>
-                                    <Text style={[styles.priceLabel, { color: '#10b981' }]}>Discrete</Text>
-                                    <Text style={[styles.priceValue, { color: '#10b981' }]}>-₹{discount}</Text>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vScale(12) }}>
+                                    <Text style={{ fontSize: hScale(12) }} className="text-green-600 dark:text-green-400">Discount</Text>
+                                    <Text style={{ fontSize: hScale(12) }} className="font-bold text-green-600 dark:text-green-400">-₹{discount}</Text>
                                 </View>
                             )}
-                            <View style={styles.divider} />
-                            <View style={styles.priceRow}>
-                                <Text style={styles.totalLabel}>Total Amount</Text>
-                                <Text style={styles.totalValue}>₹{finalAmount}</Text>
+                            <View style={{ height: 1, marginVertical: vScale(12) }} className="bg-slate-100 dark:bg-slate-800" />
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Text style={{ fontSize: hScale(18) }} className="font-black text-slate-900 dark:text-white">Total Amount</Text>
+                                <Text style={{ fontSize: hScale(24) }} className="font-black text-blue-600 dark:text-blue-400">₹{finalAmount}</Text>
                             </View>
                         </Card>
-
-                        <View style={styles.termsContainer}>
-                            <Ionicons name="information-circle-outline" size={20} color="#6b7280" />
-                            <Text style={styles.termsText}>
+ 
+                        <View style={{ flexDirection: 'row', gap: hScale(12), padding: hScale(16), borderRadius: hScale(12), marginBottom: vScale(40) }} className="bg-slate-50 dark:bg-slate-800/50">
+                            <Ionicons name="information-circle-outline" size={hScale(20)} color={isDark ? "#94a3b8" : "#64748b"} />
+                            <Text style={{ fontSize: hScale(10), lineHeight: vScale(14) }} className="flex-1 text-slate-500 dark:text-slate-400">
                                 By confirming, you agree to our booking terms and cancellation policy.
                             </Text>
                         </View>
                     </ScrollView>
-
-                    <View style={styles.modalFooter}>
+ 
+                    <View style={{ flexDirection: 'row', padding: hScale(20), gap: hScale(12), borderTopWidth: 1 }} className="border-slate-100 dark:border-slate-800">
                         <TouchableOpacity
-                            style={styles.cancelBtn}
+                            style={{ height: vScale(56), borderRadius: hScale(16), borderWidth: 1 }}
+                            className="flex-1 border-slate-200 dark:border-slate-700 items-center justify-center"
                             onPress={onClose}
                         >
-                            <Text style={styles.cancelBtnText}>Cancel</Text>
+                            <Text style={{ fontSize: hScale(14) }} className="font-black text-slate-600 dark:text-slate-400">Cancel</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={styles.confirmBtn}
+                            style={{ height: vScale(56), borderRadius: hScale(16) }}
+                            className="flex-1 bg-blue-600 items-center justify-center shadow-lg shadow-blue-500/20"
                             onPress={() => onConfirm()}
                         >
-                            <Text style={styles.confirmBtnText}>Confirm & Pay</Text>
+                            <Text style={{ fontSize: hScale(14) }} className="font-black text-white">Confirm & Pay</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -170,34 +180,37 @@ export function BookingConfirmationModal({
         </Modal>
     );
 }
-
+ 
 interface SeatSelectorProps {
     availableSeats: number;
     selectedSeats: number;
     onSelectSeats: (seats: number) => void;
 }
-
+ 
 export function SeatSelector({ availableSeats, selectedSeats, onSelectSeats }: SeatSelectorProps) {
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
+    const { hScale, vScale } = useResponsive();
+ 
     return (
-        <View style={styles.seatSelector}>
-            <Text style={styles.seatLabel}>Select Seats</Text>
-            <View style={styles.seatButtons}>
+        <View style={{ marginBottom: vScale(16) }}>
+            <Text style={{ fontSize: hScale(12), marginBottom: vScale(12) }} className="font-black text-slate-800 dark:text-slate-200">Select Seats</Text>
+            <View style={{ flexDirection: 'row', gap: hScale(12) }}>
                 {[...Array(Math.min(availableSeats, 4))].map((_, index) => {
                     const seatNumber = index + 1;
                     const isSelected = selectedSeats === seatNumber;
                     return (
                         <TouchableOpacity
                             key={seatNumber}
-                            style={[
-                                styles.seatButton,
-                                isSelected && styles.seatButtonActive
-                            ]}
+                            style={{ width: hScale(48), height: hScale(48), borderRadius: hScale(24), borderWidth: 2 }}
+                            className={`items-center justify-center ${isSelected 
+                                ? 'border-blue-600 bg-blue-600' 
+                                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'}`}
                             onPress={() => onSelectSeats(seatNumber)}
                         >
-                            <Text style={[
-                                styles.seatButtonText,
-                                isSelected && styles.seatButtonTextActive
-                            ]}>
+                            <Text style={{ fontSize: hScale(16) }} className={`font-black ${isSelected 
+                                ? 'text-white' 
+                                : 'text-slate-500 dark:text-slate-400'}`}>
                                 {seatNumber}
                             </Text>
                         </TouchableOpacity>
@@ -207,197 +220,3 @@ export function SeatSelector({ availableSeats, selectedSeats, onSelectSeats }: S
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'flex-end',
-    },
-    modalContent: {
-        backgroundColor: 'white',
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        maxHeight: '80%',
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 20,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
-    },
-    modalTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    modalBody: {
-        padding: 20,
-    },
-    summaryCard: {
-        padding: 16,
-        marginBottom: 16,
-    },
-    routeInfo: {
-        marginBottom: 16,
-    },
-    locationRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        marginBottom: 8,
-    },
-    locationText: {
-        fontSize: 16,
-        color: '#374151',
-        fontWeight: '500',
-    },
-    divider: {
-        height: 1,
-        backgroundColor: '#e5e7eb',
-        marginVertical: 12,
-    },
-    detailRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        marginBottom: 8,
-    },
-    detailText: {
-        fontSize: 14,
-        color: '#6b7280',
-    },
-    priceCard: {
-        padding: 16,
-        marginBottom: 16,
-    },
-    priceRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    priceLabel: {
-        fontSize: 14,
-        color: '#6b7280',
-    },
-    priceValue: {
-        fontSize: 14,
-        color: '#374151',
-        fontWeight: '500',
-    },
-    totalLabel: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    totalValue: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#3b82f6',
-    },
-    termsContainer: {
-        flexDirection: 'row',
-        gap: 12,
-        padding: 16,
-        backgroundColor: '#f9fafb',
-        borderRadius: 12,
-    },
-    termsText: {
-        flex: 1,
-        fontSize: 12,
-        color: '#6b7280',
-        lineHeight: 18,
-    },
-    modalFooter: {
-        flexDirection: 'row',
-        padding: 20,
-        gap: 12,
-        borderTopWidth: 1,
-        borderTopColor: '#f3f4f6',
-    },
-    cancelBtn: {
-        flex: 1,
-        paddingVertical: 14,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#d1d5db',
-        alignItems: 'center',
-    },
-    cancelBtnText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#6b7280',
-    },
-    confirmBtn: {
-        flex: 1,
-        paddingVertical: 14,
-        borderRadius: 12,
-        backgroundColor: '#3b82f6',
-        alignItems: 'center',
-    },
-    confirmBtnText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: 'white',
-    },
-    seatSelector: {
-        marginBottom: 16,
-    },
-    seatLabel: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#374151',
-        marginBottom: 12,
-    },
-    seatButtons: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    seatButton: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        borderWidth: 2,
-        borderColor: '#d1d5db',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'white',
-    },
-    seatButtonActive: {
-        borderColor: '#3b82f6',
-        backgroundColor: '#3b82f6',
-    },
-    seatButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#6b7280',
-    },
-    seatButtonTextActive: {
-        color: 'white',
-    },
-    promoContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#eff6ff',
-        padding: 12,
-        borderRadius: 12,
-        marginBottom: 16,
-        gap: 12,
-        borderWidth: 1,
-        borderColor: '#bfdbfe',
-    },
-    promoInput: {
-        flex: 1,
-        fontSize: 16,
-        color: '#1f2937',
-        fontWeight: '600',
-    },
-    applyText: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        color: '#3b82f6',
-    },
-});

@@ -1,17 +1,20 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useToast } from '@/components/ui/toast';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useResponsive } from '@/hooks/useResponsive';
 
 const SignupScreen = () => {
     const router = useRouter();
     const { signUp } = useAuth();
     const { toast } = useToast();
+    const { theme, isDark } = useTheme();
+    const { spacing, fontSize, hScale, vScale } = useResponsive();
 
     const [fullName, setFullName] = useState('');
     const [email, setEmail] = useState('');
@@ -40,18 +43,13 @@ const SignupScreen = () => {
 
         try {
             setLoading(true);
-            // Assuming signUp supports phone as 4th arg based on client code
-            // client: await signUp(email, password, fullName, phone);
-            // I need to verify if mobile AuthContext supports phone. 
-            // If not, I'll pass it anyway or update context later. 
-            // For now assuming parity with client logic.
             await signUp(email, password, fullName, phone);
 
             toast({
                 title: 'Account created!',
                 description: 'Welcome to TCSYGO. Please check your email for verification.',
             });
-            router.replace('/(tabs)');
+            router.replace('/');
         } catch (err: any) {
             toast({
                 title: 'Signup failed',
@@ -64,103 +62,125 @@ const SignupScreen = () => {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView className="flex-1 bg-white dark:bg-slate-950">
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                style={styles.keyboardView}
+                className="flex-1"
             >
-                <ScrollView contentContainerStyle={styles.scrollContent}>
+                <ScrollView contentContainerStyle={{ flexGrow: 1, padding: spacing.xl }}>
                     <TouchableOpacity
-                        style={styles.backBtn}
+                        style={{ width: hScale(40), height: hScale(40), marginBottom: vScale(32) }}
+                        className="rounded-full bg-slate-50 dark:bg-slate-900 items-center justify-center border border-slate-100 dark:border-slate-800"
                         onPress={() => router.canGoBack() && router.back()}
                     >
-                        <Ionicons name="arrow-back" size={24} color="#1f2937" />
+                        <Ionicons name="arrow-back" size={hScale(24)} color={isDark ? "#f8fafc" : "#1f2937"} />
                     </TouchableOpacity>
 
-                    <View style={styles.header}>
-                        <Text style={styles.title}>Create Account</Text>
-                        <Text style={styles.subtitle}>Join the TCSYGO community today</Text>
+                    <View style={{ marginBottom: vScale(40) }}>
+                        <Text style={{ fontSize: fontSize.xxl }} className="font-black text-slate-900 dark:text-white mb-2">Create Account</Text>
+                        <Text style={{ fontSize: fontSize.base }} className="text-slate-500 dark:text-slate-400 font-medium">Join the TCSYGO community today</Text>
                     </View>
 
-                    <View style={styles.form}>
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Full Name</Text>
-                            <View style={styles.inputWrapper}>
-                                <Ionicons name="person-outline" size={20} color="#6b7280" style={styles.inputIcon} />
-                                <TextInput
-                                    style={styles.input}
+                    <View className="gap-5">
+                        <View className="gap-2">
+                            <Text style={{ fontSize: fontSize.sm }} className="font-black text-slate-700 dark:text-slate-300 ml-1 uppercase tracking-wider">Full Name</Text>
+                            <View 
+                                style={{ height: vScale(56) }}
+                                className="flex-row items-center border border-slate-200 dark:border-slate-800 rounded-2xl px-4 bg-slate-50 dark:bg-slate-900/50"
+                            >
+                                <Ionicons name="person-outline" size={hScale(20)} color={isDark ? "#94a3b8" : "#6b7280"} style={{ marginRight: 12 }} />
+                                <Input
+                                    className="flex-1 text-slate-900 dark:text-white border-0 h-full bg-transparent"
+                                    style={{ fontSize: fontSize.base }}
                                     placeholder="John Doe"
                                     value={fullName}
                                     onChangeText={setFullName}
+                                    placeholderTextColor={isDark ? "#475569" : "#9CA3AF"}
                                 />
                             </View>
                         </View>
 
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Email Address</Text>
-                            <View style={styles.inputWrapper}>
-                                <Ionicons name="mail-outline" size={20} color="#6b7280" style={styles.inputIcon} />
-                                <TextInput
-                                    style={styles.input}
+                        <View className="gap-2">
+                            <Text style={{ fontSize: fontSize.sm }} className="font-black text-slate-700 dark:text-slate-300 ml-1 uppercase tracking-wider">Email Address</Text>
+                            <View 
+                                style={{ height: vScale(56) }}
+                                className="flex-row items-center border border-slate-200 dark:border-slate-800 rounded-2xl px-4 bg-slate-50 dark:bg-slate-900/50"
+                            >
+                                <Ionicons name="mail-outline" size={hScale(20)} color={isDark ? "#94a3b8" : "#6b7280"} style={{ marginRight: 12 }} />
+                                <Input
+                                    className="flex-1 text-slate-900 dark:text-white border-0 h-full bg-transparent"
+                                    style={{ fontSize: fontSize.base }}
                                     placeholder="your@email.com"
                                     value={email}
                                     onChangeText={setEmail}
                                     autoCapitalize="none"
                                     keyboardType="email-address"
+                                    placeholderTextColor={isDark ? "#475569" : "#9CA3AF"}
                                 />
                             </View>
                         </View>
 
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Phone Number (Optional)</Text>
-                            <View style={styles.inputWrapper}>
-                                <Ionicons name="call-outline" size={20} color="#6b7280" style={styles.inputIcon} />
-                                <TextInput
-                                    style={styles.input}
+                        <View className="gap-2">
+                            <Text style={{ fontSize: fontSize.sm }} className="font-black text-slate-700 dark:text-slate-300 ml-1 uppercase tracking-wider">Phone Number (Optional)</Text>
+                            <View 
+                                style={{ height: vScale(56) }}
+                                className="flex-row items-center border border-slate-200 dark:border-slate-800 rounded-2xl px-4 bg-slate-50 dark:bg-slate-900/50"
+                            >
+                                <Ionicons name="call-outline" size={hScale(20)} color={isDark ? "#94a3b8" : "#6b7280"} style={{ marginRight: 12 }} />
+                                <Input
+                                    className="flex-1 text-slate-900 dark:text-white border-0 h-full bg-transparent"
+                                    style={{ fontSize: fontSize.base }}
                                     placeholder="+91 98765 43210"
                                     value={phone}
                                     onChangeText={setPhone}
                                     keyboardType="phone-pad"
+                                    placeholderTextColor={isDark ? "#475569" : "#9CA3AF"}
                                 />
                             </View>
                         </View>
 
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Password</Text>
-                            <View style={styles.inputWrapper}>
-                                <Ionicons name="lock-closed-outline" size={20} color="#6b7280" style={styles.inputIcon} />
-                                <TextInput
-                                    style={styles.input}
+                        <View className="gap-2">
+                            <Text style={{ fontSize: fontSize.sm }} className="font-black text-slate-700 dark:text-slate-300 ml-1 uppercase tracking-wider">Password</Text>
+                            <View 
+                                style={{ height: vScale(56) }}
+                                className="flex-row items-center border border-slate-200 dark:border-slate-800 rounded-2xl px-4 bg-slate-50 dark:bg-slate-900/50"
+                            >
+                                <Ionicons name="lock-closed-outline" size={hScale(20)} color={isDark ? "#94a3b8" : "#6b7280"} style={{ marginRight: 12 }} />
+                                <Input
+                                    className="flex-1 text-slate-900 dark:text-white border-0 h-full bg-transparent"
+                                    style={{ fontSize: fontSize.base }}
                                     placeholder="••••••••"
                                     value={password}
                                     onChangeText={setPassword}
                                     secureTextEntry
+                                    placeholderTextColor={isDark ? "#475569" : "#9CA3AF"}
                                 />
                             </View>
-                            <Text style={styles.hintText}>
+                            <Text style={{ fontSize: hScale(10) }} className="text-slate-400 dark:text-slate-500 ml-1 uppercase font-black tracking-widest">
                                 Must be at least 6 characters long
                             </Text>
                         </View>
 
-                        <Text style={styles.termsText}>
+                        <Text style={{ fontSize: fontSize.xs, marginTop: spacing.sm, paddingHorizontal: spacing.xxl }} className="text-center text-slate-500 dark:text-slate-400 leading-5 font-medium">
                             By signing up, you agree to our{' '}
-                            <Text style={styles.linkText}>Terms of Service</Text> and{' '}
-                            <Text style={styles.linkText}>Privacy Policy</Text>.
+                            <Text className="text-blue-500 dark:text-blue-400 font-bold">Terms of Service</Text> and{' '}
+                            <Text className="text-blue-500 dark:text-blue-400 font-bold">Privacy Policy</Text>.
                         </Text>
 
                         <Button
                             onPress={handleSignup}
                             isLoading={loading}
-                            className="mt-4"
+                            style={{ height: vScale(56), marginTop: spacing.base }}
+                            className="rounded-2xl shadow-lg shadow-blue-500/20"
                         >
-                            Create Account
+                            <Text style={{ fontSize: fontSize.lg }} className="font-black text-white uppercase tracking-widest">Create Account</Text>
                         </Button>
                     </View>
 
-                    <View style={styles.footer}>
-                        <Text style={styles.footerText}>Already have an account? </Text>
+                    <View style={{ marginTop: 'auto', paddingTop: spacing.xxl }} className="flex-row justify-center">
+                        <Text style={{ fontSize: fontSize.sm }} className="text-slate-500 dark:text-slate-400 font-medium">Already have an account? </Text>
                         <TouchableOpacity onPress={() => router.push('/login' as any)}>
-                            <Text style={styles.loginText}>Sign In</Text>
+                            <Text style={{ fontSize: fontSize.sm }} className="text-blue-600 dark:text-blue-400 font-bold">Sign In</Text>
                         </TouchableOpacity>
                     </View>
                 </ScrollView>
@@ -168,94 +188,5 @@ const SignupScreen = () => {
         </SafeAreaView>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: 'white',
-    },
-    keyboardView: {
-        flex: 1,
-    },
-    scrollContent: {
-        flexGrow: 1,
-        padding: 24,
-    },
-    backBtn: {
-        marginBottom: 24,
-    },
-    header: {
-        marginBottom: 40,
-    },
-    title: {
-        fontSize: 32,
-        fontWeight: 'bold',
-        color: '#1f2937',
-        marginBottom: 8,
-    },
-    subtitle: {
-        fontSize: 16,
-        color: '#6b7280',
-    },
-    form: {
-        gap: 20,
-    },
-    inputGroup: {
-        gap: 8,
-    },
-    label: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#374151',
-    },
-    inputWrapper: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        height: 52,
-        backgroundColor: '#f9fafb',
-    },
-    inputIcon: {
-        marginRight: 12,
-    },
-    input: {
-        flex: 1,
-        fontSize: 16,
-        color: '#1f2937',
-    },
-    hintText: {
-        fontSize: 12,
-        color: '#6b7280',
-    },
-    termsText: {
-        fontSize: 13,
-        color: '#6b7280',
-        lineHeight: 18,
-        textAlign: 'center',
-        marginTop: 8,
-    },
-    linkText: {
-        color: '#3b82f6',
-        fontWeight: '500',
-    },
-    footer: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        marginTop: 'auto',
-        paddingTop: 32,
-    },
-    footerText: {
-        color: '#6b7280',
-        fontSize: 14,
-    },
-    loginText: {
-        color: '#3b82f6',
-        fontSize: 14,
-        fontWeight: 'bold',
-    },
-});
 
 export default SignupScreen;

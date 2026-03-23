@@ -1,11 +1,12 @@
 import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { Card } from '@/components/ui/card';
+import { useTheme } from '@/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-
+ 
 interface QuickAction {
     id: string;
     title: string;
@@ -14,7 +15,7 @@ interface QuickAction {
     route: string;
     color: string;
 }
-
+ 
 // Quick actions configuration
 const QUICK_ACTIONS_CONFIG: QuickAction[] = [
     {
@@ -33,74 +34,39 @@ const QUICK_ACTIONS_CONFIG: QuickAction[] = [
         route: '/create-trip',
         color: '#10b981',
     },
-    {
-        id: 'bookings',
-        title: 'My Bookings',
-        description: 'View your trips',
-        icon: 'calendar',
-        route: '/bookings',
-        color: '#f59e0b',
-    },
-    {
-        id: 'wallet',
-        title: 'Wallet',
-        description: 'Manage payments',
-        icon: 'wallet',
-        route: '/wallet',
-        color: '#8b5cf6',
-    },
 ];
-
+ 
 interface QuickActionsProps {
     onAction?: (action: string, data?: any) => void;
     recentRide?: { destination: string; time: string };
     savedPlaces?: any[];
 }
-
+ 
 export function QuickActions({ onAction, recentRide, savedPlaces }: QuickActionsProps) {
     const router = useRouter();
-    const actions = QUICK_ACTIONS_CONFIG;
-
+    const { isDark } = useTheme();
+ 
     return (
-        <View style={styles.container}>
-            <Text style={styles.title} className="font-semibold text-gray-900">
-                Quick Actions
+        <View className="mb-8">
+            <Text className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[2px] mb-6 px-1">
+                Mission Control
             </Text>
-            <View style={styles.grid}>
-                {/* Dynamic Action: Repeat Ride */}
-                {recentRide && (
-                    <TouchableOpacity
-                        style={styles.actionCard}
-                        onPress={() => onAction?.('repeat', recentRide)}
-                        activeOpacity={0.7}
-                    >
-                        <View style={[styles.iconContainer, { backgroundColor: '#e0e7ff' }]}>
-                            <Ionicons name="reload" size={24} color="#3b82f6" />
-                        </View>
-                        <Text style={styles.actionTitle} className="font-medium" numberOfLines={1}>
-                            Repeat Ride
-                        </Text>
-                        <Text style={styles.actionDescription} className="text-gray-600" numberOfLines={1}>
-                            To {recentRide.destination}
-                        </Text>
-                    </TouchableOpacity>
-                )}
-
-                {actions.map((action) => (
+            <View className="flex-row flex-wrap gap-4">
+                {QUICK_ACTIONS_CONFIG.map((action) => (
                     <TouchableOpacity
                         key={action.id}
-                        style={styles.actionCard}
+                        className="flex-1 bg-white dark:bg-slate-900 rounded-[28px] p-6 items-center justify-center border border-slate-100 dark:border-slate-800 shadow-sm active:bg-slate-50 dark:active:bg-slate-800"
                         onPress={() => router.push(action.route as any)}
                         activeOpacity={0.7}
                     >
-                        <View style={[styles.iconContainer, { backgroundColor: `${action.color}15` }]}>
-                            <Ionicons name={action.icon} size={24} color={action.color} />
+                        <View 
+                            className="w-14 h-14 rounded-2xl items-center justify-center mb-4 shadow-sm"
+                            style={{ backgroundColor: isDark ? `${action.color}20` : `${action.color}10` }}
+                        >
+                            <Ionicons name={action.icon} size={28} color={action.color} />
                         </View>
-                        <Text style={styles.actionTitle} className="font-medium">
+                        <Text className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-tighter">
                             {action.title}
-                        </Text>
-                        <Text style={styles.actionDescription} className="text-gray-600">
-                            {action.description}
                         </Text>
                     </TouchableOpacity>
                 ))}
@@ -108,7 +74,7 @@ export function QuickActions({ onAction, recentRide, savedPlaces }: QuickActions
         </View>
     );
 }
-
+ 
 interface PopularRoute {
     id: string;
     from: string;
@@ -116,9 +82,11 @@ interface PopularRoute {
     tripCount: number;
     avgPrice: number;
 }
-
+ 
 export function PopularRoutesMobile() {
     const router = useRouter();
+    const { isDark } = useTheme();
+ 
     const { data: routes, isLoading } = useQuery<PopularRoute[]>({
         queryKey: ['popular-routes-mobile'],
         queryFn: async () => {
@@ -128,17 +96,16 @@ export function PopularRoutesMobile() {
                 .eq('status', 'completed')
                 .order('created_at', { ascending: false })
                 .limit(150);
-
+ 
             if (error) throw error;
-
-            // Aggregate routes
+ 
             const routeMap = new Map<string, { from: string; to: string; count: number; totalPrice: number }>();
-
+ 
             data?.forEach((trip: any) => {
                 const key = `${trip.pickup_location}|${trip.drop_location}`;
                 const existing = routeMap.get(key);
                 const price = parseFloat(trip.price_per_seat) || 0;
-
+ 
                 if (existing) {
                     existing.count += 1;
                     existing.totalPrice += price;
@@ -151,8 +118,7 @@ export function PopularRoutesMobile() {
                     });
                 }
             });
-
-            // Convert and calculate average prices
+ 
             return Array.from(routeMap.values())
                 .map((route, index) => ({
                     id: String(index + 1),
@@ -164,9 +130,9 @@ export function PopularRoutesMobile() {
                 .sort((a, b) => b.tripCount - a.tripCount)
                 .slice(0, 3);
         },
-        staleTime: 1000 * 60 * 30, // 30 minutes
+        staleTime: 1000 * 60 * 30,
     });
-
+ 
     const handleRoutePress = (route: PopularRoute) => {
         router.push({
             pathname: '/search',
@@ -176,49 +142,66 @@ export function PopularRoutesMobile() {
             },
         });
     };
-
+ 
     if (isLoading || !routes || routes.length === 0) {
         return null;
     }
-
+ 
     return (
-        <View style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.title} className="font-semibold text-gray-900">
-                    Popular Routes
+        <View className="mb-10">
+            <View className="flex-row items-center justify-between mb-6 px-1">
+                <Text className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[2px]">
+                    Trending Corridors
                 </Text>
-                <Ionicons name="trending-up" size={20} color="#3b82f6" />
+                <View className="flex-row items-center gap-2">
+                    <Ionicons name="trending-up" size={14} color={isDark ? "#60a5fa" : "#2563eb"} />
+                    <Text className="text-[8px] font-extrabold text-blue-600 dark:text-blue-500 uppercase tracking-widest">Live Activity</Text>
+                </View>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.routesScroll}>
+            <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false} 
+                contentContainerStyle={{ paddingRight: 24, gap: 16 }}
+            >
                 {routes.map((route) => (
                     <TouchableOpacity
                         key={route.id}
-                        style={styles.routeCard}
+                        className="w-72 bg-white dark:bg-slate-900 rounded-[32px] p-6 border border-slate-100 dark:border-slate-800 shadow-sm active:opacity-80"
                         onPress={() => handleRoutePress(route)}
-                        activeOpacity={0.7}
+                        activeOpacity={0.8}
                     >
-                        <View style={styles.routeInfo}>
-                            <View style={styles.locationRow}>
-                                <Ionicons name="location" size={16} color="#10b981" />
-                                <Text style={styles.locationText} className="font-medium">
-                                    {route.from}
+                        <View className="mb-6">
+                            <View className="flex-row items-start gap-4 mb-2">
+                                <View className="mt-1 w-2.5 h-2.5 rounded-full bg-emerald-500 dark:bg-emerald-400 border-2 border-white dark:border-slate-900 shadow-sm" />
+                                <Text className="flex-1 text-sm font-bold text-slate-500 dark:text-slate-500 uppercase tracking-tight" numberOfLines={1}>
+                                    {route.from.split(',')[0]}
                                 </Text>
                             </View>
-                            <Ionicons name="arrow-forward" size={16} color="#9ca3af" style={styles.arrow} />
-                            <View style={styles.locationRow}>
-                                <Ionicons name="location" size={16} color="#ef4444" />
-                                <Text style={styles.locationText} className="font-medium">
-                                    {route.to}
+ 
+                            <View className="ml-[4px] h-4 border-l-2 border-slate-100 dark:border-slate-800/50 border-dashed my-1" />
+ 
+                            <View className="flex-row items-start gap-4">
+                                <View className="mt-1 w-2.5 h-2.5 rounded-full bg-blue-500 dark:bg-blue-400 border-2 border-white dark:border-slate-900 shadow-sm" />
+                                <Text className="flex-1 text-base font-black text-slate-900 dark:text-white uppercase tracking-tighter" numberOfLines={1}>
+                                    {route.to.split(',')[0]}
                                 </Text>
                             </View>
                         </View>
-                        <View style={styles.routeStats}>
-                            <Text style={styles.tripCount} className="text-gray-600">
-                                {route.tripCount} trips
-                            </Text>
-                            <Text style={styles.price} className="font-semibold text-primary">
-                                ₹{route.avgPrice}
-                            </Text>
+                        
+                        <View className="flex-row justify-between items-center pt-5 border-t border-slate-50 dark:border-slate-800/50">
+                            <View className="flex-row items-center gap-2">
+                                <View className="w-6 h-6 rounded-lg bg-slate-50 dark:bg-slate-800 items-center justify-center">
+                                    <Ionicons name="car" size={12} color={isDark ? "#475569" : "#94a3b8"} />
+                                </View>
+                                <Text className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                                    {route.tripCount} MISSIONS
+                                </Text>
+                            </View>
+                            <View className="bg-blue-600 dark:bg-blue-500 px-4 py-2 rounded-2xl shadow-lg shadow-blue-500/20">
+                                <Text className="text-white font-black text-sm tracking-tighter">
+                                    ₹{route.avgPrice}
+                                </Text>
+                            </View>
                         </View>
                     </TouchableOpacity>
                 ))}
@@ -226,101 +209,5 @@ export function PopularRoutesMobile() {
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        marginBottom: 24,
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 16,
-    },
-    title: {
-        fontSize: 18,
-        marginBottom: 16,
-    },
-    grid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 12,
-    },
-    actionCard: {
-        width: '48%',
-        backgroundColor: '#ffffff',
-        borderRadius: 12,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-        elevation: 1,
-    },
-    iconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 12,
-    },
-    actionTitle: {
-        fontSize: 14,
-        marginBottom: 4,
-    },
-    actionDescription: {
-        fontSize: 12,
-    },
-    routesScroll: {
-        marginHorizontal: -16,
-        paddingHorizontal: 16,
-    },
-    routeCard: {
-        width: 200,
-        backgroundColor: '#ffffff',
-        borderRadius: 12,
-        padding: 16,
-        marginRight: 12,
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-        elevation: 1,
-    },
-    routeInfo: {
-        marginBottom: 12,
-    },
-    locationRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 8,
-    },
-    locationText: {
-        fontSize: 14,
-        flex: 1,
-    },
-    arrow: {
-        marginLeft: 24,
-        marginBottom: 8,
-    },
-    routeStats: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingTop: 12,
-        borderTopWidth: 1,
-        borderTopColor: '#f3f4f6',
-    },
-    tripCount: {
-        fontSize: 12,
-    },
-    price: {
-        fontSize: 16,
-    },
-});
+ 
+const styles = StyleSheet.create({});

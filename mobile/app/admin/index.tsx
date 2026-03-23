@@ -1,55 +1,312 @@
 import { useState } from 'react';
-import { View, ScrollView, RefreshControl, ActivityIndicator, Alert, TouchableOpacity } from 'react-native';
+import {
+    View,
+    ScrollView,
+    RefreshControl,
+    TouchableOpacity,
+    StatusBar,
+    Text as RNText,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Text } from '@/components/ui/text';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useResponsive } from '@/hooks/useResponsive';
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
-import {
-    ArrowLeft,
     Users,
     Car,
     MapPin,
     DollarSign,
-    TrendingUp,
-    Check,
-    X,
-    Search,
     Shield,
-    AlertTriangle
+    ChevronRight,
+    BarChart3,
+    AlertTriangle,
+    Ticket,
+    Headphones,
+    LogOut,
+    FileText,
 } from 'lucide-react-native';
 import { NotificationDropdown } from '@/components/NotificationDropdown';
-import { mapDriver, mapTrip, mapBooking, mapPayment, mapEmergencyAlert } from '@/lib/mapper';
+import { useAuth } from '@/contexts/AuthContext';
+
+// ─── Stat Card ────────────────────────────────────────────────────────────────
+
+type StatCardProps = {
+    title: string;
+    value: string | number;
+    icon: any;
+    color: string;
+    bgColor: string;
+    emptyLabel?: string;
+};
+
+const StatCard = ({ title, value, icon: Icon, color, bgColor, emptyLabel }: StatCardProps) => {
+    const { hScale, vScale, spacing, fontSize: fontSizes } = useResponsive();
+    const isEmpty = value === 0 || value === '₹0' || value === '0';
+    return (
+        <View
+            style={{
+                width: '48%',
+                borderRadius: hScale(20),
+                marginBottom: vScale(14),
+                padding: spacing.xl,
+                overflow: 'hidden',
+                borderWidth: 1,
+                borderColor: 'rgba(0,0,0,0.05)'
+            }}
+            className={bgColor}
+        >
+            {/* Icon Row */}
+            <View
+                style={{
+                    width: hScale(46),
+                    height: hScale(46),
+                    borderRadius: hScale(14),
+                    backgroundColor: 'rgba(255,255,255,0.75)',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: vScale(12),
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: vScale(2) },
+                    shadowOpacity: 0.06,
+                    shadowRadius: hScale(4),
+                    elevation: 2,
+                }}
+            >
+                <Icon size={hScale(24)} color={color} strokeWidth={2.2} />
+            </View>
+
+            {/* Value */}
+            <RNText
+                style={{
+                    fontSize: hScale(26),
+                    fontWeight: '800',
+                    color: '#0f172a',
+                    marginBottom: vScale(2),
+                    letterSpacing: -0.5,
+                }}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+            >
+                {value}
+            </RNText>
+
+            {/* Title */}
+            <RNText
+                style={{
+                    fontSize: hScale(11),
+                    fontWeight: '700',
+                    color: '#64748b',
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.6,
+                }}
+            >
+                {title}
+            </RNText>
+
+            {/* Empty state hint */}
+            {isEmpty && emptyLabel ? (
+                <RNText
+                    style={{
+                        fontSize: hScale(10),
+                        color: '#94a3b8',
+                        marginTop: vScale(4),
+                        fontStyle: 'italic',
+                    }}
+                >
+                    {emptyLabel}
+                </RNText>
+            ) : null}
+        </View>
+    );
+};
+
+// ─── Quick Action Chip ────────────────────────────────────────────────────────
+
+type QuickActionProps = {
+    label: string;
+    icon: any;
+    color: string;
+    bgColor: string;
+    onPress: () => void;
+};
+
+const QuickAction = ({ label, icon: Icon, color, bgColor, onPress }: QuickActionProps) => {
+    const { hScale, vScale, spacing, fontSize: fontSizes } = useResponsive();
+    return (
+    <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.75}
+        style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: spacing.xl,
+            paddingVertical: vScale(10),
+            borderRadius: hScale(50),
+            marginRight: spacing.md,
+            backgroundColor: bgColor,
+            shadowColor: color,
+            shadowOffset: { width: 0, height: vScale(2) },
+            shadowOpacity: 0.15,
+            shadowRadius: hScale(4),
+            elevation: 3,
+        }}
+    >
+        <Icon size={hScale(15)} color={color} strokeWidth={2.5} style={{ marginRight: spacing.xs }} />
+        <RNText style={{ color, fontSize: hScale(13), fontWeight: '700', letterSpacing: 0.1 }}>{label}</RNText>
+    </TouchableOpacity>
+    );
+};
+
+// ─── Menu Item ────────────────────────────────────────────────────────────────
+
+const MenuItem = ({
+    title,
+    description,
+    icon: Icon,
+    color,
+    onPress,
+    isLast,
+}: {
+    title: string;
+    description: string;
+    icon: any;
+    color: string;
+    onPress: () => void;
+    isLast?: boolean;
+}) => {
+    const { hScale, vScale, spacing, fontSize: fontSizes } = useResponsive();
+    return (
+    <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.7}
+        style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: spacing.xl,
+            paddingVertical: vScale(14),
+            backgroundColor: 'white',
+            borderBottomWidth: isLast ? 0 : 1,
+            borderBottomColor: '#f1f5f9',
+        }}
+    >
+        {/* Icon bubble */}
+        <View
+            style={{
+                width: hScale(46),
+                height: hScale(46),
+                borderRadius: hScale(14),
+                backgroundColor: `${color}18`,
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: spacing.xl,
+            }}
+        >
+            <Icon size={hScale(22)} color={color} strokeWidth={2} />
+        </View>
+
+        {/* Text */}
+        <View style={{ flex: 1 }}>
+            <RNText style={{ fontSize: hScale(15), fontWeight: '700', color: '#0f172a', marginBottom: vScale(2) }}>
+                {title}
+            </RNText>
+            <RNText style={{ fontSize: hScale(12), color: '#64748b', fontWeight: '500' }}>{description}</RNText>
+        </View>
+
+        {/* Arrow */}
+        <View
+            style={{
+                width: hScale(32),
+                height: hScale(32),
+                borderRadius: hScale(10),
+                backgroundColor: '#f1f5f9',
+                alignItems: 'center',
+                justifyContent: 'center',
+            }}
+        >
+            <ChevronRight size={hScale(18)} color="#475569" strokeWidth={2.5} />
+        </View>
+    </TouchableOpacity>
+    );
+};
+
+// ─── Section Header ─────────────────────────────────────────────────────────
+
+const SectionHeader = ({ title }: { title: string }) => {
+    const { hScale, vScale, spacing } = useResponsive();
+    return (
+    <RNText
+        style={{
+            fontSize: hScale(11),
+            fontWeight: '800',
+            color: '#94a3b8',
+            textTransform: 'uppercase',
+            letterSpacing: 1.2,
+            marginBottom: vScale(10),
+            marginTop: vScale(20),
+            marginLeft: spacing.xs,
+        }}
+    >
+        {title}
+    </RNText>
+    );
+};
+
+// ─── Menu Group Container ─────────────────────────────────────────────────────
+
+const MenuSection = ({ children }: { children: React.ReactNode }) => {
+    const { hScale, vScale, spacing } = useResponsive();
+    return (
+    <View
+        style={{
+            backgroundColor: 'white',
+            borderRadius: hScale(20),
+            overflow: 'hidden',
+            marginBottom: vScale(8),
+            shadowColor: '#94a3b8',
+            shadowOffset: { width: 0, height: vScale(2) },
+            shadowOpacity: 0.08,
+            shadowRadius: hScale(8),
+            elevation: 2,
+            borderWidth: 1,
+            borderColor: '#f1f5f9'
+        }}
+    >
+        {children}
+    </View>
+    );
+};
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
     const router = useRouter();
-    const queryClient = useQueryClient();
+    const { signOut, user } = useAuth();
+    const { hScale, vScale, spacing, fontSize: fontSizes } = useResponsive();
     const [refreshing, setRefreshing] = useState(false);
-    const [searchTerm, setSearchTerm] = useState('');
 
     const { data: stats, refetch: refetchStats } = useQuery({
-        queryKey: ['admin-stats'],
+        queryKey: ['admin-dashboard-stats'],
         queryFn: async () => {
-            const { count: totalUsers } = await supabase.from('users').select('*', { count: 'exact', head: true });
-            const { count: totalDrivers } = await supabase.from('drivers').select('*', { count: 'exact', head: true });
-            const { count: totalTrips } = await supabase.from('trips').select('*', { count: 'exact', head: true });
-            const { count: pendingVerifications } = await supabase.from('drivers').select('*', { count: 'exact', head: true }).eq('verification_status', 'pending');
+            const { count: totalUsers } = await supabase
+                .from('users')
+                .select('*', { count: 'exact', head: true });
+            const { count: totalDrivers } = await supabase
+                .from('drivers')
+                .select('*', { count: 'exact', head: true });
+            const { count: totalTrips } = await supabase
+                .from('trips')
+                .select('*', { count: 'exact', head: true });
+            const { count: pendingVerifications } = await supabase
+                .from('drivers')
+                .select('*', { count: 'exact', head: true })
+                .eq('verification_status', 'pending');
 
-            const { data: payments } = await supabase.from('payments').select('amount').eq('status', 'success');
+            const { data: payments } = await supabase
+                .from('payments')
+                .select('amount')
+                .eq('status', 'success');
             const totalRevenue = payments?.reduce((sum, p) => sum + parseFloat(p.amount), 0) || 0;
 
             return {
@@ -57,451 +314,245 @@ export default function AdminDashboard() {
                 totalDrivers: totalDrivers || 0,
                 totalTrips: totalTrips || 0,
                 totalRevenue,
-                pendingVerifications: pendingVerifications || 0
+                pendingVerifications: pendingVerifications || 0,
             };
-        }
-    });
-
-    const { data: pendingDrivers, refetch: refetchDrivers } = useQuery({
-        queryKey: ['admin-drivers-pending'],
-        queryFn: async () => {
-            const { data, error } = await supabase
-                .from('drivers')
-                .select('*, user:users(*)')
-                .eq('verification_status', 'pending');
-
-            if (error) throw error;
-            return (data || []).map(mapDriver);
-        }
-    });
-
-    const { data: allTrips, refetch: refetchTrips } = useQuery({
-        queryKey: ['admin-trips'],
-        queryFn: async () => {
-            const { data, error } = await supabase
-                .from('trips')
-                .select('*, driver:drivers(*, user:users(*))')
-                .order('created_at', { ascending: false });
-
-            if (error) throw error;
-            return (data || []).map(mapTrip);
-        }
-    });
-
-    const { data: allBookings, refetch: refetchBookings } = useQuery({
-        queryKey: ['admin-bookings'],
-        queryFn: async () => {
-            const { data, error } = await supabase
-                .from('bookings')
-                .select('*, trip:trips(*, driver:drivers(*, user:users(*))), passenger:users(*)')
-                .order('created_at', { ascending: false });
-
-            if (error) throw error;
-            return (data || []).map(mapBooking);
-        }
-    });
-
-    const { data: allPayments, refetch: refetchPayments } = useQuery({
-        queryKey: ['admin-payments'],
-        queryFn: async () => {
-            const { data, error } = await supabase
-                .from('payments')
-                .select('*')
-                .order('created_at', { ascending: false });
-
-            if (error) throw error;
-            return (data || []).map(mapPayment);
-        }
-    });
-
-    const { data: allAlerts, refetch: refetchAlerts } = useQuery({
-        queryKey: ['admin-sos'],
-        queryFn: async () => {
-            const { data, error } = await supabase
-                .from('emergency_alerts')
-                .select('*, user:users(*)')
-                .order('created_at', { ascending: false });
-
-            if (error) throw error;
-            return (data || []).map(mapEmergencyAlert);
-        }
-    });
-
-    const verifyDriverMutation = useMutation({
-        mutationFn: async ({ driverId, status }: { driverId: string; status: 'verified' | 'rejected' }) => {
-            const { error } = await supabase
-                .from('drivers')
-                .update({ verification_status: status })
-                .eq('id', driverId);
-
-            if (error) throw error;
         },
-        onSuccess: () => {
-            Alert.alert("Success", "Driver verification updated");
-            queryClient.invalidateQueries({ queryKey: ['admin-drivers-pending'] });
-            queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
-        },
-        onError: (e) => {
-            Alert.alert("Error", e.message);
-        }
     });
 
     const onRefresh = async () => {
         setRefreshing(true);
-        await Promise.all([
-            refetchStats(), refetchDrivers(), refetchTrips(), refetchBookings(), refetchPayments(), refetchAlerts()
-        ]);
+        await refetchStats();
         setRefreshing(false);
     };
 
-    const filteredTrips = allTrips?.filter((trip: any) =>
-        searchTerm ? (
-            trip.pickupLocation.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            trip.dropLocation.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            trip.driver.user.fullName.toLowerCase().includes(searchTerm.toLowerCase())
-        ) : true
-    );
+    const firstName = user?.fullName?.split(' ')[0] ?? 'Admin';
 
     return (
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#f9fafb' }}>
-            {/* Header */}
-            <View className="flex-row items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
-                <View className="flex-row items-center gap-2">
-                    <Button variant="ghost" size="icon" onPress={() => router.back()}>
-                        <ArrowLeft size={20} color="#000" />
-                    </Button>
-                    <Text variant="h3" className="font-bold">Admin</Text>
-                </View>
+        <View style={{ flex: 1, backgroundColor: '#f8fafc' }}>
+            <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+            <SafeAreaView style={{ flex: 1 }} edges={['top']}>
 
-                <View className="flex-row items-center gap-2">
-                    <Badge variant="outline" className="flex-row items-center gap-1">
-                        <Shield size={12} color="#000" />
-                        <Text className="text-xs">Access</Text>
-                    </Badge>
-                    <NotificationDropdown />
-                </View>
-            </View>
-
-            <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-                <View className="p-4 gap-4">
-                    {/* Stats Grid */}
-                    <View className="flex-row flex-wrap gap-2">
-                        <Card className="flex-1 min-w-[45%] p-4">
-                            <View className="flex-row justify-between mb-2">
-                                <Users size={24} color="#3b82f6" />
-                            </View>
-                            <Text variant="h2" className="font-bold">{stats?.totalUsers || 0}</Text>
-                            <Text className="text-sm text-gray-500">Users</Text>
-                        </Card>
-                        <Card className="flex-1 min-w-[45%] p-4">
-                            <View className="flex-row justify-between mb-2">
-                                <Car size={24} color="#22c55e" />
-                            </View>
-                            <Text variant="h2" className="font-bold">{stats?.totalDrivers || 0}</Text>
-                            <Text className="text-sm text-gray-500">Drivers</Text>
-                        </Card>
-                        <Card className="flex-1 min-w-[45%] p-4">
-                            <View className="flex-row justify-between mb-2">
-                                <MapPin size={24} color="#eab308" />
-                            </View>
-                            <Text variant="h2" className="font-bold">{stats?.totalTrips || 0}</Text>
-                            <Text className="text-sm text-gray-500">Trips</Text>
-                        </Card>
-                        <Card className="flex-1 min-w-[45%] p-4">
-                            <View className="flex-row justify-between mb-2">
-                                <DollarSign size={24} color="#a855f7" />
-                            </View>
-                            <Text variant="h2" className="font-bold">₹{stats?.totalRevenue.toFixed(0) || '0'}</Text>
-                            <Text className="text-sm text-gray-500">Revenue</Text>
-                        </Card>
-                        <Card className="w-full p-4">
-                            <View className="flex-row justify-between mb-2">
-                                <TrendingUp size={24} color="#ef4444" />
-                            </View>
-                            <Text variant="h2" className="font-bold">{stats?.pendingVerifications || 0}</Text>
-                            <Text className="text-sm text-gray-500">Pending Verifications</Text>
-                        </Card>
+                {/* ── Header ───────────────────────────────── */}
+                <View
+                    style={{
+                        paddingHorizontal: spacing.xl,
+                        paddingTop: vScale(16),
+                        paddingBottom: vScale(14),
+                        backgroundColor: 'white',
+                        borderBottomWidth: 1,
+                        borderBottomColor: '#f1f5f9',
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        shadowColor: '#94a3b8',
+                        shadowOffset: { width: 0, height: vScale(2) },
+                        shadowOpacity: 0.06,
+                        shadowRadius: hScale(6),
+                        elevation: 3,
+                        zIndex: 10,
+                    }}
+                >
+                    <View>
+                        {/* Primary heading */}
+                        <RNText
+                            style={{
+                                fontSize: hScale(24),
+                                fontWeight: '900',
+                                color: '#0f172a',
+                                letterSpacing: -0.5,
+                                lineHeight: vScale(28),
+                            }}
+                        >
+                            Admin Portal
+                        </RNText>
+                        {/* Subtitle */}
+                        <RNText
+                            style={{
+                                fontSize: hScale(13),
+                                color: '#64748b',
+                                fontWeight: '500',
+                                marginTop: vScale(2),
+                            }}
+                        >
+                            Dashboard Overview · Hi, {firstName} 👋
+                        </RNText>
                     </View>
 
-                    {/* Tabs */}
-                    <Tabs defaultValue="verifications" className="w-full">
-                        <TabsList className="mb-4 flex-wrap h-auto py-2">
-                            <TabsTrigger value="verifications" className="flex-grow">Verifications</TabsTrigger>
-                            <TabsTrigger value="trips" className="flex-grow">Trips</TabsTrigger>
-                            <TabsTrigger value="bookings" className="flex-grow">Bookings</TabsTrigger>
-                            <TabsTrigger value="payments" className="flex-grow">Payments</TabsTrigger>
-                            <TabsTrigger value="alerts" className="flex-grow text-red-500">Alerts</TabsTrigger>
-                        </TabsList>
-
-                        <TabsContent value="verifications">
-                            <Card className="p-0 overflow-hidden">
-                                <View className="p-4 border-b border-gray-100">
-                                    <Text className="font-semibold text-lg">Pending Driver Verifications</Text>
-                                </View>
-                                {pendingDrivers && pendingDrivers.length > 0 ? (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead className="w-[200px]"><Text>Driver</Text></TableHead>
-                                                <TableHead className="w-[150px]"><Text>License</Text></TableHead>
-                                                <TableHead className="w-[200px]"><Text>Vehicle</Text></TableHead>
-                                                <TableHead className="w-[100px]"><Text>Date</Text></TableHead>
-                                                <TableHead className="w-[150px]"><Text>Actions</Text></TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {pendingDrivers.map((driver: any) => (
-                                                <TableRow key={driver.id}>
-                                                    <TableCell className="w-[200px]">
-                                                        <View className="flex-row items-center gap-2">
-                                                            <Avatar className="w-8 h-8">
-                                                                <AvatarImage src={driver.user.profilePhoto || undefined} />
-                                                                <AvatarFallback>{driver.user.fullName.charAt(0)}</AvatarFallback>
-                                                            </Avatar>
-                                                            <View>
-                                                                <Text className="font-medium">{driver.user.fullName}</Text>
-                                                                <Text className="text-xs text-gray-500">{driver.user.email}</Text>
-                                                            </View>
-                                                        </View>
-                                                    </TableCell>
-                                                    <TableCell className="w-[150px]">
-                                                        <Text>{driver.licenseNumber}</Text>
-                                                    </TableCell>
-                                                    <TableCell className="w-[200px]">
-                                                        <Text>{driver.vehicleMake} {driver.vehicleModel}</Text>
-                                                    </TableCell>
-                                                    <TableCell className="w-[100px]">
-                                                        <Text>{new Date(driver.createdAt).toLocaleDateString()}</Text>
-                                                    </TableCell>
-                                                    <TableCell className="w-[150px]">
-                                                        <View className="flex-row gap-2">
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                className="h-8 w-8 p-0"
-                                                                onPress={() => verifyDriverMutation.mutate({ driverId: driver.id, status: 'verified' })}
-                                                            >
-                                                                <Check size={14} color="green" />
-                                                            </Button>
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                className="h-8 w-8 p-0"
-                                                                onPress={() => verifyDriverMutation.mutate({ driverId: driver.id, status: 'rejected' })}
-                                                            >
-                                                                <X size={14} color="red" />
-                                                            </Button>
-                                                        </View>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                ) : (
-                                    <View className="p-8 items-center">
-                                        <Car size={32} color="#9ca3af" />
-                                        <Text className="text-gray-500 mt-2">No pending verifications</Text>
-                                    </View>
-                                )}
-                            </Card>
-                        </TabsContent>
-
-                        <TabsContent value="trips">
-                            <Card className="p-0 overflow-hidden">
-                                <View className="p-4 border-b border-gray-100 flex-row items-center gap-2">
-                                    <Search size={16} color="#9ca3af" />
-                                    <Input
-                                        placeholder="Search trips..."
-                                        value={searchTerm}
-                                        onChangeText={setSearchTerm}
-                                        className="h-9 flex-1"
-                                    />
-                                </View>
-                                {filteredTrips && filteredTrips.length > 0 ? (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead className="w-[150px]"><Text>Driver</Text></TableHead>
-                                                <TableHead className="w-[200px]"><Text>Route</Text></TableHead>
-                                                <TableHead className="w-[100px]"><Text>Date</Text></TableHead>
-                                                <TableHead className="w-[80px]"><Text>Seats</Text></TableHead>
-                                                <TableHead className="w-[100px]"><Text>Price</Text></TableHead>
-                                                <TableHead className="w-[100px]"><Text>Status</Text></TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {filteredTrips.slice(0, 10).map((trip: any) => (
-                                                <TableRow key={trip.id}>
-                                                    <TableCell className="w-[150px]">
-                                                        <Text numberOfLines={1}>{trip.driver.user.fullName}</Text>
-                                                    </TableCell>
-                                                    <TableCell className="w-[200px]">
-                                                        <View>
-                                                            <Text className="font-medium" numberOfLines={1}>{trip.pickupLocation}</Text>
-                                                            <Text className="text-xs text-gray-500" numberOfLines={1}>{trip.dropLocation}</Text>
-                                                        </View>
-                                                    </TableCell>
-                                                    <TableCell className="w-[100px]">
-                                                        <Text>{new Date(trip.departureTime).toLocaleDateString()}</Text>
-                                                    </TableCell>
-                                                    <TableCell className="w-[80px]">
-                                                        <Text>{trip.availableSeats}/{trip.totalSeats}</Text>
-                                                    </TableCell>
-                                                    <TableCell className="w-[100px]">
-                                                        <Text>₹{trip.pricePerSeat}</Text>
-                                                    </TableCell>
-                                                    <TableCell className="w-[100px]">
-                                                        <Badge variant="outline"><Text className="capitalize text-xs">{trip.status}</Text></Badge>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                ) : (
-                                    <View className="p-8 items-center">
-                                        <MapPin size={32} color="#9ca3af" />
-                                        <Text className="text-gray-500 mt-2">No trips found</Text>
-                                    </View>
-                                )}
-                            </Card>
-                        </TabsContent>
-
-                        <TabsContent value="bookings">
-                            <Card className="p-0 overflow-hidden">
-                                <View className="p-4 border-b border-gray-100">
-                                    <Text className="font-semibold text-lg">Recent Bookings</Text>
-                                </View>
-                                {allBookings && allBookings.length > 0 ? (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead className="w-[150px]"><Text>Passenger</Text></TableHead>
-                                                <TableHead className="w-[200px]"><Text>Trip</Text></TableHead>
-                                                <TableHead className="w-[80px]"><Text>Seats</Text></TableHead>
-                                                <TableHead className="w-[100px]"><Text>Amount</Text></TableHead>
-                                                <TableHead className="w-[100px]"><Text>Status</Text></TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {allBookings.slice(0, 10).map((booking: any) => (
-                                                <TableRow key={booking.id}>
-                                                    <TableCell className="w-[150px]">
-                                                        <Text numberOfLines={1}>{booking.passenger.fullName}</Text>
-                                                    </TableCell>
-                                                    <TableCell className="w-[200px]">
-                                                        <Text numberOfLines={1}>{booking.trip.pickupLocation}</Text>
-                                                    </TableCell>
-                                                    <TableCell className="w-[80px]">
-                                                        <Text>{booking.seatsBooked}</Text>
-                                                    </TableCell>
-                                                    <TableCell className="w-[100px]">
-                                                        <Text>₹{booking.totalAmount}</Text>
-                                                    </TableCell>
-                                                    <TableCell className="w-[100px]">
-                                                        <Badge variant="outline"><Text className="capitalize text-xs">{booking.status}</Text></Badge>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                ) : (
-                                    <View className="p-8 items-center">
-                                        <Users size={32} color="#9ca3af" />
-                                        <Text className="text-gray-500 mt-2">No bookings found</Text>
-                                    </View>
-                                )}
-                            </Card>
-                        </TabsContent>
-
-                        <TabsContent value="payments">
-                            <Card className="p-0 overflow-hidden">
-                                <View className="p-4 border-b border-gray-100">
-                                    <Text className="font-semibold text-lg">Payments</Text>
-                                </View>
-                                {allPayments && allPayments.length > 0 ? (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead className="w-[100px]"><Text>ID</Text></TableHead>
-                                                <TableHead className="w-[100px]"><Text>Amount</Text></TableHead>
-                                                <TableHead className="w-[100px]"><Text>Fee</Text></TableHead>
-                                                <TableHead className="w-[100px]"><Text>Earnings</Text></TableHead>
-                                                <TableHead className="w-[100px]"><Text>Status</Text></TableHead>
-                                                <TableHead className="w-[100px]"><Text>Date</Text></TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {allPayments.slice(0, 10).map((payment: any) => (
-                                                <TableRow key={payment.id}>
-                                                    <TableCell className="w-[100px]"><Text className="text-xs" numberOfLines={1}>{payment.id.slice(0, 8)}</Text></TableCell>
-                                                    <TableCell className="w-[100px]"><Text>₹{payment.amount}</Text></TableCell>
-                                                    <TableCell className="w-[100px]"><Text>₹{payment.platformFee}</Text></TableCell>
-                                                    <TableCell className="w-[100px]"><Text>₹{payment.driverEarnings}</Text></TableCell>
-                                                    <TableCell className="w-[100px]">
-                                                        <Badge variant="outline"><Text className="text-xs">{payment.status}</Text></Badge>
-                                                    </TableCell>
-                                                    <TableCell className="w-[100px]"><Text className="text-xs">{new Date(payment.createdAt).toLocaleDateString()}</Text></TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                ) : (
-                                    <View className="p-8 items-center">
-                                        <DollarSign size={32} color="#9ca3af" />
-                                        <Text className="text-gray-500 mt-2">No payments found</Text>
-                                    </View>
-                                )}
-                            </Card>
-                        </TabsContent>
-
-                        <TabsContent value="alerts">
-                            <Card className="p-0 overflow-hidden">
-                                <View className="p-4 border-b border-gray-100">
-                                    <Text className="font-semibold text-lg text-red-500">SOS Alerts</Text>
-                                </View>
-                                {allAlerts && allAlerts.length > 0 ? (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead className="w-[150px]"><Text>Time</Text></TableHead>
-                                                <TableHead className="w-[150px]"><Text>Reporter</Text></TableHead>
-                                                <TableHead className="w-[100px]"><Text>Status</Text></TableHead>
-                                                <TableHead className="w-[150px]"><Text>Action</Text></TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {allAlerts.map((alert: any) => (
-                                                <TableRow key={alert.id}>
-                                                    <TableCell className="w-[150px]"><Text>{new Date(alert.createdAt).toLocaleString()}</Text></TableCell>
-                                                    <TableCell className="w-[150px]">
-                                                        <View>
-                                                            <Text>{alert.user?.fullName || 'Unknown'}</Text>
-                                                            <Text className="text-xs text-gray-500">{alert.user?.phone}</Text>
-                                                        </View>
-                                                    </TableCell>
-                                                    <TableCell className="w-[100px]">
-                                                        <Badge variant="destructive"><Text className="text-xs text-white">{alert.status}</Text></Badge>
-                                                    </TableCell>
-                                                    <TableCell className="w-[150px]">
-                                                        <Button size="sm" variant="outline" onPress={() => router.push(`/track/${alert.tripId}`)}>
-                                                            <Text>Track</Text>
-                                                        </Button>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                ) : (
-                                    <View className="p-8 items-center">
-                                        <Shield size={32} color="#9ca3af" />
-                                        <Text className="text-gray-500 mt-2">No active SOS alerts</Text>
-                                    </View>
-                                )}
-                            </Card>
-                        </TabsContent>
-                    </Tabs>
+                    {/* Actions */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                        <NotificationDropdown />
+                        <TouchableOpacity
+                            onPress={signOut}
+                            accessibilityLabel="Sign out"
+                            accessibilityRole="button"
+                            style={{
+                                width: hScale(40),
+                                height: hScale(40),
+                                borderRadius: hScale(20),
+                                backgroundColor: '#f8fafc',
+                                borderWidth: 1,
+                                borderColor: '#e2e8f0',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                            }}
+                        >
+                            <LogOut size={hScale(18)} color="#64748b" strokeWidth={2} />
+                        </TouchableOpacity>
+                    </View>
                 </View>
-            </ScrollView>
-        </SafeAreaView>
+
+                <ScrollView
+                    style={{ flex: 1, paddingHorizontal: spacing.xl }}
+                    contentContainerStyle={{ paddingBottom: vScale(100), paddingTop: vScale(20) }}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#64748b" />
+                    }
+                    showsVerticalScrollIndicator={false}
+                >
+
+                    {/* ── Stats Grid ───────────────────────────── */}
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+                        <StatCard
+                            title="Total Revenue"
+                            value={`₹${stats?.totalRevenue.toLocaleString() || '0'}`}
+                            icon={DollarSign}
+                            color="#7c3aed"
+                            bgColor="bg-violet-50"
+                            emptyLabel="No payments yet"
+                        />
+                        <StatCard
+                            title="Drivers"
+                            value={stats?.totalDrivers || 0}
+                            icon={Car}
+                            color="#16a34a"
+                            bgColor="bg-green-50"
+                            emptyLabel="No drivers yet"
+                        />
+                        <StatCard
+                            title="Users"
+                            value={stats?.totalUsers || 0}
+                            icon={Users}
+                            color="#2563eb"
+                            bgColor="bg-blue-50"
+                            emptyLabel="No users yet"
+                        />
+                        <StatCard
+                            title="Pending Approvals"
+                            value={stats?.pendingVerifications || 0}
+                            icon={AlertTriangle}
+                            color="#ea580c"
+                            bgColor="bg-orange-50"
+                            emptyLabel="All clear!"
+                        />
+                    </View>
+
+                    {/* ── Quick Actions ─────────────────────────── */}
+                    <SectionHeader title="Quick Actions" />
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={{ paddingBottom: vScale(4), paddingTop: vScale(2) }}
+                        style={{ marginBottom: vScale(4) }}
+                    >
+                        <QuickAction
+                            label="Approve Drivers"
+                            icon={Shield}
+                            color="#f97316"
+                            bgColor="#fff7ed"
+                            onPress={() => router.push('/admin/verifications')}
+                        />
+                        <QuickAction
+                            label="View Reports"
+                            icon={FileText}
+                            color="#8b5cf6"
+                            bgColor="#f5f3ff"
+                            onPress={() => router.push('/admin/reports')}
+                        />
+                        <QuickAction
+                            label="Manage Users"
+                            icon={Users}
+                            color="#3b82f6"
+                            bgColor="#eff6ff"
+                            onPress={() => router.push('/admin/users' as any)}
+                        />
+                        <QuickAction
+                            label="Track Trips"
+                            icon={MapPin}
+                            color="#0ea5e9"
+                            bgColor="#f0f9ff"
+                            onPress={() => router.push('/admin/trips')}
+                        />
+                    </ScrollView>
+
+                    {/* ── Operations ───────────────────────────── */}
+                    <SectionHeader title="Operations" />
+                    <MenuSection>
+                        <MenuItem
+                            title="Driver Verifications"
+                            description="Approve or reject applications"
+                            icon={Shield}
+                            color="#f97316"
+                            onPress={() => router.push('/admin/verifications')}
+                        />
+                        <MenuItem
+                            title="Manage Users"
+                            description="View and manage all users"
+                            icon={Users}
+                            color="#3b82f6"
+                            onPress={() => router.push('/admin/users' as any)}
+                        />
+                        <MenuItem
+                            title="Trip Management"
+                            description="Track active and past trips"
+                            icon={MapPin}
+                            color="#0ea5e9"
+                            onPress={() => router.push('/admin/trips')}
+                            isLast
+                        />
+                    </MenuSection>
+
+                    {/* ── Business & Analytics ─────────────────── */}
+                    <SectionHeader title="Business & Analytics" />
+                    <MenuSection>
+                        <MenuItem
+                            title="Financial Reports"
+                            description="Revenue and activity analytics"
+                            icon={BarChart3}
+                            color="#8b5cf6"
+                            onPress={() => router.push('/admin/reports')}
+                        />
+                        <MenuItem
+                            title="Promo Codes"
+                            description="Manage discounts and offers"
+                            icon={Ticket}
+                            color="#10b981"
+                            onPress={() => router.push('/admin/promocodes')}
+                            isLast
+                        />
+                    </MenuSection>
+
+                    {/* ── Support ──────────────────────────────── */}
+                    <SectionHeader title="Support" />
+                    <MenuSection>
+                        <MenuItem
+                            title="SOS Alerts"
+                            description="Emergency handling"
+                            icon={AlertTriangle}
+                            color="#ef4444"
+                            onPress={() => router.push('/admin/alerts')}
+                        />
+                        <MenuItem
+                            title="User Support"
+                            description="Inquiries and tickets"
+                            icon={Headphones}
+                            color="#ec4899"
+                            onPress={() => router.push('/admin/support')}
+                            isLast
+                        />
+                    </MenuSection>
+
+                </ScrollView>
+            </SafeAreaView>
+        </View>
     );
 }

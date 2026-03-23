@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, RefreshControl } from 'react-native';
+import { View, ScrollView, TouchableOpacity, ActivityIndicator, Alert, RefreshControl, StatusBar, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
@@ -9,10 +9,14 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { PaymentService, WalletBalance, WalletTransaction } from '@/services/PaymentService';
-
+import { useTheme } from '@/contexts/ThemeContext';
+import { useResponsive } from '@/hooks/useResponsive';
+ 
 export default function WalletScreen() {
     const router = useRouter();
     const { user } = useAuth();
+    const { theme, isDark, colors } = useTheme();
+    const { hScale, vScale, mScale, spacing, fontSize } = useResponsive();
     const [balance, setBalance] = useState<WalletBalance | null>(null);
     const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
     const [loading, setLoading] = useState(true);
@@ -20,13 +24,13 @@ export default function WalletScreen() {
     const [autoTopUp, setAutoTopUp] = useState(false);
     const [threshold, setThreshold] = useState(500);
     const [topUpAmount, setTopUpAmount] = useState(1000);
-
+ 
     useEffect(() => {
         if (user) {
             fetchWalletData();
         }
     }, [user]);
-
+ 
     const fetchWalletData = async () => {
         if (!user) return;
         setLoading(true);
@@ -37,14 +41,13 @@ export default function WalletScreen() {
             ]);
             setBalance(bal);
             setTransactions(txs);
-
-            // Fetch auto-pay settings
+ 
             const { data: settings } = await supabase
                 .from('auto_pay_settings')
                 .select('*')
                 .eq('user_id', user.id)
                 .single();
-
+ 
             if (settings) {
                 setAutoTopUp(settings.enabled);
                 setThreshold(settings.threshold || 500);
@@ -57,7 +60,7 @@ export default function WalletScreen() {
             setRefreshing(false);
         }
     };
-
+ 
     const handleToggleAutoTopUp = async () => {
         if (!user) return;
         const newState = !autoTopUp;
@@ -70,20 +73,20 @@ export default function WalletScreen() {
                     enabled: newState,
                     threshold,
                     top_up_amount: topUpAmount,
-                    default_payment_method: 'card' // Default
+                    default_payment_method: 'card'
                 });
             if (error) throw error;
         } catch (error) {
             Alert.alert("Error", "Failed to update auto top-up settings");
-            setAutoTopUp(!newState); // Revert
+            setAutoTopUp(!newState);
         }
     };
-
+ 
     const onRefresh = () => {
         setRefreshing(true);
         fetchWalletData();
     };
-
+ 
     const handleAddMoney = () => {
         Alert.prompt(
             "Add Money",
@@ -100,11 +103,9 @@ export default function WalletScreen() {
                         const numAmount = Number(amount);
                         try {
                             setLoading(true);
-
-                            // 1. Create Order
+ 
                             const orderData = await PaymentService.createOrder(numAmount, 'INR', `wallet_${Date.now()}`);
-
-                            // 2. Open Razorpay
+ 
                             const RazorpayCheckout = (await import('react-native-razorpay')).default;
                             const options = {
                                 description: 'Wallet Recharge',
@@ -119,13 +120,12 @@ export default function WalletScreen() {
                                     contact: user?.phone || '',
                                     name: user?.fullName || 'Passenger'
                                 },
-                                theme: { color: '#3b82f6' }
+                                theme: { color: isDark ? '#ffffff' : '#3b82f6' }
                             };
-
+ 
                             RazorpayCheckout.open(options).then(async (data: any) => {
-                                // 3. Verify and Update Wallet
                                 const result = await PaymentService.addMoneyToWallet(user!.id, numAmount, data.razorpay_payment_id);
-
+ 
                                 if (result) {
                                     Alert.alert("Success", `₹${numAmount} added to your wallet!`);
                                     fetchWalletData();
@@ -136,7 +136,7 @@ export default function WalletScreen() {
                                 console.error('Razorpay Error:', error);
                                 Alert.alert(`Error: ${error.code}`, error.description);
                             });
-
+ 
                         } catch (error: any) {
                             Alert.alert("Error", error.message || "Failed to add money");
                         } finally {
@@ -150,272 +150,117 @@ export default function WalletScreen() {
             "number-pad"
         );
     };
-
+ 
     if (loading && !refreshing) {
         return (
-            <View style={styles.center}>
-                <ActivityIndicator size="large" color="#3b82f6" />
-                <Text>Loading Wallet...</Text>
-            </View>
+            <SafeAreaView style={{ gap: spacing.lg }} className="flex-1 bg-white dark:bg-slate-950 justify-center items-center">
+                <ActivityIndicator size="large" color={isDark ? "#ffffff" : "#3b82f6"} />
+                <Text style={{ fontSize: hScale(10) }} className="text-slate-500 dark:text-slate-500 font-black uppercase tracking-widest">Accessing Secure Wallet...</Text>
+            </SafeAreaView>
         );
     }
-
+ 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-                    <Ionicons name="arrow-back" size={24} color="#1f2937" />
+        <SafeAreaView className="flex-1 bg-slate-50 dark:bg-slate-950" edges={['top']}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+            
+            {/* Header */}
+            <View style={{ paddingHorizontal: spacing.xl, paddingVertical: vScale(16), borderBottomWidth: 1 }} className="flex-row items-center justify-between border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-sm z-10">
+                <TouchableOpacity 
+                    onPress={() => router.back()} 
+                    style={{ width: hScale(40), height: hScale(40) }}
+                    className="rounded-full bg-slate-50 dark:bg-slate-900 items-center justify-center active:bg-slate-100 dark:active:bg-slate-800"
+                >
+                    <Ionicons name="arrow-back" size={hScale(24)} color={isDark ? "#f8fafc" : "#1e293b"} />
                 </TouchableOpacity>
-                <Text variant="h3" style={styles.title}>My Wallet</Text>
-                <View style={{ width: 40 }} />
+                <Text style={{ fontSize: fontSize.xl }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter">My Wallet</Text>
+                <View style={{ width: hScale(40) }} />
             </View>
-
+ 
             <ScrollView
-                style={styles.content}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                style={{ flex: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.xl }}
+                contentContainerStyle={{ paddingBottom: vScale(100) }}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={isDark ? "#fff" : "#3b82f6"} />}
                 showsVerticalScrollIndicator={false}
             >
-                <Card style={styles.balanceCard}>
-                    <Text style={styles.balanceLabel}>Current Balance</Text>
-                    <Text style={styles.balanceAmount}>₹{balance?.balance.toFixed(2) || '0.00'}</Text>
-                    <Button
+                {/* Wallet Balance Card */}
+                <Card style={{ padding: spacing.xxl, borderRadius: hScale(40), marginBottom: vScale(32) }} className="bg-slate-900 dark:bg-white items-center shadow-xl shadow-slate-900/10 dark:shadow-none relative overflow-hidden">
+                    <View style={{ width: hScale(128), height: hScale(128), marginRight: hScale(-64), marginTop: vScale(-64) }} className="absolute top-0 right-0 bg-white/5 dark:bg-slate-100/50 rounded-full" />
+                    <Text style={{ fontSize: hScale(10), letterSpacing: 4 }} className="text-slate-400 dark:text-slate-500 font-black uppercase">Verified Balance</Text>
+                    <Text style={{ fontSize: hScale(48), marginTop: vScale(12) }} className="text-white dark:text-slate-900 font-black uppercase tracking-tighter">₹{balance?.balance.toFixed(2) || '0.00'}</Text>
+                    
+                    <TouchableOpacity
                         onPress={handleAddMoney}
-                        size="lg"
-                        className="mt-6 w-full bg-white"
+                        style={{ marginTop: vScale(32), height: vScale(64), borderRadius: hScale(24), gap: spacing.md }}
+                        className="w-full bg-blue-500 dark:bg-slate-900 flex-row items-center justify-center shadow-lg shadow-blue-500/20"
                     >
-                        <Ionicons name="add" size={24} color="#3b82f6" style={{ marginRight: 8 }} />
-                        <Text style={{ color: '#3b82f6', fontWeight: 'bold' }}>Add Money</Text>
-                    </Button>
+                        <Ionicons name="add" size={hScale(24)} color="#ffffff" strokeWidth={3} />
+                        <Text style={{ fontSize: fontSize.base }} className="text-white font-black uppercase tracking-widest">Recharge Wallet</Text>
+                    </TouchableOpacity>
                 </Card>
-
-                <Card style={styles.autoPayCard}>
-                    <View style={styles.autoPayHeader}>
-                        <View>
-                            <Text style={styles.autoPayTitle}>Auto Top-up</Text>
-                            <Text style={styles.autoPaySubtitle}>Automatically add money when balance is low</Text>
+ 
+                {/* Auto Top-up Card */}
+                <Card style={{ padding: spacing.xl, borderRadius: hScale(32), marginBottom: vScale(32), borderWidth: 1 }} className="p-6 bg-white dark:bg-slate-900 shadow-sm border-slate-100/60 dark:border-slate-800">
+                    <View className="flex-row justify-between items-center">
+                        <View style={{ flex: 1, paddingRight: spacing.lg }}>
+                            <Text style={{ fontSize: fontSize.base }} className="font-black text-slate-900 dark:text-white uppercase tracking-tight">Auto Recharge</Text>
+                            <Text style={{ fontSize: fontSize.xs, marginTop: vScale(4) }} className="font-medium text-slate-500 dark:text-slate-500">Smart recharge when balance drops</Text>
                         </View>
-                        <TouchableOpacity
-                            onPress={handleToggleAutoTopUp}
-                            style={[styles.switch, autoTopUp && styles.switchOn]}
-                        >
-                            <View style={[styles.switchHandle, autoTopUp && styles.switchHandleOn]} />
-                        </TouchableOpacity>
+                        <Switch
+                            value={autoTopUp}
+                            onValueChange={handleToggleAutoTopUp}
+                            trackColor={{ false: isDark ? "#1e293b" : "#e2e8f0", true: "#3b82f6" }}
+                            thumbColor={"#ffffff"}
+                        />
                     </View>
-
+ 
                     {autoTopUp && (
-                        <View style={styles.autoPaySettings}>
-                            <View style={styles.divider} />
-                            <View style={styles.settingsRow}>
-                                <Text style={styles.settingsLabel}>When balance is below</Text>
-                                <Text style={styles.settingsValue}>₹{threshold}</Text>
+                        <View style={{ marginTop: vScale(24), paddingTop: vScale(24), borderTopWidth: 1 }} className="border-slate-50 dark:border-slate-800/50">
+                            <View style={{ marginBottom: vScale(16) }} className="flex-row justify-between">
+                                <Text style={{ fontSize: hScale(10) }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">When balance is below</Text>
+                                <Text style={{ fontSize: fontSize.sm }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter">₹{threshold}</Text>
                             </View>
-                            <View style={styles.settingsRow}>
-                                <Text style={styles.settingsLabel}>Add amount</Text>
-                                <Text style={styles.settingsValue}>₹{topUpAmount}</Text>
+                            <View className="flex-row justify-between">
+                                <Text style={{ fontSize: hScale(10) }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Add amount</Text>
+                                <Text style={{ fontSize: fontSize.sm }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter">₹{topUpAmount}</Text>
                             </View>
                         </View>
                     )}
                 </Card>
-
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Transaction History</Text>
+ 
+                {/* Transaction History */}
+                <View style={{ marginBottom: vScale(24), paddingHorizontal: spacing.xs }} className="flex-row justify-between items-center">
+                    <Text style={{ fontSize: hScale(10) }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Active Transactions</Text>
                 </View>
-
+ 
                 {transactions.length === 0 ? (
-                    <View style={styles.emptyState}>
-                        <Ionicons name="receipt-outline" size={48} color="#d1d5db" />
-                        <Text style={styles.emptyText}>No transactions yet</Text>
+                    <View style={{ marginTop: vScale(48), paddingVertical: vScale(40) }} className="items-center opacity-30">
+                        <Ionicons name="receipt-outline" size={hScale(64)} color={isDark ? "#94a3b8" : "#cbd5e1"} />
+                        <Text style={{ fontSize: hScale(10), marginTop: vScale(16) }} className="text-slate-400 dark:text-slate-600 font-black uppercase tracking-widest">No transaction data</Text>
                     </View>
                 ) : (
-                    transactions.map((tx) => (
-                        <View key={tx.id} style={styles.txRow}>
-                            <View style={[styles.txIcon, { backgroundColor: tx.type === 'credit' ? '#dcfce7' : '#fee2e2' }]}>
-                                <Ionicons
-                                    name={tx.type === 'credit' ? 'arrow-down' : 'arrow-up'}
-                                    size={20}
-                                    color={tx.type === 'credit' ? '#16a34a' : '#ef4444'}
-                                />
+                    <View style={{ gap: spacing.md }}>
+                        {transactions.map((tx) => (
+                            <View key={tx.id} style={{ padding: spacing.xl, borderRadius: hScale(28), borderWidth: 1 }} className="flex-row items-center bg-white dark:bg-slate-900 shadow-sm border-slate-100/60 dark:border-slate-800">
+                                <View style={{ width: hScale(48), height: hScale(48), borderRadius: hScale(16) }} className={`justify-center items-center ${tx.type === 'credit' ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20'}`}>
+                                    <Ionicons
+                                        name={tx.type === 'credit' ? 'arrow-down' : 'arrow-up'}
+                                        size={hScale(22)}
+                                        color={tx.type === 'credit' ? '#16a34a' : '#ef4444'}
+                                    />
+                                </View>
+                                <View style={{ flex: 1, marginLeft: spacing.xl, paddingRight: spacing.sm }}>
+                                    <Text style={{ fontSize: fontSize.sm }} className="font-bold text-slate-800 dark:text-slate-200 tracking-tight" numberOfLines={1}>{tx.description}</Text>
+                                    <Text style={{ fontSize: hScale(10), marginTop: vScale(4) }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{new Date(tx.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</Text>
+                                </View>
+                                <Text style={{ fontSize: fontSize.base }} className={`font-black uppercase tracking-tighter ${tx.type === 'credit' ? 'text-green-600' : 'text-red-500'}`}>
+                                    {tx.type === 'credit' ? '+' : '-'} ₹{tx.amount.toFixed(2)}
+                                </Text>
                             </View>
-                            <View style={styles.txDetails}>
-                                <Text style={styles.txDesc}>{tx.description}</Text>
-                                <Text style={styles.txDate}>{new Date(tx.created_at).toLocaleDateString()}</Text>
-                            </View>
-                            <Text style={[styles.txAmount, { color: tx.type === 'credit' ? '#16a34a' : '#ef4444' }]}>
-                                {tx.type === 'credit' ? '+' : '-'} ₹{tx.amount.toFixed(2)}
-                            </Text>
-                        </View>
-                    ))
+                        ))}
+                    </View>
                 )}
             </ScrollView>
         </SafeAreaView>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#f9fafb',
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        backgroundColor: 'white',
-        borderBottomWidth: 1,
-        borderBottomColor: '#e5e7eb',
-    },
-    backBtn: {
-        padding: 4,
-    },
-    title: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    content: {
-        flex: 1,
-        padding: 16,
-    },
-    balanceCard: {
-        backgroundColor: '#3b82f6',
-        padding: 24,
-        borderRadius: 24,
-        alignItems: 'center',
-        marginBottom: 24,
-    },
-    balanceLabel: {
-        color: 'rgba(255,255,255,0.8)',
-        fontSize: 14,
-        fontWeight: '500',
-    },
-    balanceAmount: {
-        color: 'white',
-        fontSize: 40,
-        fontWeight: 'bold',
-        marginTop: 8,
-    },
-    sectionHeader: {
-        marginBottom: 16,
-    },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    txRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'white',
-        padding: 16,
-        borderRadius: 16,
-        marginBottom: 12,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-        elevation: 1,
-    },
-    txIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    txDetails: {
-        flex: 1,
-        marginLeft: 12,
-    },
-    txDesc: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#1f2937',
-    },
-    txDate: {
-        fontSize: 12,
-        color: '#6b7280',
-        marginTop: 2,
-    },
-    txAmount: {
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-    center: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: 12,
-    },
-    emptyState: {
-        alignItems: 'center',
-        marginTop: 40,
-        gap: 12,
-    },
-    emptyText: {
-        color: '#9ca3af',
-        fontSize: 14,
-    },
-    autoPayCard: {
-        padding: 20,
-        borderRadius: 20,
-        marginBottom: 24,
-    },
-    autoPayHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    autoPayTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    autoPaySubtitle: {
-        fontSize: 12,
-        color: '#6b7280',
-        marginTop: 2,
-    },
-    switch: {
-        width: 50,
-        height: 28,
-        borderRadius: 14,
-        backgroundColor: '#e5e7eb',
-        padding: 2,
-    },
-    switchOn: {
-        backgroundColor: '#3b82f6',
-    },
-    switchHandle: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        backgroundColor: 'white',
-    },
-    switchHandleOn: {
-        transform: [{ translateX: 22 }],
-    },
-    autoPaySettings: {
-        marginTop: 16,
-    },
-    divider: {
-        height: 1,
-        backgroundColor: '#f3f4f6',
-        marginBottom: 16,
-    },
-    settingsRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 8,
-    },
-    settingsLabel: {
-        fontSize: 14,
-        color: '#4b5563',
-    },
-    settingsValue: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#1f2937',
-    }
-});

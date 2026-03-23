@@ -1,23 +1,27 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Modal, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { Text } from '@/components/ui/text';
 import { Ionicons } from '@expo/vector-icons';
 import { ReceiptService } from '@/services/ReceiptService';
 import { logger } from '@/services/LoggerService';
-
+import { useTheme } from '@/contexts/ThemeContext';
+import { useResponsive } from '@/hooks/useResponsive';
+ 
 interface FareBreakdownModalProps {
     visible: boolean;
     onClose: () => void;
     trip: any; // Using any for flexibility with booking/trip objects
     booking?: any;
 }
-
+ 
 export function FareBreakdownModal({ visible, onClose, trip, booking }: FareBreakdownModalProps) {
+    const { theme, isDark } = useTheme();
+    const { hScale, vScale, spacing } = useResponsive();
+ 
     if (!visible) return null;
-
+ 
     // Calculate generic values if booking not provided (e.g. for driver view)
-    // Driver view might need total earnings, but for now let's focus on passenger receipt
     const seats = booking?.seats_booked || 1;
-    // Total amount should be consistent with what was paid
     const subtotal = (booking?.total_amount || 0) / (booking?.surge_multiplier || 1);
     const baseFare = booking?.fare_breakdown?.base_fare || (parseFloat(trip.price_per_seat) * seats);
     const distanceFare = booking?.fare_breakdown?.distance_fare || 0;
@@ -27,7 +31,7 @@ export function FareBreakdownModal({ visible, onClose, trip, booking }: FareBrea
     const discount = booking?.discount_amount || 0;
     const totalAmount = booking ? parseFloat(booking.total_amount) : (baseFare + distanceFare + surgeCharge + taxes + platformFee);
     const [isSharing, setIsSharing] = useState(false);
-
+ 
     const handleShare = async () => {
         if (!booking?.id) return;
         setIsSharing(true);
@@ -42,7 +46,7 @@ export function FareBreakdownModal({ visible, onClose, trip, booking }: FareBrea
             setIsSharing(false);
         }
     };
-
+ 
     return (
         <Modal
             animationType="slide"
@@ -50,85 +54,104 @@ export function FareBreakdownModal({ visible, onClose, trip, booking }: FareBrea
             visible={visible}
             onRequestClose={onClose}
         >
-            <View style={styles.centeredView}>
-                <View style={styles.modalView}>
-                    <View style={styles.header}>
-                        <Text style={styles.modalText}>Ride Receipt</Text>
-                        <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                            <Ionicons name="close" size={24} color="#1f2937" />
+            <View style={{ flex: 1, justifyContent: 'flex-end' }} className="bg-black/60">
+                <View style={{ height: '85%', borderTopLeftRadius: hScale(40), borderTopRightRadius: hScale(40), padding: hScale(32), borderTopWidth: 1 }} className="bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-xl">
+                    <View style={{ width: hScale(48), height: vScale(6), borderRadius: hScale(3), marginBottom: vScale(32) }} className="bg-slate-100 dark:bg-slate-800 self-center" />
+                    
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: vScale(32) }}>
+                        <Text style={{ fontSize: hScale(24) }} className="font-black text-slate-900 dark:text-white">Ride Receipt</Text>
+                        <TouchableOpacity 
+                            onPress={onClose} 
+                            style={{ width: hScale(40), height: hScale(40), borderRadius: hScale(20) }}
+                            className="bg-slate-100 dark:bg-slate-800 items-center justify-center"
+                        >
+                            <Ionicons name="close" size={hScale(24)} color={isDark ? "#94a3b8" : "#475569"} />
                         </TouchableOpacity>
                     </View>
-
-                    <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                        <View style={styles.tripSummary}>
-                            <Text style={styles.receiptId}>Receipt ID: #SYGO-{trip.id.slice(0, 8).toUpperCase()}</Text>
-                            <Text style={styles.date}>{new Date(trip.departure_time || trip.created_at).toLocaleString()}</Text>
+ 
+                    <ScrollView showsVerticalScrollIndicator={false}>
+                        <View style={{ marginBottom: vScale(32) }}>
+                            <Text style={{ fontSize: hScale(10), marginBottom: vScale(6) }} className="font-black text-slate-400 dark:text-slate-600 uppercase tracking-[2px]">Receipt ID: #SYGO-{trip.id.slice(0, 8).toUpperCase()}</Text>
+                            <Text style={{ fontSize: hScale(14) }} className="font-bold text-slate-600 dark:text-slate-300">{new Date(trip.departure_time || trip.created_at).toLocaleString(undefined, { dateStyle: 'long', timeStyle: 'short' })}</Text>
                         </View>
-
-                        <View style={styles.routeContainer}>
-                            <View style={styles.locationRow}>
-                                <Ionicons name="radio-button-on" size={16} color="#3b82f6" />
-                                <Text style={styles.locationText} numberOfLines={1}>{trip.pickup_location}</Text>
+ 
+                        <View style={{ borderRadius: hScale(24), padding: hScale(24), marginBottom: vScale(32), borderWidth: 1 }} className="bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800/50">
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(16) }}>
+                                <View style={{ width: hScale(20), height: hScale(20), borderRadius: hScale(10) }} className="bg-blue-500/10 items-center justify-center">
+                                    <View style={{ width: hScale(10), height: hScale(10), borderRadius: hScale(5) }} className="bg-blue-500" />
+                                </View>
+                                <Text style={{ fontSize: hScale(14) }} className="font-bold text-slate-900 dark:text-white flex-1" numberOfLines={1}>{trip.pickup_location}</Text>
                             </View>
-                            <View style={styles.connector} />
-                            <View style={styles.locationRow}>
-                                <Ionicons name="location" size={16} color="#ef4444" />
-                                <Text style={styles.locationText} numberOfLines={1}>{trip.drop_location}</Text>
+                            <View style={{ width: hScale(2), height: vScale(24), marginLeft: hScale(10), marginVertical: vScale(4) }} className="bg-slate-200 dark:bg-slate-700" />
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(16) }}>
+                                <View style={{ width: hScale(20), height: hScale(20), borderRadius: hScale(10) }} className="bg-rose-500/10 items-center justify-center">
+                                    <View style={{ width: hScale(10), height: hScale(10), borderRadius: hScale(5) }} className="bg-rose-500" />
+                                </View>
+                                <Text style={{ fontSize: hScale(14) }} className="font-bold text-slate-900 dark:text-white flex-1" numberOfLines={1}>{trip.drop_location}</Text>
                             </View>
                         </View>
-
-                        <View style={styles.divider} />
-
-                        <View style={styles.priceBreakdown}>
-                            <Text style={styles.sectionTitle}>Fare Breakdown</Text>
-                            <View style={styles.row}>
-                                <Text style={styles.label}>Ride Fare ({seats} seat{seats > 1 ? 's' : ''})</Text>
-                                <Text style={styles.value}>₹{baseFare.toFixed(2)}</Text>
+ 
+                        <View style={{ height: 1, marginBottom: vScale(32) }} className="bg-slate-100 dark:bg-slate-800" />
+ 
+                        <View style={{ marginBottom: vScale(32) }}>
+                            <Text style={{ fontSize: hScale(12), marginBottom: vScale(24) }} className="font-black text-slate-400 dark:text-slate-600 uppercase tracking-widest">Fare Breakdown</Text>
+                            
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: vScale(16) }}>
+                                <Text style={{ fontSize: hScale(14) }} className="font-medium text-slate-500 dark:text-slate-400">Ride Fare ({seats} seat{seats > 1 ? 's' : ''})</Text>
+                                <Text style={{ fontSize: hScale(14) }} className="font-black text-slate-900 dark:text-white">₹{baseFare.toFixed(2)}</Text>
                             </View>
+ 
                             {distanceFare > 0 && (
-                                <View style={styles.row}>
-                                    <Text style={styles.label}>Distance Fare</Text>
-                                    <Text style={styles.value}>₹{distanceFare.toFixed(2)}</Text>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: vScale(16) }}>
+                                    <Text style={{ fontSize: hScale(14) }} className="font-medium text-slate-500 dark:text-slate-400">Distance Fare</Text>
+                                    <Text style={{ fontSize: hScale(14) }} className="font-black text-slate-900 dark:text-white">₹{distanceFare.toFixed(2)}</Text>
                                 </View>
                             )}
+ 
                             {surgeCharge > 0 && (
-                                <View style={styles.row}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                        <Ionicons name="flash" size={14} color="#f59e0b" style={{ marginRight: 4 }} />
-                                        <Text style={[styles.label, { color: '#d97706' }]}>Surge Pricing</Text>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: vScale(16) }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(6) }}>
+                                        <Ionicons name="flash" size={hScale(14)} color="#f59e0b" />
+                                        <Text style={{ fontSize: hScale(14) }} className="font-black text-amber-500">Surge Pricing</Text>
                                     </View>
-                                    <Text style={[styles.value, { color: '#d97706' }]}>₹{surgeCharge.toFixed(2)}</Text>
+                                    <Text style={{ fontSize: hScale(14) }} className="font-black text-amber-500">₹{surgeCharge.toFixed(2)}</Text>
                                 </View>
                             )}
-                            <View style={styles.row}>
-                                <Text style={styles.label}>Taxes & Fees</Text>
-                                <Text style={styles.value}>₹{(taxes + platformFee).toFixed(2)}</Text>
+ 
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: vScale(16) }}>
+                                <Text style={{ fontSize: hScale(14) }} className="font-medium text-slate-500 dark:text-slate-400">Taxes & Fees</Text>
+                                <Text style={{ fontSize: hScale(14) }} className="font-black text-slate-900 dark:text-white">₹{(taxes + platformFee).toFixed(2)}</Text>
                             </View>
-
+ 
                             {discount > 0 && (
-                                <View style={styles.row}>
-                                    <Text style={[styles.label, { color: '#059669' }]}>Promotion/Discount</Text>
-                                    <Text style={[styles.value, { color: '#059669' }]}>-₹{parseFloat(discount.toString()).toFixed(2)}</Text>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: vScale(16) }}>
+                                    <Text style={{ fontSize: hScale(14) }} className="font-black text-emerald-500">Promotion/Discount</Text>
+                                    <Text style={{ fontSize: hScale(14) }} className="font-black text-emerald-500">-₹{parseFloat(discount.toString()).toFixed(2)}</Text>
                                 </View>
                             )}
-
-                            <View style={[styles.row, styles.totalRow]}>
+ 
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, paddingTop: vScale(24), marginTop: vScale(8) }} className="border-slate-100 dark:border-slate-800">
                                 <View>
-                                    <Text style={styles.totalLabel}>Total Amount</Text>
-                                    <Text style={styles.paymentMethod}>Paid via {booking?.payment_method?.toUpperCase() || 'WALLET'}</Text>
+                                    <Text style={{ fontSize: hScale(20) }} className="font-black text-slate-900 dark:text-white">Total Amount</Text>
+                                    <Text style={{ fontSize: Math.max(8, hScale(10)), marginTop: vScale(4) }} className="font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Paid via {booking?.payment_method?.toUpperCase() || 'WALLET'}</Text>
                                 </View>
-                                <Text style={styles.totalValue}>₹{totalAmount.toFixed(2)}</Text>
+                                <Text style={{ fontSize: hScale(30) }} className="font-black text-blue-600 dark:text-blue-400">₹{totalAmount.toFixed(2)}</Text>
                             </View>
                         </View>
-
-                        <View style={styles.securityBox}>
-                            <Ionicons name="shield-checkmark" size={20} color="#059669" />
-                            <Text style={styles.securityText}>This is a computer-generated receipt and doesn't require a signature.</Text>
+ 
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(16), padding: hScale(20), borderRadius: hScale(16), marginBottom: vScale(40), borderWidth: 1 }} className="bg-emerald-50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-900/20">
+                            <View style={{ width: hScale(40), height: hScale(40), borderRadius: hScale(20) }} className="bg-emerald-100 dark:bg-emerald-900/30 items-center justify-center">
+                                <Ionicons name="shield-checkmark" size={hScale(24)} color="#10b981" />
+                            </View>
+                            <Text style={{ fontSize: hScale(12), lineHeight: vScale(16) }} className="text-emerald-700 dark:text-emerald-400 flex-1 font-medium">This is a computer-generated receipt and doesn't require a signature.</Text>
                         </View>
                     </ScrollView>
-
+ 
                     <TouchableOpacity
-                        style={[styles.downloadBtn, (!booking?.id || isSharing) && styles.downloadBtnDisabled]}
+                        style={{ height: vScale(64), borderRadius: hScale(16), gap: hScale(12) }}
+                        className={`bg-blue-600 active:bg-blue-700 flex-row items-center justify-center shadow-lg ${
+                            !booking?.id || isSharing ? 'opacity-50 shadow-none' : 'shadow-blue-500/20'
+                        }`}
                         onPress={handleShare}
                         disabled={!booking?.id || isSharing}
                     >
@@ -136,8 +159,8 @@ export function FareBreakdownModal({ visible, onClose, trip, booking }: FareBrea
                             <ActivityIndicator color="white" size="small" />
                         ) : (
                             <>
-                                <Ionicons name="share-outline" size={20} color="white" />
-                                <Text style={styles.downloadText}>Share Receipt</Text>
+                                <Ionicons name="share-outline" size={hScale(24)} color="white" />
+                                <Text style={{ fontSize: hScale(18) }} className="text-white font-black">Share Receipt</Text>
                             </>
                         )}
                     </TouchableOpacity>
@@ -146,173 +169,5 @@ export function FareBreakdownModal({ visible, onClose, trip, booking }: FareBrea
         </Modal>
     );
 }
-
-const styles = StyleSheet.create({
-    centeredView: {
-        flex: 1,
-        justifyContent: 'flex-end',
-        backgroundColor: 'rgba(0,0,0,0.6)',
-    },
-    modalView: {
-        backgroundColor: 'white',
-        borderTopLeftRadius: 28,
-        borderTopRightRadius: 28,
-        padding: 24,
-        height: '80%',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 10,
-        elevation: 20,
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 24,
-    },
-    modalText: {
-        fontSize: 22,
-        fontWeight: '800',
-        color: '#1f2937',
-    },
-    closeBtn: {
-        backgroundColor: '#f3f4f6',
-        borderRadius: 20,
-        padding: 8,
-    },
-    content: {
-        flex: 1,
-    },
-    tripSummary: {
-        marginBottom: 24,
-    },
-    receiptId: {
-        fontSize: 12,
-        fontWeight: 'bold',
-        color: '#9ca3af',
-        letterSpacing: 1,
-        marginBottom: 4,
-    },
-    date: {
-        color: '#4b5563',
-        fontSize: 14,
-        fontWeight: '500',
-    },
-    routeContainer: {
-        backgroundColor: '#f9fafb',
-        borderRadius: 16,
-        padding: 16,
-        marginBottom: 24,
-    },
-    locationRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    locationText: {
-        fontSize: 14,
-        color: '#1f2937',
-        fontWeight: '500',
-        flex: 1,
-    },
-    connector: {
-        width: 2,
-        height: 16,
-        backgroundColor: '#e5e7eb',
-        marginLeft: 7,
-        marginVertical: 4,
-    },
-    divider: {
-        height: 1,
-        backgroundColor: '#f3f4f6',
-        marginBottom: 24,
-    },
-    priceBreakdown: {
-        marginBottom: 24,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#1f2937',
-        marginBottom: 16,
-    },
-    row: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 14,
-    },
-    label: {
-        color: '#6b7280',
-        fontSize: 14,
-        fontWeight: '500',
-    },
-    value: {
-        color: '#1f2937',
-        fontSize: 15,
-        fontWeight: '600',
-    },
-    totalRow: {
-        borderTopWidth: 1,
-        borderTopColor: '#f3f4f6',
-        paddingTop: 20,
-        marginTop: 6,
-        alignItems: 'center',
-    },
-    totalLabel: {
-        fontSize: 18,
-        fontWeight: '800',
-        color: '#1f2937',
-    },
-    paymentMethod: {
-        fontSize: 12,
-        color: '#9ca3af',
-        fontWeight: '600',
-        marginTop: 2,
-    },
-    totalValue: {
-        fontSize: 24,
-        fontWeight: '900',
-        color: '#3b82f6',
-    },
-    securityBox: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        backgroundColor: '#f0fdf4',
-        padding: 16,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#dcfce7',
-        marginBottom: 24,
-    },
-    securityText: {
-        fontSize: 12,
-        color: '#166534',
-        fontWeight: '500',
-        flex: 1,
-    },
-    downloadBtn: {
-        backgroundColor: '#3b82f6',
-        height: 56,
-        borderRadius: 16,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 10,
-        shadowColor: '#3b82f6',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 10,
-    },
-    downloadBtnDisabled: {
-        backgroundColor: '#9ca3af',
-        shadowColor: 'transparent',
-    },
-    downloadText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-});
+ 
+const styles = StyleSheet.create({});

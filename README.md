@@ -195,10 +195,10 @@ The app will be available at http://localhost:5000
 
 4. Go to **Authentication** → **Settings**
 5. Configure:
-   - **Site URL**: `http://localhost:5173` (development) or production URL
+   - **Site URL**: `http://localhost:5000` (development) or production URL
    - **Redirect URLs**: Add allowed URLs:
      ```
-     http://localhost:5173/**
+     http://localhost:5000/**
      http://localhost:5000/**
      https://your-production-domain.com/**
      ```

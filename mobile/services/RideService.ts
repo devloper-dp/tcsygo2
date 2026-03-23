@@ -66,10 +66,9 @@ export const RideService = {
      */
     getRecentRides: async (userId: string, limit = 1): Promise<Ride[]> => {
         const { data, error } = await supabase
-            .from('trips')
+            .from('bookings')
             .select('*')
-            .eq('passenger_id', userId) // Assuming there's a join table or column, adjusting to schema standard
-            // Note: Schema might vary, standardizing on 'trips' table for now based on previous file reads
+            .eq('passenger_id', userId)
             .order('created_at', { ascending: false })
             .limit(limit);
 
@@ -95,11 +94,11 @@ export const RideService = {
         const distanceKm = distanceResult.distance / 1000;
         const durationMins = distanceResult.duration / 60;
 
-        // Base rates by vehicle type
+        // Base rates by vehicle type (Matching Client Defaults)
         const baseRates = {
-            bike: { base: 25, perKm: 14, perMin: 2 },
-            auto: { base: 35, perKm: 18, perMin: 2.5 },
-            car: { base: 60, perKm: 24, perMin: 3 },
+            bike: { base: 20, perKm: 8, perMin: 1, minFare: 30 },
+            auto: { base: 30, perKm: 12, perMin: 1.5, minFare: 50 },
+            car: { base: 50, perKm: 15, perMin: 2, minFare: 80 },
         };
 
         const rates = baseRates[vehicleType];
@@ -112,20 +111,25 @@ export const RideService = {
         const surgeData = await SurgePricingService.getSurgeMultiplier(pickup.lat, pickup.lng);
         const surgeMultiplier = surgeData.multiplier;
 
-        const subtotal = baseFare + distanceFare + timeFare;
+        let subtotal = baseFare + distanceFare + timeFare;
+
+        // Apply minimum fare
+        if (subtotal < rates.minFare) {
+            subtotal = rates.minFare;
+        }
+
         const surgeCharge = subtotal * (surgeMultiplier - 1);
+        const totalWithSurge = subtotal * surgeMultiplier;
 
-        // Standard convenience fee
-        const convenienceFee = 10;
+        // Fees (Matching Client: 5% platform, 5% GST)
+        const platformFee = totalWithSurge * 0.05;
+        const gst = (totalWithSurge + platformFee) * 0.05;
 
-        const taxableAmount = subtotal + surgeCharge + convenienceFee;
-        const taxes = taxableAmount * 0.18; // 18% GST
-
-        const total = taxableAmount + taxes;
+        const total = Math.round(totalWithSurge + platformFee + gst);
 
         return {
             basePrice: Math.round(baseFare),
-            estimatedPrice: Math.round(total),
+            estimatedPrice: total,
             currency: 'INR',
             surgeMultiplier,
             surgeReason: surgeData.reason,
@@ -136,9 +140,9 @@ export const RideService = {
                 distanceFare: Math.round(distanceFare),
                 timeFare: Math.round(timeFare),
                 surgeCharge: Math.round(surgeCharge),
-                convenienceFee: Math.round(convenienceFee),
-                taxes: Math.round(taxes),
-                total: Math.round(total),
+                convenienceFee: Math.round(platformFee), // Mapping platform fee to convenience
+                taxes: Math.round(gst),
+                total: total,
             },
         };
     },
@@ -184,11 +188,62 @@ export const RideService = {
     },
 
     /**
-     * Book a new ride
+     * Create a new ride request (Matching Client Logic)
+     */
+    createRideRequest: async (params: {
+        pickupLocation: string;
+        pickupCoords: { lat: number; lng: number };
+        dropLocation: string;
+        dropCoords: { lat: number; lng: number };
+        vehicleType: 'bike' | 'auto' | 'car';
+        fare: number;
+        distance: number;
+        duration: number;
+        preferences?: any;
+        promoCode?: string;
+        discountAmount?: number;
+    }) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('User not authenticated');
+
+        const timeoutMinutes = 5;
+        const timeoutAt = new Date(Date.now() + timeoutMinutes * 60 * 1000).toISOString();
+
+        const { data, error } = await supabase
+            .from('ride_requests')
+            .insert({
+                passenger_id: user.id,
+                pickup_location: params.pickupLocation,
+                pickup_lat: params.pickupCoords.lat,
+                pickup_lng: params.pickupCoords.lng,
+                drop_location: params.dropLocation,
+                drop_lat: params.dropCoords.lat,
+                drop_lng: params.dropCoords.lng,
+                vehicle_type: params.vehicleType,
+                fare: params.fare,
+                distance: params.distance,
+                duration: params.duration,
+                status: 'searching',
+                preferences: params.preferences || {},
+                promo_code: params.promoCode,
+                discount_amount: params.discountAmount || 0,
+                search_radius: 5000,
+                timeout_at: timeoutAt,
+            })
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data;
+    },
+
+    /**
+     * Book a ride (Legacy/Direct Booking - Deprecated for On-Demand)
+     * Kept for compatibility if used elsewhere, but typically we use createRideRequest now.
      */
     bookRide: async (bookingDetails: Partial<Ride>) => {
         const { data, error } = await supabase
-            .from('bookings') // Standardizing on 'bookings' for all ride types
+            .from('bookings')
             .insert([{
                 ...bookingDetails,
                 status: 'pending',
@@ -485,5 +540,191 @@ export const RideService = {
             supabase.removeChannel(channel);
         };
     },
-};
 
+    /**
+     * Accept a ride request (Driver Side)
+     * Handles atomic locking, booking creation, and pooling logic
+     */
+    acceptRequest: async (request: any, driverId: string): Promise<{ id: string }> => {
+        try {
+            // 1. ATOMIC LOCK: Try to set status to 'accepted' first
+            const { data: updatedRequest, error: updateError } = await supabase
+                .from('ride_requests')
+                .update({
+                    status: 'accepted',
+                    driver_id: driverId
+                })
+                .eq('id', request.id)
+                .in('status', ['pending', 'searching']) // Only update if it's still pending
+                .select()
+                .single();
+
+            if (updateError || !updatedRequest) {
+                throw new Error("Ride is no longer available (taken by another driver)");
+            }
+
+            try {
+                // 2. Create Booking Record
+                const { data: booking, error: bookingError } = await supabase
+                    .from('bookings')
+                    .insert({
+                        passenger_id: request.passengerId,
+                        driver_id: driverId,
+                        seats_booked: request.seats || 1,
+                        total_amount: request.fare,
+                        status: 'confirmed',
+                        pickup_location: request.pickupLocation,
+                        pickup_lat: request.pickupLat,
+                        pickup_lng: request.pickupLng,
+                        drop_location: request.dropLocation,
+                        drop_lat: request.dropLat,
+                        drop_lng: request.dropLng
+                    })
+                    .select()
+                    .single();
+
+                if (bookingError) throw bookingError;
+
+                // 3. Check for existing active trip for this driver (POOLING)
+                let tripId;
+                const { data: activeTrip } = await supabase
+                    .from('trips')
+                    .select('id, available_seats, pickup_lat, pickup_lng, drop_lat, drop_lng, bookings(drop_lat, drop_lng, status)')
+                    .eq('driver_id', driverId)
+                    .eq('status', 'ongoing')
+                    .gt('available_seats', 0)
+                    .maybeSingle();
+
+                if (activeTrip) {
+                    // 3a. Deviation Check (Advanced Routing)
+                    const { locationTrackingService } = await import('@/lib/location-tracking');
+                    const { calculateDetour } = await import('@/lib/maps');
+
+                    // Get current driver location
+                    const driverLoc = await locationTrackingService.getCurrentLocation(activeTrip.id);
+                    const startCoord = driverLoc ? { lat: driverLoc.lat, lng: driverLoc.lng } : { lat: Number(activeTrip.pickup_lat), lng: Number(activeTrip.pickup_lng) };
+
+                    // Get existing drops from bookings (waypoints)
+                    const bookings = (activeTrip.bookings || []).filter((b: any) => b.status === 'confirmed');
+                    const currentWaypoints = bookings.map((b: any) => ({ lat: Number(b.drop_lat), lng: Number(b.drop_lng) }));
+
+                    // New stops to add
+                    const newStops = [
+                        { lat: Number(request.pickupLat), lng: Number(request.pickupLng) },
+                        { lat: Number(request.dropLat), lng: Number(request.dropLng) }
+                    ];
+
+                    const detour = await calculateDetour(
+                        startCoord,
+                        { lat: Number(activeTrip.drop_lat), lng: Number(activeTrip.drop_lng) }, // Trip end
+                        currentWaypoints,
+                        newStops
+                    );
+
+                    // THRESHOLD: 15 minutes max detour
+                    if (detour.detourDuration > 15) {
+                        throw new Error(`Detour too large (+${Math.round(detour.detourDuration)} mins). Cannot pool.`);
+                    }
+
+                    // reuse existing trip
+                    tripId = activeTrip.id;
+
+                    // Update seats AND ROUTE so checking clients see the new path
+                    await supabase.from('trips')
+                        .update({
+                            available_seats: activeTrip.available_seats - 1,
+                            route: detour.geometry
+                        })
+                        .eq('id', tripId);
+
+                } else {
+                    // Create New Trip
+                    const { data: trip, error: tripError } = await supabase
+                        .from('trips')
+                        .insert({
+                            driver_id: driverId,
+                            booking_id: booking.id, // Primary booking
+                            pickup_location: request.pickupLocation,
+                            pickup_lat: request.pickupLat,
+                            pickup_lng: request.pickupLng,
+                            drop_location: request.dropLocation,
+                            drop_lat: request.dropLat,
+                            drop_lng: request.dropLng,
+                            departure_time: new Date().toISOString(),
+                            distance: request.distance,
+                            duration: request.duration,
+                            price_per_seat: request.fare,
+                            available_seats: 3.0, // Assuming 4 seater - 1
+                            total_seats: 4,
+                            status: 'ongoing',
+                            preferences: {},
+                        })
+                        .select()
+                        .single();
+
+                    if (tripError) throw tripError;
+                    tripId = trip.id;
+                }
+
+                // 4. Update Booking with Trip ID
+                const { error: updateBookingError } = await supabase
+                    .from('bookings')
+                    .update({ trip_id: tripId })
+                    .eq('id', booking.id);
+
+                if (updateBookingError) throw updateBookingError;
+
+                // 5. Update Request with Trip ID (Link it back)
+                const { error: reqError } = await supabase
+                    .from('ride_requests')
+                    .update({
+                        trip_id: tripId
+                    })
+                    .eq('id', request.id);
+
+                if (reqError) throw reqError;
+
+                // 6. Send Notification to Passenger
+                await supabase.from('notifications').insert({
+                    user_id: request.passengerId,
+                    title: 'Ride Accepted',
+                    message: 'A driver has accepted your ride!',
+                    type: 'booking',
+                    data: { tripId: tripId, driverId: driverId },
+                    is_read: false
+                });
+
+                // 7. Cleanup other requests (optional/best effort)
+                try {
+                    await supabase
+                        .from('ride_requests')
+                        .update({
+                            status: 'cancelled',
+                            cancellation_reason: 'Auto-cancelled due to other request acceptance'
+                        })
+                        .eq('passenger_id', request.passengerId)
+                        .neq('id', request.id)
+                        .in('status', ['pending', 'searching']);
+                } catch (cleanupError) {
+                    console.error("Non-fatal error cleaning up sibling requests", cleanupError);
+                }
+
+                return { id: tripId };
+
+            } catch (error) {
+                // Rollback: If anything fails after "locking" the request, we should try to release it
+                console.error("Error during trip creation, rolling back request status...", error);
+                await supabase
+                    .from('ride_requests')
+                    .update({ status: 'pending', driver_id: null })
+                    .eq('id', request.id)
+                    .eq('driver_id', driverId);
+
+                throw error;
+            }
+        } catch (error: any) {
+            logger.error('Error accepting request:', error);
+            throw error;
+        }
+    }
+};

@@ -1,104 +1,55 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, TouchableOpacity, StatusBar } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
-import { Ionicons } from '@expo/vector-icons';
+import { AlertCircle, RefreshCcw, X } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Animated, { FadeIn, SlideInUp } from 'react-native-reanimated';
-
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useResponsive } from '@/hooks/useResponsive';
+ 
 export default function PaymentFailureScreen() {
     const router = useRouter();
     const { bookingId, error } = useLocalSearchParams();
-
+    const { theme, isDark } = useTheme();
+    const { hScale, vScale, spacing } = useResponsive();
+ 
     return (
-        <View style={styles.container}>
-            <Animated.View entering={SlideInUp} style={styles.card}>
-                <View style={styles.iconContainer}>
-                    <Ionicons name="alert-circle" size={80} color="#ef4444" />
-                </View>
-
-                <Text variant="h2" style={styles.title}>Payment Failed</Text>
-                <Text style={styles.message}>
-                    We couldn't process your payment for booking #{bookingId?.toString().slice(0, 8)}.
-                    {error ? `\n\nError: ${error}` : ''}
-                </Text>
-
-                <View style={styles.divider} />
-
-                <Button
-                    style={styles.button}
-                    onPress={() => router.replace(`/payment/${bookingId}`)}
-                >
-                    <Text style={styles.buttonText}>Try Again</Text>
-                </Button>
-
-                <TouchableOpacity
-                    style={styles.homeButton}
-                    onPress={() => router.replace('/(tabs)')}
-                >
-                    <Text style={styles.homeButtonText}>Back to Home</Text>
-                </TouchableOpacity>
-            </Animated.View>
+        <View className="flex-1 bg-red-50 dark:bg-slate-950">
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={isDark ? "#020617" : "#fef2f2"} />
+            <SafeAreaView style={{ flex: 1, justifyContent: 'center', padding: spacing.xl }}>
+ 
+                <Animated.View entering={SlideInUp} style={{ padding: spacing.xl, borderRadius: hScale(40), alignItems: 'center', borderWidth: 1 }} className="bg-white dark:bg-slate-900 shadow-2xl shadow-red-500/10 border-slate-100 dark:border-slate-800">
+                    <View style={{ width: hScale(96), height: hScale(96), borderRadius: hScale(48), borderWidth: 8, marginBottom: vScale(32) }} className="bg-red-100 dark:bg-red-900/20 items-center justify-center border-red-50 dark:border-red-900/10">
+                        <X size={hScale(48)} color="#ef4444" strokeWidth={4} />
+                    </View>
+ 
+                    <Text style={{ fontSize: hScale(30), marginBottom: vScale(12) }} className="font-black text-slate-900 dark:text-white text-center uppercase tracking-tighter">Payment Failed</Text>
+                    <Text style={{ fontSize: hScale(14), lineHeight: vScale(24), marginBottom: vScale(40), paddingHorizontal: hScale(8) }} className="text-center text-slate-500 dark:text-slate-400 font-medium">
+                        We couldn't process your payment. Please try again or use a different payment method.
+                        {error ? `\n\nError: ${error}` : ''}
+                    </Text>
+ 
+                    <Button
+                        style={{ width: '100%', height: vScale(64), borderRadius: hScale(24), marginBottom: vScale(16) }}
+                        className="bg-red-500 shadow-xl shadow-red-500/20 flex-row justify-center items-center"
+                        onPress={() => router.replace(`/payment/${bookingId}`)}
+                    >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(12) }}>
+                            <RefreshCcw size={hScale(20)} color="white" strokeWidth={3} />
+                            <Text style={{ fontSize: hScale(14) }} className="text-white font-black uppercase tracking-widest">Try Again</Text>
+                        </View>
+                    </Button>
+ 
+                    <TouchableOpacity
+                        style={{ paddingVertical: vScale(16), marginTop: vScale(8) }}
+                        onPress={() => router.replace('/')}
+                    >
+                        <Text style={{ fontSize: hScale(10) }} className="text-slate-400 dark:text-slate-600 font-black uppercase tracking-widest">Cancel & Go Home</Text>
+                    </TouchableOpacity>
+                </Animated.View>
+            </SafeAreaView>
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#f9fafb',
-        justifyContent: 'center',
-        padding: 20,
-    },
-    card: {
-        backgroundColor: 'white',
-        borderRadius: 24,
-        padding: 32,
-        alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 5,
-    },
-    iconContainer: {
-        marginBottom: 24,
-    },
-    title: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#1f2937',
-        marginBottom: 12,
-    },
-    message: {
-        textAlign: 'center',
-        color: '#6b7280',
-        lineHeight: 20,
-        marginBottom: 32,
-    },
-    divider: {
-        width: '100%',
-        height: 1,
-        backgroundColor: '#f3f4f6',
-        marginBottom: 24,
-    },
-    button: {
-        width: '100%',
-        height: 52,
-        marginBottom: 12,
-        backgroundColor: '#ef4444',
-    },
-    buttonText: {
-        color: 'white',
-        fontWeight: 'bold',
-        fontSize: 16,
-    },
-    homeButton: {
-        padding: 12,
-    },
-    homeButtonText: {
-        color: '#6b7280',
-        fontWeight: '600',
-        fontSize: 14,
-    }
-});

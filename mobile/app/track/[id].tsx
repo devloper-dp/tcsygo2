@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Share, Linking } from 'react-native';
+import { View, TouchableOpacity, Alert, ActivityIndicator, Share, Linking, Vibration } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -10,13 +10,24 @@ import { useAuth } from '@/contexts/AuthContext';
 import { locationTrackingService, LocationUpdate } from '@/lib/location-tracking';
 import { Text } from '@/components/ui/text';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { DriverVerificationModal } from '@/components/DriverVerificationModal';
+import { RatingModal } from '@/components/RatingModal';
+import { SplitFareModal } from '@/components/SplitFareModal';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useResponsive } from '@/hooks/useResponsive';
 
 export default function TrackTripScreen() {
     const router = useRouter();
     const { id: tripId } = useLocalSearchParams();
     const { user } = useAuth();
+    const { isDark } = useTheme();
+    const { hScale, vScale, spacing } = useResponsive();
     const [driverLocation, setDriverLocation] = useState<LocationUpdate | null>(null);
     const [eta, setEta] = useState<string>('Calculating...');
+    const [showVerification, setShowVerification] = useState(false);
+    const [showSplitFare, setShowSplitFare] = useState(false);
+    const [hasVerified, setHasVerified] = useState(false);
+    const [isCompleted, setIsCompleted] = useState(false);
 
     const { data: trip, isLoading, error } = useQuery({
         queryKey: ['track-trip', tripId],
@@ -46,22 +57,53 @@ export default function TrackTripScreen() {
             }
         });
 
+        // Subscribe to trip status changes for completion
+        const statusChannel = supabase
+            .channel(`trip-status-${tripId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'trips',
+                    filter: `id=eq.${tripId}`
+                },
+                (payload) => {
+                    if (payload.new.status === 'completed') {
+                        setIsCompleted(true);
+                        Vibration.vibrate(500);
+                    }
+                }
+            )
+            .subscribe();
+
         // Subscribe to updates
         const unsubscribe = locationTrackingService.subscribeToTrip({
             tripId,
             onUpdate: (location) => {
                 setDriverLocation(location);
 
-                // Calculate ETA
                 if (trip) {
-                    const distance = calculateDistance(
+                    const distToDrop = calculateDistance(
                         location.lat,
                         location.lng,
                         parseFloat(trip.drop_lat),
                         parseFloat(trip.drop_lng)
                     );
-                    const speed = location.speed || 40; // km/h
-                    const timeInMinutes = Math.round((distance / speed) * 60);
+                    const distToPickup = calculateDistance(
+                        location.lat,
+                        location.lng,
+                        parseFloat(trip.pickup_lat),
+                        parseFloat(trip.pickup_lng)
+                    );
+
+                    // Geofence check for arrival
+                    if (distToPickup < 0.05 && !hasVerified) { // 50 meters
+                        setShowVerification(true);
+                    }
+
+                    const speed = location.speed || 40;
+                    const timeInMinutes = Math.round((distToDrop / speed) * 60);
                     setEta(`${timeInMinutes} min`);
                 }
             },
@@ -72,8 +114,9 @@ export default function TrackTripScreen() {
 
         return () => {
             unsubscribe();
+            supabase.removeChannel(statusChannel);
         };
-    }, [tripId, trip]);
+    }, [tripId, trip, hasVerified]);
 
     const handleSOS = () => {
         Alert.alert(
@@ -146,17 +189,17 @@ Track my ride: https://tcsygo.app/track/${trip.id}`;
 
     if (isLoading || !trip) {
         return (
-            <View style={styles.loading}>
+            <View style={{ gap: vScale(12) }} className="flex-1 justify-center items-center">
                 <ActivityIndicator size="large" color="#3b82f6" />
-                <Text>Connecting to vehicle...</Text>
+                <Text style={{ fontSize: hScale(14) }}>Connecting to vehicle...</Text>
             </View>
         );
     }
 
     if (error) {
         return (
-            <View style={styles.center}>
-                <Text>Error loading trip</Text>
+            <View className="flex-1 justify-center items-center">
+                <Text style={{ fontSize: hScale(14) }}>Error loading trip</Text>
             </View>
         );
     }
@@ -164,33 +207,32 @@ Track my ride: https://tcsygo.app/track/${trip.id}`;
     const driverUser = trip.driver?.user;
 
     return (
-        <View style={styles.container}>
-            <SafeAreaView style={styles.headerContainer} edges={['top']}>
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                        <Ionicons name="arrow-back" size={24} color="#1f2937" />
+        <View className="flex-1 bg-slate-50 dark:bg-slate-950">
+            <SafeAreaView className="bg-white dark:bg-slate-900 z-30 shadow-sm" edges={['top']}>
+                <View style={{ paddingHorizontal: spacing.xl, paddingVertical: vScale(16), gap: hScale(16), borderBottomWidth: 1 }} className="flex-row items-center border-slate-100 dark:border-slate-800">
+                    <TouchableOpacity onPress={() => router.back()} style={{ padding: hScale(8), borderRadius: hScale(20) }} className="bg-slate-100 dark:bg-slate-800">
+                        <Ionicons name="arrow-back" size={hScale(20)} color={isDark ? "#94a3b8" : "#1f2937"} />
                     </TouchableOpacity>
-                    <View style={styles.headerCenter}>
-                        <Text variant="h3" style={styles.headerTitle}>Live Tracking</Text>
-                        <Text style={styles.headerSubtitle} numberOfLines={1}>
-                            {trip.pickup_location} → {trip.drop_location}
+                    <View className="flex-1">
+                        <Text style={{ fontSize: hScale(18) }} className="font-black text-slate-900 dark:text-white tracking-tight">Live Tracking</Text>
+                        <Text style={{ fontSize: hScale(10) }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest" numberOfLines={1}>
+                            {trip.pickup_location.split(',')[0]} → {trip.drop_location.split(',')[0]}
                         </Text>
                     </View>
-                    <View style={styles.headerRight}>
-                        <View style={styles.liveBadge}>
-                            <View style={styles.liveDot} />
-                            <Text style={styles.liveText}>LIVE</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(12) }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: hScale(12), paddingVertical: vScale(6), borderRadius: hScale(20), borderWidth: 1, gap: hScale(8) }} className="bg-emerald-500/10 border-emerald-500/20">
+                            <View style={{ width: hScale(8), height: hScale(8), borderRadius: hScale(4) }} className="bg-emerald-500 shadow-sm shadow-emerald-500" />
+                            <Text style={{ fontSize: hScale(10) }} className="font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">LIVE</Text>
                         </View>
-                        <TouchableOpacity onPress={handleSOS} style={styles.sosButton}>
-                            <Ionicons name="shield" size={16} color="white" />
-                            <Text style={styles.sosText}>SOS</Text>
+                        <TouchableOpacity onPress={handleSOS} style={{ paddingHorizontal: hScale(16), paddingVertical: vScale(8), borderRadius: hScale(20) }} className="bg-rose-600 active:bg-rose-700 shadow-lg shadow-rose-600/20">
+                            <Text style={{ fontSize: hScale(12) }} className="text-white font-black uppercase tracking-widest">SOS</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
             </SafeAreaView>
 
             <Map
-                style={styles.map}
+                style={{ flex: 1 }}
                 initialRegion={{
                     latitude: parseFloat(trip.pickup_lat),
                     longitude: parseFloat(trip.pickup_lng),
@@ -213,8 +255,8 @@ Track my ride: https://tcsygo.app/track/${trip.id}`;
                         coordinate={{ latitude: driverLocation.lat, longitude: driverLocation.lng }}
                         title="Driver"
                     >
-                        <View style={styles.driverMarker}>
-                            <Ionicons name="car" size={20} color="white" />
+                        <View style={{ padding: hScale(6), borderRadius: hScale(20), borderWidth: 2 }} className="bg-white dark:bg-slate-900 border-blue-600 shadow-lg">
+                            <Ionicons name="car" size={hScale(24)} color="#3b82f6" />
                         </View>
                     </Marker>
                 )}
@@ -222,106 +264,152 @@ Track my ride: https://tcsygo.app/track/${trip.id}`;
                     <Polyline
                         coordinates={trip.route.geometry.map((coord: any) => ({ latitude: coord.lat, longitude: coord.lng }))}
                         strokeColor="#3b82f6"
-                        strokeWidth={4}
+                        strokeWidth={hScale(4)}
                     />
                 )}
             </Map>
 
-            <View style={styles.footer}>
-                <View style={styles.driverInfo}>
-                    <Avatar className="w-12 h-12">
+            <View style={{ padding: spacing.xl, borderRadius: hScale(40), marginTop: vScale(-40), borderTopWidth: 1 }} className="bg-white dark:bg-slate-900 shadow-2xl z-20 border-slate-100 dark:border-slate-800">
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(16), marginBottom: vScale(24) }}>
+                    <Avatar style={{ width: hScale(64), height: hScale(64), borderRadius: hScale(24), borderWidth: 1 }} className="border-slate-100 dark:border-slate-800">
                         <AvatarImage src={driverUser?.profile_photo} />
-                        <AvatarFallback>{driverUser?.full_name?.charAt(0)}</AvatarFallback>
+                        <AvatarFallback className="bg-slate-100 dark:bg-slate-800 font-black text-slate-600 dark:text-slate-300">
+                            {driverUser?.full_name?.charAt(0)}
+                        </AvatarFallback>
                     </Avatar>
-                    <View style={styles.driverDetails}>
-                        <View style={styles.driverNameRow}>
-                            <Text style={styles.driverName}>{driverUser?.full_name}</Text>
-                            <View style={styles.verifiedBadge}>
-                                <Ionicons name="checkmark-circle" size={14} color="#3b82f6" />
-                                <Text style={styles.verifiedText}>Verified</Text>
+                    <View className="flex-1">
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(8) }}>
+                            <Text style={{ fontSize: hScale(20) }} className="font-black text-slate-900 dark:text-white tracking-tight">{driverUser?.full_name}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: hScale(8), paddingVertical: vScale(2), borderRadius: hScale(6), gap: hScale(4) }} className="bg-blue-500/10">
+                                <Ionicons name="checkmark-circle" size={hScale(14)} color="#3b82f6" />
+                                <Text style={{ fontSize: hScale(10) }} className="font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">Verified</Text>
                             </View>
                         </View>
-                        <Text style={styles.driverStatus}>
+                        <Text style={{ fontSize: hScale(14), marginTop: vScale(2) }} className={`font-black uppercase tracking-widest ${eta === '0 min' ? 'text-emerald-500' : 'text-blue-500'}`}>
                             {eta === '0 min' ? 'Arrived at pickup' : 'En route to pickup'}
                         </Text>
                         {driverLocation && (
-                            <View style={styles.etaContainer}>
-                                <Ionicons name="navigate" size={12} color="#3b82f6" />
-                                <Text style={styles.etaText}>ETA: {eta}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(8), marginTop: vScale(8) }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: hScale(8), paddingVertical: vScale(4), borderRadius: hScale(8), borderWidth: 1, gap: hScale(6) }} className="bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50">
+                                    <Ionicons name="navigate" size={hScale(12)} color="#3b82f6" />
+                                    <Text style={{ fontSize: hScale(10) }} className="font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">ETA: {eta}</Text>
+                                </View>
                                 {driverLocation.speed && (
-                                    <Text style={styles.speedText}>
+                                    <Text style={{ fontSize: hScale(10), lineHeight: vScale(14) }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
                                         • {Math.round(driverLocation.speed)} km/h
                                     </Text>
                                 )}
                             </View>
                         )}
                     </View>
-                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <View style={{ flexDirection: 'row', gap: hScale(12) }}>
                         <TouchableOpacity
-                            style={styles.callButton}
+                            style={{ width: hScale(48), height: hScale(48), borderRadius: hScale(16), borderWidth: 1 }}
+                            className="bg-slate-100 dark:bg-slate-800 justify-center items-center border-slate-200 dark:border-slate-700"
                             onPress={() => router.push(`/chat/${tripId}`)}
                         >
-                            <Ionicons name="chatbubble" size={20} color="#3b82f6" />
+                            <Ionicons name="chatbubble" size={hScale(20)} color={isDark ? "#60a5fa" : "#2563eb"} />
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.callButton}>
-                            <Ionicons name="call" size={20} color="#3b82f6" />
+                        <TouchableOpacity style={{ width: hScale(48), height: hScale(48), borderRadius: hScale(16), borderWidth: 1 }} className="bg-slate-100 dark:bg-slate-800 justify-center items-center border-slate-200 dark:border-slate-700">
+                            <Ionicons name="call" size={hScale(20)} color={isDark ? "#60a5fa" : "#2563eb"} />
                         </TouchableOpacity>
                     </View>
                 </View>
-                <View style={styles.safetyBanner}>
-                    <View style={styles.safetyItem}>
-                        <Ionicons name="shield-checkmark" size={14} color="#16a34a" />
-                        <Text style={styles.safetyText}>Insured Trip</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(12), padding: hScale(16), borderRadius: hScale(16), borderWidth: 1 }} className="bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800">
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(8) }}>
+                        <Ionicons name="shield-checkmark" size={hScale(16)} color="#10b981" />
+                        <Text style={{ fontSize: hScale(10) }} className="font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Insured Trip</Text>
                     </View>
-                    <View style={styles.divider} />
-                    <View style={styles.safetyItem}>
-                        <Ionicons name="eye-outline" size={14} color="#6b7280" />
-                        <Text style={styles.safetyText}>Safety Monitored</Text>
+                    <View style={{ width: 1, height: vScale(16), marginHorizontal: hScale(4) }} className="bg-slate-200 dark:bg-slate-700 mx-1" />
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(8) }}>
+                        <Ionicons name="eye" size={hScale(16)} color={isDark ? "#94a3b8" : "#64748b"} />
+                        <Text style={{ fontSize: hScale(10) }} className="font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Monitored</Text>
                     </View>
-                    <TouchableOpacity onPress={handleSafetyCheckIn} style={styles.checkInBtn}>
-                        <Text style={styles.checkInText}>I'm Safe</Text>
+                    <TouchableOpacity onPress={handleSafetyCheckIn} style={{ marginLeft: hScale(16), paddingHorizontal: hScale(16), paddingVertical: vScale(8), borderRadius: hScale(12), borderWidth: 1 }} className="ml-auto bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50">
+                        <Text style={{ fontSize: hScale(10) }} className="text-blue-600 dark:text-blue-400 font-black uppercase tracking-widest">I'm Safe</Text>
                     </TouchableOpacity>
-                </View>
-
-                {/* Quick Actions Grid */}
-                <View style={styles.actionGrid}>
-                    <TouchableOpacity style={styles.actionButton} onPress={handleShareRide}>
-                        <View style={[styles.actionIcon, { backgroundColor: '#e0f2fe' }]}>
-                            <Ionicons name="share-social" size={20} color="#0284c7" />
+                </View>                {/* Quick Actions Grid */}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: vScale(32), paddingTop: vScale(32), borderTopWidth: 1 }} className="border-slate-100 dark:border-slate-800">
+                    <TouchableOpacity style={{ alignItems: 'center', gap: vScale(8), flex: 1 }} onPress={handleShareRide}>
+                        <View style={{ width: hScale(48), height: hScale(48), borderRadius: hScale(20), borderWidth: 1 }} className="bg-blue-50 dark:bg-blue-900/30 justify-center items-center border-blue-100 dark:border-blue-800">
+                            <Ionicons name="share-social" size={hScale(20)} color={isDark ? "#60a5fa" : "#2563eb"} />
                         </View>
-                        <Text style={styles.actionLabel}>Share</Text>
+                        <Text style={{ fontSize: hScale(10) }} className="font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Share</Text>
                     </TouchableOpacity>
-
-                    <TouchableOpacity style={styles.actionButton} onPress={openInMaps}>
-                        <View style={[styles.actionIcon, { backgroundColor: '#dcfce7' }]}>
-                            <Ionicons name="map" size={20} color="#16a34a" />
+ 
+                    <TouchableOpacity style={{ alignItems: 'center', gap: vScale(8), flex: 1 }} onPress={openInMaps}>
+                        <View style={{ width: hScale(48), height: hScale(48), borderRadius: hScale(20), borderWidth: 1 }} className="bg-emerald-50 dark:bg-emerald-900/30 justify-center items-center border-emerald-100 dark:border-emerald-800">
+                            <Ionicons name="map" size={hScale(20)} color={isDark ? "#34d399" : "#059669"} />
                         </View>
-                        <Text style={styles.actionLabel}>Nav</Text>
+                        <Text style={{ fontSize: hScale(10) }} className="font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Navigate</Text>
                     </TouchableOpacity>
-
-                    <TouchableOpacity style={styles.actionButton} onPress={() => Alert.alert('Support', 'Contact us at: help@tcsygo.com')}>
-                        <View style={[styles.actionIcon, { backgroundColor: '#f3f4f6' }]}>
-                            <Ionicons name="help-circle" size={20} color="#4b5563" />
+ 
+                    <TouchableOpacity style={{ alignItems: 'center', gap: vScale(8), flex: 1 }} onPress={() => setShowSplitFare(true)}>
+                        <View style={{ width: hScale(48), height: hScale(48), borderRadius: hScale(20), borderWidth: 1 }} className="bg-purple-50 dark:bg-purple-900/30 justify-center items-center border-purple-100 dark:border-purple-800">
+                            <Ionicons name="people" size={hScale(20)} color={isDark ? "#c084fc" : "#7c3aed"} />
                         </View>
-                        <Text style={styles.actionLabel}>Support</Text>
+                        <Text style={{ fontSize: hScale(10) }} className="font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Split</Text>
+                    </TouchableOpacity>
+ 
+                    <TouchableOpacity style={{ alignItems: 'center', gap: vScale(8), flex: 1 }} onPress={() => Alert.alert('Support', 'Contact us at: help@tcsygo.com')}>
+                        <View style={{ width: hScale(48), height: hScale(48), borderRadius: hScale(20), borderWidth: 1 }} className="bg-slate-100 dark:bg-slate-800 justify-center items-center border-slate-200 dark:border-slate-700">
+                            <Ionicons name="help-circle" size={hScale(20)} color={isDark ? "#94a3b8" : "#4b5563"} />
+                        </View>
+                        <Text style={{ fontSize: hScale(10) }} className="font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Support</Text>
                     </TouchableOpacity>
                 </View>
                 {/* Dev Only: Simulation Button */}
                 {__DEV__ && (
                     <TouchableOpacity
-                        style={{ marginTop: 8, padding: 8, backgroundColor: '#e5e7eb', alignItems: 'center', borderRadius: 8 }}
+                        style={{ marginTop: vScale(8), padding: hScale(8), borderRadius: hScale(8) }}
+                        className="bg-gray-200 items-center"
                         onPress={() => {
                             if (tripId && trip.driver.user_id) {
-                                locationTrackingService.startSimulation(tripId as string, trip.driver.user_id);
-                                Alert.alert('Simulation Started', 'Driver location should now move automatically.');
+                                // locationTrackingService.startSimulation(tripId as string, trip.driver.user_id);
+                                Alert.alert('Simulation', 'Simulation feature unavailable');
                             }
                         }}
                     >
-                        <Text style={{ fontSize: 10, color: '#374151' }}>DEV: Start Location Simulation</Text>
+                        <Text style={{ fontSize: hScale(10) }} className="text-gray-700">DEV: Start Location Simulation</Text>
                     </TouchableOpacity>
                 )}
             </View>
-        </View>
+
+            <DriverVerificationModal
+                isVisible={showVerification}
+                onClose={() => setShowVerification(false)}
+                driver={trip.driver}
+                onVerify={() => {
+                    setHasVerified(true);
+                    setShowVerification(false);
+                    Alert.alert("Verified", "Have a safe trip!");
+                }}
+            />
+
+            <RatingModal
+                isOpen={isCompleted}
+                onClose={() => setIsCompleted(false)}
+                onSubmit={(rating: number, feedback: string) => {
+                    // Handle rating submission
+                    setIsCompleted(false);
+                    router.push('/trips');
+                }}
+                tripDetails={{
+                    driverName: driverUser?.full_name || 'Driver',
+                    driverPhoto: driverUser?.profile_photo || undefined,
+                    amount: parseFloat(trip.price_per_seat || '0'),
+                    pickup: trip.pickup_location,
+                    drop: trip.drop_location
+                }}
+            />
+
+            <SplitFareModal
+                isVisible={showSplitFare}
+                onClose={() => setShowSplitFare(false)}
+                bookingId={tripId as string} // Ideally we use booking ID not trip ID, but for MVP assuming 1-1 or getting booking ID elsewhere
+                totalAmount={parseFloat(trip.price_per_seat || '0')}
+            />
+        </View >
     );
 }
 
@@ -337,231 +425,3 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: 'white',
-    },
-    headerContainer: {
-        backgroundColor: 'white',
-        zIndex: 10,
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingBottom: 16,
-        gap: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f3f4f6',
-    },
-    backButton: {
-        padding: 4,
-    },
-    headerCenter: {
-        flex: 1,
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    headerSubtitle: {
-        fontSize: 12,
-        color: '#6b7280',
-    },
-    headerRight: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    liveBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 12,
-        backgroundColor: '#dcfce7',
-        borderWidth: 1,
-        borderColor: '#86efac',
-        gap: 4,
-    },
-    liveDot: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-        backgroundColor: '#22c55e',
-    },
-    liveText: {
-        fontSize: 10,
-        fontWeight: 'bold',
-        color: '#22c55e',
-    },
-    sosButton: {
-        backgroundColor: '#ef4444',
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
-        gap: 4,
-    },
-    sosText: {
-        color: 'white',
-        fontWeight: 'bold',
-        fontSize: 12,
-    },
-    map: {
-        flex: 1,
-    },
-    loading: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: 12,
-    },
-    center: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    footer: {
-        backgroundColor: 'white',
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        marginTop: -20,
-        padding: 20,
-        shadowColor: "#000",
-        shadowOffset: {
-            width: 0,
-            height: -2,
-        },
-        shadowOpacity: 0.1,
-        shadowRadius: 3.84,
-        elevation: 5,
-    },
-    driverInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    driverDetails: {
-        flex: 1,
-    },
-    driverNameRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    driverName: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    verifiedBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#eff6ff',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 4,
-        gap: 2,
-    },
-    verifiedText: {
-        fontSize: 10,
-        fontWeight: 'bold',
-        color: '#3b82f6',
-    },
-    driverStatus: {
-        fontSize: 14,
-        color: '#22c55e',
-        fontWeight: '500',
-    },
-    etaContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        marginTop: 4,
-    },
-    etaText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: '#3b82f6',
-    },
-    speedText: {
-        fontSize: 12,
-        color: '#6b7280',
-    },
-    callButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#f3f4f6',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    safetyBanner: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        marginTop: 12,
-        padding: 8,
-        backgroundColor: '#f9fafb',
-        borderRadius: 8,
-    },
-    safetyText: {
-        fontSize: 12,
-        color: '#6b7280',
-    },
-    safetyItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    divider: {
-        width: 1,
-        height: 12,
-        backgroundColor: '#e5e7eb',
-        marginHorizontal: 4,
-    },
-    checkInBtn: {
-        marginLeft: 'auto',
-    },
-    checkInText: {
-        color: '#3b82f6',
-        fontWeight: 'bold',
-        fontSize: 12,
-    },
-    driverMarker: {
-        backgroundColor: '#3b82f6',
-        padding: 8,
-        borderRadius: 20,
-        borderWidth: 2,
-        borderColor: 'white',
-    },
-    actionGrid: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        marginTop: 16,
-        paddingTop: 16,
-        borderTopWidth: 1,
-        borderTopColor: '#f3f4f6'
-    },
-    actionButton: {
-        alignItems: 'center',
-        gap: 4
-    },
-    actionIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        justifyContent: 'center',
-        alignItems: 'center'
-    },
-    actionLabel: {
-        fontSize: 12,
-        color: '#4b5563',
-        fontWeight: '500'
-    }
-});
