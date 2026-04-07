@@ -1,4 +1,0 @@
-﻿services/ScheduledRideManager.ts(142,21): error TS2322: Type '{ seconds: number; }' is not assignable to type 'NotificationTriggerInput'.
-  Property 'type' is missing in type '{ seconds: number; }' but required in type 'TimeIntervalTriggerInput'.
-services/ScheduledRideManager.ts(156,21): error TS2322: Type '{ seconds: number; }' is not assignable to type 'NotificationTriggerInput'.
-  Property 'type' is missing in type '{ seconds: number; }' but required in type 'TimeIntervalTriggerInput'.

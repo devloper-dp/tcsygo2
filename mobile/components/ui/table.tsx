@@ -3,8 +3,8 @@ import { ScrollView, View, Text } from "react-native";
 import { cn } from "../../lib/utils";
 
 const Table = React.forwardRef<
-    React.ElementRef<typeof ScrollView>,
-    React.ComponentPropsWithoutRef<typeof ScrollView>
+    React.ElementRef<typeof View>,
+    React.ComponentPropsWithoutRef<typeof View>
 >(({ className, ...props }, ref) => (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: "100%" }}>
         <View

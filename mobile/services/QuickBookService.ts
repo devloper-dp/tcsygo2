@@ -1,3 +1,4 @@
+import { RideService, Preferences } from './RideService';
 import { supabase } from '@/lib/supabase';
 import * as Location from 'expo-location';
 import { Alert } from 'react-native';
@@ -5,23 +6,19 @@ import { logger } from './LoggerService';
 
 export interface QuickBookRequest {
     pickupLocation?: {
-        latitude: number;
-        longitude: number;
+        lat: number;
+        lng: number;
         address: string;
     };
     dropLocation: {
-        latitude: number;
-        longitude: number;
+        lat: number;
+        lng: number;
         address: string;
     };
     vehicleType?: 'bike' | 'auto' | 'car';
     promoCode?: string;
     discountAmount?: number;
-    preferences?: {
-        ac?: boolean;
-        music?: boolean;
-        pets?: boolean;
-    };
+    preferences?: Preferences;
 }
 
 export interface QuickBookResponse {
@@ -36,7 +33,7 @@ export const QuickBookService = {
     /**
      * Get current location for quick booking
      */
-    getCurrentLocation: async (): Promise<{ latitude: number; longitude: number; address: string } | null> => {
+    getCurrentLocation: async (): Promise<{ lat: number; lng: number; address: string } | null> => {
         try {
             // Request location permissions
             const { status } = await Location.requestForegroundPermissionsAsync();
@@ -50,19 +47,16 @@ export const QuickBookService = {
                 accuracy: Location.Accuracy.High,
             });
 
-            // Reverse geocode to get address
-            const addresses = await Location.reverseGeocodeAsync({
-                latitude: location.coords.latitude,
-                longitude: location.coords.longitude,
-            });
-
-            const address = addresses[0]
-                ? `${addresses[0].name || ''}, ${addresses[0].street || ''}, ${addresses[0].city || ''}`
-                : 'Current Location';
+            // Reverse geocode to get address using our open MapService
+            const { MapService } = await import('./MapService');
+            const address = await MapService.reverseGeocode({
+                lat: location.coords.latitude,
+                lng: location.coords.longitude,
+            }) || 'Current Location';
 
             return {
-                latitude: location.coords.latitude,
-                longitude: location.coords.longitude,
+                lat: location.coords.latitude,
+                lng: location.coords.longitude,
                 address: address.trim(),
             };
         } catch (error) {
@@ -94,17 +88,17 @@ export const QuickBookService = {
 
             // Estimate fare first
             const fareEstimate = await RideService.estimateFare(
-                { lat: pickupLocation.latitude, lng: pickupLocation.longitude },
-                { lat: request.dropLocation.latitude, lng: request.dropLocation.longitude },
+                { lat: pickupLocation.lat, lng: pickupLocation.lng },
+                { lat: request.dropLocation.lat, lng: request.dropLocation.lng },
                 request.vehicleType || 'bike'
             );
 
             // Create Request
             const rideRequest = await RideService.createRideRequest({
                 pickupLocation: pickupLocation.address,
-                pickupCoords: { lat: pickupLocation.latitude, lng: pickupLocation.longitude },
+                pickupCoords: { lat: pickupLocation.lat, lng: pickupLocation.lng },
                 dropLocation: request.dropLocation.address,
-                dropCoords: { lat: request.dropLocation.latitude, lng: request.dropLocation.longitude },
+                dropCoords: { lat: request.dropLocation.lat, lng: request.dropLocation.lng },
                 vehicleType: request.vehicleType || 'bike',
                 fare: fareEstimate.estimatedPrice,
                 distance: fareEstimate.distanceKm,
@@ -117,8 +111,8 @@ export const QuickBookService = {
             // Start matching process
             const matchResult = await QuickBookService.matchWithDrivers(
                 rideRequest.id,
-                pickupLocation.latitude,
-                pickupLocation.longitude,
+                pickupLocation.lat,
+                pickupLocation.lng,
                 pickupLocation.address,
                 request.vehicleType || 'bike'
             );
@@ -159,8 +153,8 @@ export const QuickBookService = {
      */
     matchWithDrivers: async (
         requestId: string,
-        latitude: number,
-        longitude: number,
+        lat: number,
+        lng: number,
         pickupAddress: string,
         vehicleType: string
     ): Promise<{ success: boolean; estimatedArrival?: number; error?: string; bookingId?: string }> => {
@@ -173,7 +167,7 @@ export const QuickBookService = {
         const { RideService } = await import('./RideService');
 
         // Notify drivers ONCE
-        const drivers = await RideService.findNearbyDrivers({ lat: latitude, lng: longitude }, vehicleType as any);
+        const drivers = await RideService.findNearbyDrivers({ lat, lng }, vehicleType as any);
         if (drivers.length > 0) {
             const { NotificationService } = await import('./NotificationService');
             // Simplified: NotificationService might not be fully implemented in this context yet, fail gracefully
@@ -316,8 +310,8 @@ export const QuickBookService = {
             // Quick book with same details
             return await QuickBookService.quickBook({
                 dropLocation: {
-                    latitude: lastRide.drop_lat,
-                    longitude: lastRide.drop_lng,
+                    lat: lastRide.drop_lat,
+                    lng: lastRide.drop_lng,
                     address: lastRide.drop_location,
                 },
                 vehicleType: lastRide.vehicle_type,

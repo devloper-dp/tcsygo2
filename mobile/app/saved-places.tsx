@@ -261,53 +261,31 @@ export default function SavedPlacesScreen() {
     );
 }
  
-// Add Place Modal Component
+import { LocationAutocomplete } from '@/components/LocationAutocomplete';
+
 const AddPlaceModal: React.FC<{
-    place: SavedPlace;
+    place: any;
     isDark: boolean;
     onClose: () => void;
-    onSave: () => void;
+    onSave: () => Promise<void>;
     useResponsiveHook: typeof useResponsive;
 }> = ({ place, isDark, onClose, onSave, useResponsiveHook }) => {
+    const { toast } = require('@/components/ui/toast').useToast();
     const { hScale, vScale, spacing, fontSize } = useResponsiveHook();
     const [label, setLabel] = useState(place.label);
     const [address, setAddress] = useState(place.address);
-    const [suggestions, setSuggestions] = useState<any[]>([]);
     const [selectedCoords, setSelectedCoords] = useState<{ lat: number; lng: number } | null>(
         place.id ? { lat: place.latitude, lng: place.longitude } : null
     );
     const [loading, setLoading] = useState(false);
  
-    const handleAddressChange = async (text: string) => {
-        setAddress(text);
-        if (text.length > 2) {
-            const results = await MapService.getPlaceAutocomplete(text);
-            setSuggestions(results);
-        } else {
-            setSuggestions([]);
-        }
-    };
- 
-    const handleSelectSuggestion = async (suggestion: any) => {
-        setAddress(suggestion.description);
-        setSuggestions([]);
-        setLoading(true);
-        try {
-            const details = await MapService.getPlaceDetails(suggestion.placeId);
-            if (details) {
-                setSelectedCoords(details.coordinates);
-                setAddress(details.address);
-            }
-        } catch (error) {
-            logger.error('Error getting place details:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
- 
     const handleSave = async () => {
         if (!label.trim() || !address.trim()) {
-            Alert.alert('Error', 'Please enter both identification and coordinates');
+            toast({
+                title: 'Error',
+                description: 'Please enter both identification and coordinates',
+                variant: 'destructive',
+            });
             return;
         }
  
@@ -319,7 +297,7 @@ const AddPlaceModal: React.FC<{
             }
  
             if (!coordinates) {
-                Alert.alert('Error', 'Terminal unreachable. Please verify address.');
+                toast({ title: 'Error', description: 'Terminal unreachable. Please verify address.', variant: 'destructive' });
                 return;
             }
  
@@ -346,7 +324,7 @@ const AddPlaceModal: React.FC<{
             onSave();
         } catch (error: any) {
             logger.error('Error saving place:', error);
-            Alert.alert('Error', 'Execution failed. Failed to save coordinates.');
+            toast({ title: 'Error', description: 'Execution failed. Failed to save coordinates.', variant: 'destructive' });
         } finally {
             setLoading(false);
         }
@@ -376,38 +354,16 @@ const AddPlaceModal: React.FC<{
                     />
  
                     <Text style={{ fontSize: hScale(10), marginBottom: vScale(12), marginLeft: spacing.xs }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Coordinates</Text>
-                    <View className="relative z-10">
-                        <TextInput
-                            style={{ paddingHorizontal: spacing.xl, paddingVertical: vScale(16), borderRadius: hScale(16), fontSize: fontSize.base, height: vScale(96), borderWidth: 1 }}
-                            className={`bg-slate-50 dark:bg-slate-950 border-slate-100 dark:border-slate-800 text-slate-900 dark:text-white shadow-inner ${suggestions.length > 0 ? 'rounded-b-none' : ''}`}
-                            value={address}
-                            onChangeText={handleAddressChange}
+                    <View style={{ gap: spacing.sm }} className="z-50">
+                        <LocationAutocomplete
                             placeholder="Search terminal grid..."
+                            value={address}
+                            onChange={(val, coords) => {
+                                setAddress(val);
+                                if (coords) setSelectedCoords(coords);
+                            }}
                             placeholderTextColor={isDark ? "#334155" : "#94a3b8"}
-                            multiline
-                            numberOfLines={3}
-                            textAlignVertical="top"
                         />
-                        {suggestions.length > 0 && (
-                            <View style={{ top: vScale(96), borderRadius: hScale(16), maxHeight: vScale(192), borderTopWidth: 0, borderWidth: 1 }} className="absolute left-0 right-0 bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 rounded-t-none z-50 shadow-xl overflow-hidden">
-                                <ScrollView keyboardShouldPersistTaps="handled" className="flex-1">
-                                    {suggestions.map((item, index) => (
-                                        <TouchableOpacity
-                                            key={index}
-                                            style={{ paddingHorizontal: spacing.xl, paddingVertical: vScale(16), borderBottomWidth: 1 }}
-                                            className="flex-row items-center border-slate-50 dark:border-slate-800/50 active:bg-slate-50 dark:active:bg-slate-800"
-                                            onPress={() => handleSelectSuggestion(item)}
-                                        >
-                                            <MapPin size={hScale(16)} color="#3b82f6" style={{ marginRight: spacing.lg }} />
-                                            <View className="flex-1">
-                                                <Text style={{ fontSize: fontSize.sm }} className="font-black text-slate-900 dark:text-white uppercase tracking-tighter" numberOfLines={1}>{item.mainText}</Text>
-                                                <Text style={{ fontSize: hScale(10) }} className="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-tight" numberOfLines={1}>{item.secondaryText}</Text>
-                                            </View>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-                        )}
                     </View>
                 </View>
  

@@ -91,13 +91,13 @@ export function QuickBookModal({ visible, onClose, pickup, drop, onBookingSucces
         try {
             const response = await QuickBookService.quickBook({
                 pickupLocation: {
-                    latitude: pickup.coords.lat,
-                    longitude: pickup.coords.lng,
+                    lat: pickup.coords.lat,
+                    lng: pickup.coords.lng,
                     address: pickup.address,
                 },
                 dropLocation: {
-                    latitude: drop.coords.lat,
-                    longitude: drop.coords.lng,
+                    lat: drop.coords.lat,
+                    lng: drop.coords.lng,
                     address: drop.address,
                 },
                 vehicleType: selectedType,

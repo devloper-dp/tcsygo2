@@ -1,64 +1,7 @@
-import React from 'react';
-import MapView, { Marker, Polyline } from 'react-native-maps';
-import { View, Platform } from 'react-native';
+import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
+import { View, Platform, StyleSheet } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
- 
-// Premium Tactical Dark Map Style
-const DARK_MAP_STYLE = [
-  {
-    "elementType": "geometry",
-    "stylers": [{ "color": "#020617" }]
-  },
-  {
-    "elementType": "labels.text.fill",
-    "stylers": [{ "color": "#475569" }]
-  },
-  {
-    "elementType": "labels.text.stroke",
-    "stylers": [{ "color": "#020617" }]
-  },
-  {
-    "featureType": "administrative",
-    "elementType": "geometry",
-    "stylers": [{ "color": "#1e293b" }]
-  },
-  {
-    "featureType": "poi",
-    "elementType": "geometry",
-    "stylers": [{ "color": "#0f172a" }]
-  },
-  {
-    "featureType": "poi",
-    "elementType": "labels.text.fill",
-    "stylers": [{ "color": "#64748b" }]
-  },
-  {
-    "featureType": "road",
-    "elementType": "geometry",
-    "stylers": [{ "color": "#1e293b" }]
-  },
-  {
-    "featureType": "road",
-    "elementType": "geometry.stroke",
-    "stylers": [{ "color": "#0f172a" }]
-  },
-  {
-    "featureType": "road",
-    "elementType": "labels.text.fill",
-    "stylers": [{ "color": "#94a3b8" }]
-  },
-  {
-    "featureType": "transit",
-    "elementType": "geometry",
-    "stylers": [{ "color": "#0f172a" }]
-  },
-  {
-    "featureType": "water",
-    "elementType": "geometry",
-    "stylers": [{ "color": "#020617" }]
-  }
-];
- 
+
 interface MapProps {
     children?: React.ReactNode;
     style?: any;
@@ -66,25 +9,36 @@ interface MapProps {
     initialRegion?: any;
     region?: any;
 }
- 
+
 export function Map({ children, style, className, initialRegion, region }: MapProps) {
     const { isDark } = useTheme();
- 
+
     if (Platform.OS === 'web') {
         const MapWeb = require('./Map.web').Map;
         return <MapWeb style={style} className={className} initialRegion={initialRegion}>{children}</MapWeb>;
     }
- 
+
     return (
         <MapView
-            style={style}
+            style={[StyleSheet.absoluteFillObject, style]}
             className={className}
             initialRegion={initialRegion}
             region={region}
             showsUserLocation
             showsMyLocationButton={false}
-            customMapStyle={isDark ? DARK_MAP_STYLE : []}
+            // Use 'none' to disable the base map layer when using custom tiles
+            mapType={Platform.OS === 'android' ? 'none' : 'standard'}
         >
+            <UrlTile
+                /**
+                 * Use CARTO Voyager tiles (based on OSM data) for a reliable open mapping experience.
+                 * This avoids 403 errors from direct OSM servers which require specific User-Agents.
+                 */
+                urlTemplate="https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+                maximumZ={19}
+                tileSize={256}
+                flipY={false}
+            />
             {children}
         </MapView>
     );

@@ -2,7 +2,7 @@ import React from 'react';
 import { View, ScrollView, TouchableOpacity } from 'react-native';
 import { Text } from './text';
 import { Ionicons } from '@expo/vector-icons';
-import Collapsible from './collapsible';
+import { Collapsible } from './collapsible';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/contexts/ThemeContext';
  

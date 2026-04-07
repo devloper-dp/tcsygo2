@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import * as Print from 'expo-print';
 import { logger } from './LoggerService';
 
 export interface ReceiptData {
@@ -300,17 +301,37 @@ export const ReceiptService = {
     },
 
     /**
+     * Generate PDF receipt
+     */
+    generatePDF: async (receipt: ReceiptData): Promise<string | null> => {
+        try {
+            const html = ReceiptService.generateHTMLReceipt(receipt);
+            const { uri } = await Print.printToFileAsync({ html });
+            
+            // Rename to a friendly name
+            const fileName = `TCSYGO_Receipt_${receipt.id}.pdf`;
+            const newUri = `${(FileSystem as any).documentDirectory}${fileName}`;
+            await FileSystem.moveAsync({ from: uri, to: newUri });
+            
+            return newUri;
+        } catch (error) {
+            logger.error('Error generating PDF receipt:', error);
+            return null;
+        }
+    },
+
+    /**
      * Share receipt
      */
     shareReceipt: async (receipt: ReceiptData): Promise<boolean> => {
         try {
-            const filePath = await ReceiptService.saveReceipt(receipt);
+            const filePath = await ReceiptService.generatePDF(receipt);
             if (!filePath) return false;
 
             const canShare = await Sharing.isAvailableAsync();
             if (canShare) {
                 await Sharing.shareAsync(filePath, {
-                    mimeType: 'text/html',
+                    mimeType: 'application/pdf',
                     dialogTitle: 'Share Receipt',
                 });
                 return true;

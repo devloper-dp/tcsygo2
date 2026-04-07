@@ -1,8 +1,8 @@
 import * as Location from 'expo-location';
 import { logger } from './LoggerService';
 
-// Google Maps API configuration
-const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+// Using Open Mapping Services (OSRM, Nominatim, Photon) - No API Key Required
+
 
 export interface Coordinates {
     lat: number;
@@ -42,6 +42,7 @@ export interface PlaceAutocompleteResult {
     description: string;
     mainText: string;
     secondaryText: string;
+    coordinates?: Coordinates; // Added for Photon integration
 }
 
 export interface PlaceDetails {
@@ -53,37 +54,40 @@ export interface PlaceDetails {
 
 export const MapService = {
     /**
-     * Calculate distance and duration between two points using Google Maps Distance Matrix API
+     * Calculate distance and duration between two points using OSRM Table API
      * Falls back to Haversine formula if API is unavailable
      */
     getDistance: async (
         origin: Coordinates,
         destination: Coordinates
     ): Promise<DistanceMatrixResult> => {
-        if (!GOOGLE_MAPS_API_KEY) {
-            logger.warn('Google Maps API key not configured, using Haversine formula');
-            return MapService.getDistanceHaversine(origin, destination);
-        }
-
         try {
-            const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origin.lat},${origin.lng}&destinations=${destination.lat},${destination.lng}&key=${GOOGLE_MAPS_API_KEY}&mode=driving`;
+            // OSRM uses longitude,latitude format
+            const url = `http://router.project-osrm.org/table/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?annotations=distance,duration`;
 
-            const response = await fetch(url);
+            const response = await fetch(url, {
+                headers: {
+                    'Accept': 'application/json',
+                    'User-Agent': 'TCSYGO-Mobile'
+                }
+            });
             const data = await response.json();
 
-            if (data.status === 'OK' && data.rows[0].elements[0].status === 'OK') {
-                const element = data.rows[0].elements[0];
+            if (data.code === 'Ok' && data.distances?.[0]?.[1] !== undefined) {
+                const distance = data.distances[0][1]; // distance in meters
+                const duration = data.durations[0][1]; // duration in seconds
+
                 return {
-                    distance: element.distance.value,
-                    duration: element.duration.value,
-                    distanceText: element.distance.text,
-                    durationText: element.duration.text,
+                    distance,
+                    duration,
+                    distanceText: `${(distance / 1000).toFixed(1)} km`,
+                    durationText: `${Math.round(duration / 60)} mins`,
                 };
             } else {
-                throw new Error('Distance Matrix API error: ' + data.status);
+                throw new Error('OSRM Table API error: ' + (data.code || 'Unknown error'));
             }
         } catch (error) {
-            logger.error('Error fetching distance from Google Maps:', error);
+            logger.error('Error fetching distance from OSRM:', error);
             // Fallback to Haversine
             return MapService.getDistanceHaversine(origin, destination);
         }
@@ -122,71 +126,74 @@ export const MapService = {
     },
 
     /**
-     * Get route with turn-by-turn directions using Google Maps Directions API
+     * Get route with turn-by-turn directions using OSRM Route API
      */
     getRoute: async (
         origin: Coordinates,
         destination: Coordinates,
         waypoints?: Coordinates[]
     ): Promise<Route> => {
-        if (!GOOGLE_MAPS_API_KEY) {
-            throw new Error('Google Maps API key not configured');
-        }
-
         try {
-            let url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.lat},${origin.lng}&destination=${destination.lat},${destination.lng}&key=${GOOGLE_MAPS_API_KEY}&mode=driving`;
-
+            let coordsArr = [`${origin.lng},${origin.lat}`];
             if (waypoints && waypoints.length > 0) {
-                const waypointsStr = waypoints
-                    .map((wp) => `${wp.lat},${wp.lng}`)
-                    .join('|');
-                url += `&waypoints=${waypointsStr}`;
+                waypoints.forEach(wp => coordsArr.push(`${wp.lng},${wp.lat}`));
             }
+            coordsArr.push(`${destination.lng},${destination.lat}`);
+            
+            const coordsStr = coordsArr.join(';');
+            const url = `http://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&steps=true&geometries=polyline`;
 
-            const response = await fetch(url);
+            const response = await fetch(url, {
+                headers: {
+                    'Accept': 'application/json',
+                    'User-Agent': 'TCSYGO-Mobile-App'
+                }
+            });
             const data = await response.json();
 
-            if (data.status === 'OK' && data.routes.length > 0) {
+            if (data.code === 'Ok' && data.routes.length > 0) {
                 const route = data.routes[0];
                 const leg = route.legs[0];
 
-                const steps: RouteStep[] = leg.steps.map((step: any) => ({
-                    instruction: step.html_instructions.replace(/<[^>]*>/g, ''), // Remove HTML tags
-                    distance: step.distance.value,
-                    duration: step.duration.value,
-                    maneuver: step.maneuver,
-                    startLocation: {
-                        lat: step.start_location.lat,
-                        lng: step.start_location.lng,
-                    },
-                    endLocation: {
-                        lat: step.end_location.lat,
-                        lng: step.end_location.lng,
-                    },
-                }));
+                const steps: RouteStep[] = route.legs.flatMap((l: any) => 
+                    l.steps.map((step: any) => ({
+                        instruction: step.maneuver.instruction,
+                        distance: step.distance,
+                        duration: step.duration,
+                        maneuver: step.maneuver.type,
+                        startLocation: {
+                            lat: step.maneuver.location[1],
+                            lng: step.maneuver.location[0],
+                        },
+                        endLocation: {
+                            lat: step.maneuver.location[1],
+                            lng: step.maneuver.location[0], // OSRM steps are point-based
+                        },
+                    }))
+                );
 
                 return {
-                    distance: leg.distance.value,
-                    duration: leg.duration.value,
-                    polyline: route.overview_polyline.points,
-                    geometry: MapService.decodePolyline(route.overview_polyline.points),
+                    distance: route.distance,
+                    duration: route.duration,
+                    polyline: route.geometry,
+                    geometry: MapService.decodePolyline(route.geometry),
                     steps,
                     bounds: {
                         northeast: {
-                            lat: route.bounds.northeast.lat,
-                            lng: route.bounds.northeast.lng,
+                            lat: Math.max(...route.legs.flatMap((l: any) => l.steps.map((s: any) => s.maneuver.location[1]))),
+                            lng: Math.max(...route.legs.flatMap((l: any) => l.steps.map((s: any) => s.maneuver.location[0]))),
                         },
                         southwest: {
-                            lat: route.bounds.southwest.lat,
-                            lng: route.bounds.southwest.lng,
+                            lat: Math.min(...route.legs.flatMap((l: any) => l.steps.map((s: any) => s.maneuver.location[1]))),
+                            lng: Math.min(...route.legs.flatMap((l: any) => l.steps.map((s: any) => s.maneuver.location[0]))),
                         },
                     },
                 };
             } else {
-                throw new Error('Directions API error: ' + data.status);
+                throw new Error('OSRM Route API error: ' + (data.code || 'Unknown error'));
             }
         } catch (error) {
-            logger.error('Error fetching route from Google Maps:', error);
+            logger.error('Error fetching route from OSRM:', error);
             throw error;
         }
     },
@@ -233,130 +240,141 @@ export const MapService = {
     },
 
     /**
-     * Geocode address to coordinates
+     * Geocode address to coordinates using Nominatim API
      */
     geocode: async (address: string): Promise<Coordinates | null> => {
-        if (!GOOGLE_MAPS_API_KEY) {
-            throw new Error('Google Maps API key not configured');
-        }
-
         try {
-            const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
+            const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
                 address
-            )}&key=${GOOGLE_MAPS_API_KEY}`;
+            )}&format=jsonv2&limit=1`;
 
-            const response = await fetch(url);
+            const response = await fetch(url, {
+                headers: {
+                    'Accept': 'application/json',
+                    'User-Agent': 'TCSYGO-Mobile'
+                }
+            });
             const data = await response.json();
 
-            if (data.status === 'OK' && data.results.length > 0) {
-                const location = data.results[0].geometry.location;
+            if (data && data.length > 0) {
                 return {
-                    lat: location.lat,
-                    lng: location.lng,
+                    lat: parseFloat(data[0].lat),
+                    lng: parseFloat(data[0].lon),
                 };
             }
             return null;
         } catch (error) {
-            logger.error('Error geocoding address:', error);
+            logger.error('Error geocoding address with Nominatim:', error);
             return null;
         }
     },
 
     /**
-     * Reverse geocode coordinates to address
+     * Reverse geocode coordinates to address using Nominatim API
      */
     reverseGeocode: async (coordinates: Coordinates): Promise<string | null> => {
-        if (!GOOGLE_MAPS_API_KEY) {
-            throw new Error('Google Maps API key not configured');
-        }
-
         try {
-            const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${coordinates.lat},${coordinates.lng}&key=${GOOGLE_MAPS_API_KEY}`;
+            const url = `https://nominatim.openstreetmap.org/reverse?lat=${coordinates.lat}&lon=${coordinates.lng}&format=jsonv2`;
 
-            const response = await fetch(url);
+            const response = await fetch(url, {
+                headers: {
+                    'Accept': 'application/json',
+                    'User-Agent': 'TCSYGO-Mobile'
+                }
+            });
             const data = await response.json();
 
-            if (data.status === 'OK' && data.results.length > 0) {
-                return data.results[0].formatted_address;
+            if (data && data.display_name) {
+                return data.display_name;
             }
             return null;
         } catch (error) {
-            logger.error('Error reverse geocoding:', error);
+            logger.error('Error reverse geocoding with Nominatim:', error);
             return null;
         }
     },
 
     /**
-     * Get place autocomplete suggestions
+     * Get place autocomplete suggestions using Photon API (OpenStreetMap based)
      */
     getPlaceAutocomplete: async (
         input: string,
         location?: Coordinates,
         radius?: number
     ): Promise<PlaceAutocompleteResult[]> => {
-        if (!GOOGLE_MAPS_API_KEY) {
-            throw new Error('Google Maps API key not configured');
-        }
-
         try {
-            let url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
-                input
-            )}&key=${GOOGLE_MAPS_API_KEY}`;
+            let url = `https://photon.komoot.io/api/?q=${encodeURIComponent(input)}&limit=10`;
 
             if (location) {
-                url += `&location=${location.lat},${location.lng}`;
-            }
-            if (radius) {
-                url += `&radius=${radius}`;
+                url += `&lat=${location.lat}&lon=${location.lng}`;
             }
 
             const response = await fetch(url);
             const data = await response.json();
 
-            if (data.status === 'OK') {
-                return data.predictions.map((prediction: any) => ({
-                    placeId: prediction.place_id,
-                    description: prediction.description,
-                    mainText: prediction.structured_formatting.main_text,
-                    secondaryText: prediction.structured_formatting.secondary_text,
-                }));
+            if (data && data.features) {
+                return data.features.map((feature: any) => {
+                    const properties = feature.properties;
+                    const coords = feature.geometry.coordinates;
+                    
+                    const mainText = properties.name || properties.street || properties.city || 'Unknown';
+                    const secondaryText = [properties.city, properties.state, properties.country]
+                        .filter(Boolean)
+                        .join(', ');
+
+                    return {
+                        placeId: properties.osm_id?.toString() || Math.random().toString(),
+                        description: `${mainText}, ${secondaryText}`,
+                        mainText: mainText,
+                        secondaryText: secondaryText,
+                        coordinates: {
+                            lat: coords[1],
+                            lng: coords[0]
+                        }
+                    };
+                });
             }
             return [];
         } catch (error) {
-            logger.error('Error fetching place autocomplete:', error);
+            logger.error('Error fetching place autocomplete from Photon:', error);
             return [];
         }
     },
 
     /**
-     * Get place details by place ID
+     * Get place details by place ID (Adapts to Photon/Nominatim)
      */
     getPlaceDetails: async (placeId: string): Promise<PlaceDetails | null> => {
-        if (!GOOGLE_MAPS_API_KEY) {
-            throw new Error('Google Maps API key not configured');
-        }
-
         try {
-            const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&key=${GOOGLE_MAPS_API_KEY}`;
-
-            const response = await fetch(url);
+            // Since we updated autocomplete to include coordinates, we might already have them.
+            // If not, we can treat placeId as a query for Nominatim if it looks like a string, 
+            // or use specific OSM ID lookup if we implement it.
+            // For now, we'll use a search query as a fallback.
+            
+            const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(placeId)}&format=jsonv2&limit=1`;
+            const response = await fetch(url, {
+                headers: {
+                    'Accept': 'application/json',
+                    'User-Agent': 'TCSYGO-Mobile-App'
+                }
+            });
             const data = await response.json();
 
-            if (data.status === 'OK') {
-                const result = data.result;
+            if (data && data.length > 0) {
+                const result = data[0];
                 return {
-                    placeId: result.place_id,
-                    name: result.name,
-                    address: result.formatted_address,
+                    placeId: result.osm_id.toString(),
+                    name: result.display_name.split(',')[0],
+                    address: result.display_name,
                     coordinates: {
-                        lat: result.geometry.location.lat,
-                        lng: result.geometry.location.lng,
+                        lat: parseFloat(result.lat),
+                        lng: parseFloat(result.lon),
                     },
                 };
             }
             return null;
         } catch (error) {
-            logger.error('Error fetching place details:', error);
+            logger.error('Error fetching place details from Nominatim:', error);
             return null;
         }
     },
@@ -410,8 +428,8 @@ export const MapService = {
                 `)
                 .eq('drivers.verification_status', 'approved')
                 .eq('drivers.is_available', true)
-                .not('latitude', 'is', null)
-                .not('longitude', 'is', null);
+                .not('lat', 'is', null)
+                .not('lng', 'is', null);
 
             if (error || !drivers) {
                 logger.error('Error fetching nearby drivers:', error);
@@ -421,8 +439,8 @@ export const MapService = {
             // Filter drivers within radius using Haversine formula
             const nearbyDrivers = drivers.filter((driver) => {
                 const driverLocation: Coordinates = {
-                    lat: driver.latitude,
-                    lng: driver.longitude,
+                    lat: driver.lat,
+                    lng: driver.lng,
                 };
                 const distance = MapService.getDistanceHaversine(location, driverLocation).distance;
                 return distance <= radiusMeters;

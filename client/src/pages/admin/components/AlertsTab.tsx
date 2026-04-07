@@ -64,8 +64,9 @@ export function AlertsTab() {
                                     </TableCell>
                                     <TableCell>
                                         <a
-                                            href={`https://www.google.com/maps?q=${alert.lat},${alert.lng}`}
+                                            href={`https://www.openstreetmap.org/?mlat=${alert.lat}&mlon=${alert.lng}#map=17/${alert.lat}/${alert.lng}`}
                                             target="_blank"
+                                            rel="noopener noreferrer"
                                             className="text-primary hover:underline flex items-center gap-1"
                                         >
                                             <MapPin className="w-3 h-3" />

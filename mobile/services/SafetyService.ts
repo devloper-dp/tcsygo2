@@ -194,7 +194,7 @@ export const SafetyService = {
                 .single();
 
             const userName = user?.full_name || 'User';
-            const locationLink = `https://maps.google.com/?q=${location.lat},${location.lng}`;
+            const locationLink = `https://www.openstreetmap.org/?mlat=${location.lat}&mlon=${location.lng}#map=17/${location.lat}/${location.lng}`;
 
             const message = `EMERGENCY ALERT: ${userName} has triggered an emergency alert during their ride. Current location: ${locationLink}. Booking ID: ${bookingId}. Please contact them immediately.`;
 

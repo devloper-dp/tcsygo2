@@ -31,6 +31,7 @@ const CreateTripScreen = () => {
     const { user } = useAuth();
     const { isDark } = useTheme();
     const { hScale, vScale, mScale, spacing, fontSize } = useResponsive();
+    const { toast } = require('@/components/ui/toast').useToast();
  
     const [pickup, setPickup] = useState('');
     const [pickupCoords, setPickupCoords] = useState<Coordinates>();
@@ -98,28 +99,36 @@ const CreateTripScreen = () => {
                     { text: "Status Feed", onPress: () => router.push('/become-driver') },
                     { text: "Abort", style: "cancel", onPress: () => router.back() }
                 ]);
+                toast({
+                    title: "Verification Pending",
+                    description: "Your credentials are under review by central command. Mission deployment disabled.",
+                    variant: "destructive"
+                });
             }
         }
     }, [isLoadingDriver, driverProfile]);
  
     const calculateRoute = async () => {
         if (!pickupCoords || !dropCoords) return;
- 
+
         try {
+            const { RideService } = await import('@/services/RideService');
+            const surge = await RideService.getSurgeMultiplier();
+            
             const route = await MapService.getRoute(
                 pickupCoords,
                 dropCoords,
                 waypoints.filter(w => w.coords.lat !== 0).map(w => w.coords)
             );
             setRouteInfo({
-                distance: route.distance / 1000, 
-                duration: Math.round(route.duration / 60), 
+                distance: route.distance, 
+                duration: route.duration, 
                 route: route.geometry
             });
- 
+
             if (!price || price === '0') {
                 const { calculateFare } = await import('@/lib/fareCalculator');
-                const fare = calculateFare(preferences.vehicleType, route.distance / 1000, route.duration / 60);
+                const fare = calculateFare(preferences.vehicleType, route.distance, route.duration, surge.multiplier);
                 setPrice(fare.totalFare.toString());
             }
         } catch (error) {
@@ -144,11 +153,18 @@ const CreateTripScreen = () => {
             return data;
         },
         onSuccess: () => {
-            Alert.alert('Mission Published', 'Your mission profile has been broadcasted to the terminal.');
+            toast({
+                title: 'Mission Published',
+                description: 'Your mission profile has been broadcasted to the terminal.',
+            });
             router.replace('/driver/trips' as any);
         },
         onError: (error: any) => {
-            Alert.alert('Transmission Error', error.message || 'Failed to sync mission profile');
+            toast({
+                title: 'Transmission Error',
+                description: error.message || 'Failed to sync mission profile',
+                variant: 'destructive',
+            });
         }
     });
  

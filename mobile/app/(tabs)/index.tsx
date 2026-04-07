@@ -106,8 +106,8 @@ export default function HomeScreen() {
     const rides = await RideService.getRecentRides(user.id, 1);
     if (rides.length > 0) {
       setRecentRide({
-        destination: rides[0].drop_location,
-        time: new Date(rides[0].created_at).toLocaleDateString()
+        destination: (rides[0] as any).dropLocation,
+        time: new Date((rides[0] as any).createdAt).toLocaleDateString()
       });
     }
 
@@ -145,11 +145,11 @@ export default function HomeScreen() {
     if (action === 'repeat_ride') {
       const rides = await RideService.getRecentRides(user.id, 1);
       if (rides.length > 0) {
-        const ride = rides[0];
-        setPickup(ride.pickup_location);
-        setPickupCoords({ lat: ride.pickup_lat, lng: ride.pickup_lng });
-        setDrop(ride.drop_location);
-        setDropCoords({ lat: ride.drop_lat, lng: ride.drop_lng });
+        const ride = rides[0] as any;
+        setPickup(ride.pickupLocation);
+        setPickupCoords({ lat: ride.pickupLat, lng: ride.pickupLng });
+        setDrop(ride.dropLocation);
+        setDropCoords({ lat: ride.dropLat, lng: ride.dropLng });
       }
     } else if (action === 'add_place') {
       router.push('/saved-places');

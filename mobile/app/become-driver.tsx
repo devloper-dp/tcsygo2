@@ -37,6 +37,7 @@ export default function BecomeDriverScreen() {
     const { user } = useAuth();
     const { theme, isDark, colors } = useTheme();
     const { hScale, vScale, mScale, spacing, fontSize } = useResponsive();
+    const { toast } = require('@/components/ui/toast').useToast();
     const [step, setStep] = useState(1);
     const [uploading, setUploading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -212,7 +213,11 @@ export default function BecomeDriverScreen() {
                 uploadImage(result.assets[0].base64, field);
             }
         } catch (error) {
-            Alert.alert('Error', 'Failed to pick image');
+            toast({
+                title: 'Error',
+                description: 'Failed to pick image',
+                variant: 'destructive',
+            });
         }
     };
  
@@ -243,7 +248,11 @@ export default function BecomeDriverScreen() {
  
         } catch (error: any) {
             console.error("Upload failed", error);
-            Alert.alert('Upload Failed', error.message);
+            toast({
+                title: 'Upload Failed',
+                description: error.message,
+                variant: 'destructive',
+            });
         } finally {
             setUploading(false);
         }
@@ -253,14 +262,22 @@ export default function BecomeDriverScreen() {
         if (step === 1) {
             const result = licenseSchema.safeParse(formData);
             if (!result.success) {
-                Alert.alert('Validation Check', result.error.issues[0]?.message);
+                toast({
+                    title: 'Validation Check',
+                    description: result.error.issues[0]?.message,
+                    variant: 'destructive',
+                });
                 return;
             }
             setStep(2);
         } else if (step === 2) {
             const result = vehicleSchema.safeParse(formData);
             if (!result.success) {
-                Alert.alert('Validation Check', result.error.issues[0]?.message);
+                toast({
+                    title: 'Validation Check',
+                    description: result.error.issues[0]?.message,
+                    variant: 'destructive',
+                });
                 return;
             }
             setStep(3);
@@ -272,7 +289,11 @@ export default function BecomeDriverScreen() {
     const handleSubmit = async () => {
         try {
             if (!user) {
-                Alert.alert('Error', 'You must be logged in to submit an application.');
+                toast({
+                    title: 'Error',
+                    description: 'You must be logged in to submit an application.',
+                    variant: 'destructive',
+                });
                 return;
             }
             setSubmitting(true);
@@ -319,11 +340,17 @@ export default function BecomeDriverScreen() {
             if (driverError) throw driverError;
             await clearDraft();
  
-            Alert.alert('Success', 'Application submitted successfully!', [
-                { text: 'OK', onPress: () => router.replace('/driver') }
-            ]);
+            toast({
+                title: 'Success',
+                description: 'Application submitted successfully!',
+            });
+            router.replace('/driver' as any);
         } catch (error: any) {
-            Alert.alert('Error', error.message);
+            toast({
+                title: 'Error',
+                description: error.message,
+                variant: 'destructive',
+            });
         } finally {
             setSubmitting(false);
         }

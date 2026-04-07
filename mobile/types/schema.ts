@@ -75,3 +75,44 @@ export interface Trip {
 export type TripWithDriver = Trip & {
     driver: Driver & { user: User };
 };
+
+export interface RideRequest {
+    id: string;
+    passengerId: string;
+    pickupLocation: string;
+    pickupLat: number;
+    pickupLng: number;
+    dropLocation: string;
+    dropLat: number;
+    dropLng: number;
+    status: 'pending' | 'searching' | 'accepted' | 'rejected' | 'cancelled' | 'timeout' | 'started' | 'completed' | 'scheduled' | 'confirmed';
+    fare: number;
+    totalAmount: number;
+    distance: number;
+    duration: number;
+    vehicleType: 'bike' | 'auto' | 'car';
+    driverId?: string | null;
+    tripId?: string | null;
+    seats: number;
+    preferences?: any;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface Booking {
+    id: string;
+    tripId?: string | null;
+    passengerId: string;
+    driverId?: string | null;
+    seatsBooked: number;
+    totalAmount: number;
+    status: string;
+    pickupLocation?: string | null;
+    pickupLat?: string | null;
+    pickupLng?: string | null;
+    dropLocation?: string | null;
+    dropLat?: string | null;
+    dropLng?: string | null;
+    createdAt: string;
+    updatedAt: string;
+}

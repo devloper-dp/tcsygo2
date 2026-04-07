@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
+import { Map, Marker, Polyline } from './Map';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/ui/card';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface Coordinates {
     latitude: number;
@@ -55,9 +56,8 @@ export function TripReplay({ route, pickup, drop, style }: TripReplayProps) {
     return (
         <Card style={[styles.container, style]}>
             <View style={styles.mapContainer}>
-                <MapView
+                <Map
                     style={styles.map}
-                    provider={PROVIDER_DEFAULT}
                     initialRegion={{
                         ...pickup,
                         latitudeDelta: 0.05,
@@ -79,7 +79,7 @@ export function TripReplay({ route, pickup, drop, style }: TripReplayProps) {
                             <Ionicons name="car" size={20} color="white" />
                         </View>
                     </Marker>
-                </MapView>
+                </Map>
             </View>
 
             <View style={styles.controls}>

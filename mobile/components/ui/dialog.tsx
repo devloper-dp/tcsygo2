@@ -64,7 +64,7 @@ const DialogContent = React.forwardRef<
                         "w-[90%] max-w-lg rounded-lg bg-background p-6 shadow-lg",
                         className
                     )}
-                    {...props}
+                    {...(({ onBlur, ...p }: any) => p)(props)}
                 >
                     <View ref={ref}>
                         {children}

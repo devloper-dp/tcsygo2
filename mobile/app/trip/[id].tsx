@@ -1,7 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, Share, Platform, Linking, ActivityIndicator } from 'react-native';
-import Animated, { FadeIn, FadeInDown, SlideInDown, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import {
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    TouchableOpacity,
+    View,
+    StatusBar,
+    StyleSheet,
+    Platform,
+    Image,
+    Share,
+    Linking
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { FadeIn, FadeInDown, SlideInDown, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,7 +22,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { TripTimelineMobile, DriverVerificationMobile, SimilarTripsMobile } from '../../components/TripDetailsComponents';
 import { BookingConfirmationModal, SeatSelector } from '../../components/BookingComponents';
-import { locationTrackingService } from '@/lib/location-tracking';
+import { locationTrackingService } from '@/services/LocationTrackingService';
 import { RatePassengerModal } from '../../components/RatePassengerModal';
 import { EmergencyButton } from '../../components/EmergencyButton';
 import { saveTrip, unsaveTrip, isTripSaved } from '@/lib/savedTrips';
@@ -20,6 +32,7 @@ import { RideInsuranceCard } from '../../components/RideInsuranceCard';
 import { SafetyTipsModal } from '../../components/SafetyTipsModal';
 import { GeofenceAlerts } from '../../components/GeofenceAlerts';
 import { SplitFareModal } from '../../components/SplitFareModal';
+import { RideService } from '@/services/RideService';
 import { FareBreakdownModal } from '@/components/FareBreakdownModal';
 import { TipDriverModal } from '@/components/TipDriverModal';
 import { PaymentService } from '@/services/PaymentService';
@@ -27,12 +40,17 @@ import { DriverVerificationModal } from '@/components/DriverVerificationModal';
 import { SafetyService } from '@/services/SafetyService';
 import { logger } from '@/services/LoggerService';
 import { NotificationService } from '@/services/NotificationService';
+import { ReceiptService } from '@/services/ReceiptService';
 import { DriverArrivalTimer } from '../../components/DriverArrivalTimer';
 import { TripReplay } from '../../components/TripReplay';
 import { Text } from '@/components/ui/text';
 import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useResponsive } from '@/hooks/useResponsive';
+import { useToast } from '@/components/ui/toast';
+import { Phone, MessageSquare, Navigation, MapPin, Clock, Calendar, Users, Info, Shield, CheckCircle, XCircle } from 'lucide-react-native';
 
 const TripDetailsScreen = () => {
     // ... (Hooks remain same)
@@ -56,6 +74,9 @@ const TripDetailsScreen = () => {
     const [ratePassengerModalVisible, setRatePassengerModalVisible] = useState(false);
     const [selectedPassenger, setSelectedPassenger] = useState<{ id: string, name: string } | null>(null);
 
+    const [showFareBreakdown, setShowFareBreakdown] = useState(false);
+    const { toast } = useToast();
+
     // Check if trip is saved
     useEffect(() => {
         const checkSaved = async () => {
@@ -74,8 +95,7 @@ const TripDetailsScreen = () => {
                 .from('trips')
                 .select(`
                     *,
-                    driver:users(*),
-                    driver_details:drivers(*)
+                    driver:drivers(*, user:users(*))
                 `)
                 .eq('id', id)
                 .single();
@@ -166,8 +186,15 @@ const TripDetailsScreen = () => {
                 .insert([{
                     trip_id: id,
                     passenger_id: user?.id,
+                    driver_id: trip.driver_id,
                     seats_booked: seatsToBook,
                     total_amount: (trip.price_per_seat * seatsToBook),
+                    pickup_location: trip.pickup_location,
+                    pickup_lat: trip.pickup_lat,
+                    pickup_lng: trip.pickup_lng,
+                    drop_location: trip.drop_location,
+                    drop_lat: trip.drop_lat,
+                    drop_lng: trip.drop_lng,
                     status: 'pending'
                 }])
                 .select()
@@ -180,7 +207,11 @@ const TripDetailsScreen = () => {
             router.push(`/payment/${data.id}` as any);
         },
         onError: (error: any) => {
-            Alert.alert('Booking Failed', error.message || 'Please try again');
+            toast({
+                title: 'Booking Failed',
+                description: error.message || 'Please try again',
+                variant: 'destructive',
+            });
         }
     });
 
@@ -200,7 +231,7 @@ const TripDetailsScreen = () => {
             if (bookings) {
                 for (const booking of bookings) {
                     if (status === 'arrived') {
-                        await NotificationService.sendDriverArrival(booking.passenger_id, trip.driver?.full_name || 'Driver', 0);
+                        await NotificationService.sendDriverArrival(booking.passenger_id, trip.driver?.user?.full_name || 'Driver', 0);
                     } else if (status === 'ongoing') {
                         await NotificationService.sendRideStarted(booking.passenger_id, trip.drop_location);
                     } else if (status === 'completed') {
@@ -212,9 +243,16 @@ const TripDetailsScreen = () => {
             if (status === 'ongoing') {
                 try {
                     await locationTrackingService.startBackgroundTracking(id as string, user?.id as string);
-                    Alert.alert('Success', 'Trip Started. Location sharing is active.');
+                    toast({
+                        title: 'Success',
+                        description: 'Trip Started. Location sharing is active.',
+                    });
                 } catch (e: any) {
-                    Alert.alert('Warning', 'Trip started but failed to start location tracking: ' + e.message);
+                    toast({
+                        title: 'Warning',
+                        description: 'Trip started but failed to start location tracking: ' + e.message,
+                        variant: 'destructive',
+                    });
                 }
             } else if (status === 'completed') {
                 await locationTrackingService.stopTracking();
@@ -223,20 +261,37 @@ const TripDetailsScreen = () => {
                 try {
                     const { settled, failed } = await PaymentService.settleTripPayments(id as string);
                     if (failed > 0) {
-                        Alert.alert('Trip Ended', `Trip completed successfully. ${settled} payments settled, ${failed} payments pending.`);
+                        toast({
+                            title: 'Trip Ended',
+                            description: `Trip completed successfully. ${settled} payments settled, ${failed} payments pending.`,
+                        });
                     } else {
-                        Alert.alert('Trip Ended', 'Trip completed and all payments have been settled.');
+                        toast({
+                            title: 'Trip Ended',
+                            description: 'Trip completed and all payments have been settled.',
+                        });
                     }
                 } catch (paymentError: any) {
                     console.error('Error in auto-pay settlement:', paymentError);
-                    Alert.alert('Trip Ended', 'Trip completed, but auto-payment settlement failed. Passengers can pay manually.');
+                    toast({
+                        title: 'Trip Ended',
+                        description: 'Trip completed, but auto-payment settlement failed. Passengers can pay manually.',
+                        variant: 'destructive',
+                    });
                 }
             } else {
-                Alert.alert('Success', `Trip ${status}`);
+                toast({
+                    title: 'Success',
+                    description: `Trip ${status}`,
+                });
             }
         },
         onError: (error: any) => {
-            Alert.alert('Error', error.message || 'Failed to update trip status');
+            toast({
+                title: 'Error',
+                description: error.message || 'Failed to update trip status',
+                variant: 'destructive',
+            });
         }
     });
 
@@ -291,7 +346,7 @@ const TripDetailsScreen = () => {
         if (prevStatus && prevStatus !== currentStatus) {
             // Only notify if status actually changed
             if (currentStatus === 'arrived') {
-                NotificationService.sendDriverArrival(user.id, trip.driver?.full_name || 'Driver', 0);
+                NotificationService.sendDriverArrival(user.id, trip.driver?.user?.full_name || 'Driver', 0);
             } else if (currentStatus === 'ongoing') {
                 NotificationService.sendRideStarted(user.id, trip.drop_location);
             } else if (currentStatus === 'completed') {
@@ -394,10 +449,17 @@ const TripDetailsScreen = () => {
             } else {
                 await saveTrip(id as string);
                 setIsSaved(true);
-                Alert.alert('Saved', 'Trip saved for later');
+                toast({
+                    title: 'Saved',
+                    description: 'Trip saved for later',
+                });
             }
         } catch (e) {
-            Alert.alert('Error', 'Failed to update saved status');
+            toast({
+                title: 'Error',
+                description: 'Failed to update saved status',
+                variant: 'destructive',
+            });
         }
     };
     const { theme } = useTheme();
@@ -435,7 +497,7 @@ const TripDetailsScreen = () => {
 
     // isDriver is already defined at the top of the component
     return (
-        <SafeAreaView className="flex-1 bg-slate-50 dark:bg-slate-950">
+        <SafeAreaView edges={['top']} className="flex-1 bg-slate-50 dark:bg-slate-950">
             <View style={{ paddingHorizontal: spacing.xl, paddingVertical: vScale(16), borderBottomWidth: 1 }} className="flex-row justify-between items-center border-slate-50 dark:border-slate-800 bg-white dark:bg-slate-900 z-10 shadow-sm">
                 <TouchableOpacity onPress={() => router.back()} style={{ padding: hScale(8), borderRadius: hScale(20) }} className="bg-slate-100 dark:bg-slate-800">
                     <Ionicons name="arrow-back" size={hScale(20)} color={isDark ? "#94a3b8" : "#1f2937"} />
@@ -495,7 +557,7 @@ const TripDetailsScreen = () => {
                             {driverLocation && (
                                 <Marker
                                     coordinate={{ latitude: driverLocation.lat, longitude: driverLocation.lng }}
-                                    title={`${trip.driver?.full_name || 'Driver'}`}
+                                    title={`${trip.driver?.user?.full_name || 'Driver'}`}
                                 >
                                     <View style={{ padding: hScale(6), borderRadius: hScale(20), borderWidth: 2 }} className="bg-white dark:bg-slate-900 border-blue-600 shadow-lg">
                                         <Ionicons name="car" size={hScale(24)} color="#3b82f6" />
@@ -540,27 +602,31 @@ const TripDetailsScreen = () => {
                     <Card style={{ padding: hScale(20), borderRadius: hScale(28), marginBottom: vScale(32), borderWidth: 1 }} className="flex-row justify-between items-center bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-none">
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(16) }}>
                             <View style={{ width: hScale(56), height: hScale(56), borderRadius: hScale(16), borderWidth: 1 }} className="bg-blue-100 dark:bg-blue-900/30 justify-center items-center overflow-hidden border-blue-200 dark:border-blue-800">
-                                {trip.driver?.avatar_url ? (
-                                    <Image source={{ uri: trip.driver.avatar_url }} className="w-full h-full" />
+                                {trip.driver?.user?.avatar_url ? (
+                                    <Image source={{ uri: trip.driver.user.avatar_url }} className="w-full h-full" />
                                 ) : (
-                                    <Text style={{ fontSize: hScale(20) }} className="text-blue-600 dark:text-blue-400 font-black">{trip.driver?.full_name?.charAt(0) || 'D'}</Text>
+                                    <Text style={{ fontSize: hScale(20) }} className="text-blue-600 dark:text-blue-400 font-black">{trip.driver?.user?.full_name?.charAt(0) || 'D'}</Text>
                                 )}
                             </View>
                             <View>
-                                <Text style={{ fontSize: hScale(18) }} className="font-black text-slate-900 dark:text-white tracking-tight">{trip.driver?.full_name || 'Verified Driver'}</Text>
+                                <Text style={{ fontSize: hScale(18) }} className="font-black text-slate-900 dark:text-white tracking-tight">{trip.driver?.user?.full_name || 'Verified Driver'}</Text>
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(8), marginTop: vScale(2) }}>
                                     <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: hScale(8), paddingVertical: vScale(2), borderRadius: hScale(6), gap: hScale(4) }} className="bg-amber-100 dark:bg-amber-900/40">
                                         <Ionicons name="star" size={hScale(12)} color="#f59e0b" />
-                                        <Text style={{ fontSize: hScale(10) }} className="font-black text-amber-700 dark:text-amber-400">4.8</Text>
+                                        <Text style={{ fontSize: hScale(10) }} className="font-black text-amber-700 dark:text-amber-400">{trip.driver?.rating || 'New'}</Text>
                                     </View>
-                                    <Text style={{ fontSize: hScale(10) }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">120 Rides</Text>
+                                    <Text style={{ fontSize: hScale(10) }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{trip.driver?.total_trips || '0'} Rides</Text>
                                 </View>
                             </View>
                         </View>
-                        <View style={{ paddingHorizontal: hScale(16), paddingVertical: vScale(8), borderRadius: hScale(16), borderWidth: 1 }} className="items-end bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50">
+                        <TouchableOpacity 
+                            onPress={() => setShowFareBreakdown(true)}
+                            style={{ paddingHorizontal: hScale(16), paddingVertical: vScale(8), borderRadius: hScale(16), borderWidth: 1 }} 
+                            className="items-end bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50"
+                        >
                             <Text style={{ fontSize: hScale(10), marginBottom: vScale(2) }} className="font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Fare</Text>
                             <Text style={{ fontSize: hScale(20) }} className="font-black text-blue-600 dark:text-blue-400 tracking-tighter">₹{trip.price_per_seat}</Text>
-                        </View>
+                        </TouchableOpacity>
                     </Card>
  
                     <View style={{ padding: hScale(24), borderRadius: hScale(32), marginBottom: vScale(40), borderWidth: 1, gap: vScale(24) }} className="bg-white dark:bg-slate-900/50 border-slate-100 dark:border-slate-800">
@@ -706,7 +772,7 @@ const TripDetailsScreen = () => {
                         <TouchableOpacity
                             style={{ height: vScale(64), borderRadius: hScale(24), gap: hScale(12) }}
                             className="flex-row items-center justify-center bg-blue-600 active:bg-blue-700 shadow-lg shadow-blue-500/20"
-                            onPress={() => router.push(`/chat/${id}?userId=${isDriver ? 'passenger' : trip.driver_id}&userName=${isDriver ? 'Passenger' : trip.driver?.full_name}` as any)}
+                            onPress={() => router.push(`/chat/${id}?userId=${isDriver ? 'passenger' : trip.driver?.user_id}&userName=${isDriver ? 'Passenger' : trip.driver?.user?.full_name}` as any)}
                         >
                             <Ionicons name="chatbubble" size={hScale(20)} color="white" />
                             <Text style={{ fontSize: hScale(18) }} className="font-black text-white">
@@ -748,6 +814,16 @@ const TripDetailsScreen = () => {
                 onClose={() => setShowSafetyTips(false)}
             />
 
+            <FareBreakdownModal
+                visible={showFareBreakdown || showReceipt}
+                onClose={() => {
+                    setShowFareBreakdown(false);
+                    setShowReceipt(false);
+                }}
+                trip={trip}
+                booking={bookings?.find((b: any) => b.passenger_id === user?.id)}
+            />
+
             <SplitFareModal
                 isVisible={showSplitFare}
                 onClose={() => setShowSplitFare(false)}
@@ -760,14 +836,7 @@ const TripDetailsScreen = () => {
                 onClose={() => setShowBookingConfirmation(false)}
                 onConfirm={() => {
                     setShowBookingConfirmation(false);
-                    bookingMutation.mutate(undefined, {
-                        onSuccess: () => {
-                            // After successful booking, show verification if trip is starting soon
-                            // and trigger auto-share logic
-                            setShowDriverVerification(true);
-                            logger.info('Booking successful, showing driver verification');
-                        }
-                    });
+                    bookingMutation.mutate();
                 }}
                 trip={{
                     pickupLocation: trip.pickup_location,
@@ -819,12 +888,7 @@ const TripDetailsScreen = () => {
                 trip={trip}
             />
 
-            <FareBreakdownModal
-                visible={showReceipt}
-                onClose={() => setShowReceipt(false)}
-                trip={trip}
-                booking={bookings?.find((b: any) => b.passenger_id === user?.id)} // For passengers
-            />
+
 
             <TipDriverModal
                 visible={showTipModal}

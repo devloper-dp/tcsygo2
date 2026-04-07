@@ -125,7 +125,8 @@ export function MultiPaymentSelector({
                 userId: user?.id || '',
                 type: 'wallet',
                 isDefault: true,
-                createdAt: '', updatedAt: '' // dummy
+                createdAt: new Date().toISOString(), 
+                updatedAt: new Date().toISOString() 
             } as PaymentMethod);
         } else if (type === 'cash') {
             onPaymentMethodSelect({ type: 'cash' });
@@ -143,12 +144,9 @@ export function MultiPaymentSelector({
                 userId: user?.id || '',
                 type: 'upi',
                 upiId: upiId,
-                // upiApp is not in shared schema?
-                // Shared schema has `provider`? `walletType`?
-                // Let's use `provider` for upiApp if needed? Or just ignore it if not in schema.
-                // Schema has `upiId`.
                 isDefault: false,
-                createdAt: '', updatedAt: ''
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
             } as PaymentMethod);
         } else if (type === 'card') {
             onPaymentMethodSelect({
@@ -156,7 +154,8 @@ export function MultiPaymentSelector({
                 userId: user?.id || '',
                 type: 'card',
                 isDefault: false,
-                createdAt: '', updatedAt: ''
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
             } as PaymentMethod);
         }
     };
@@ -171,7 +170,8 @@ export function MultiPaymentSelector({
                 type: 'upi',
                 upiId: val,
                 isDefault: false,
-                createdAt: '', updatedAt: ''
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
             } as PaymentMethod);
         }
     };
@@ -184,10 +184,10 @@ export function MultiPaymentSelector({
                 userId: user?.id || '',
                 type: 'upi',
                 upiId: upiId,
-                // Store appId in provider or ignore
                 provider: appId,
                 isDefault: false,
-                createdAt: '', updatedAt: ''
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
             } as PaymentMethod);
         }
     };

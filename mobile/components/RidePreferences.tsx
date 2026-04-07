@@ -30,6 +30,7 @@ export function RidePreferences({
     style,
 }: RidePreferencesProps) {
     const { isDark } = useTheme();
+    const { toast } = require('@/components/ui/toast').useToast();
     const [internalPreferences, setInternalPreferences] = useState<RidePreference>(
         externalPreferences || {
             ac_preferred: true,
@@ -97,9 +98,16 @@ export function RidePreferences({
                 });
  
             if (error) throw error;
-            alert('Preferences saved successfully!');
+            toast({
+                title: 'Success',
+                description: 'Preferences saved successfully!',
+            });
         } catch (error: any) {
-            alert('Failed to save preferences: ' + error.message);
+            toast({
+                title: 'Error',
+                description: 'Failed to save preferences: ' + error.message,
+                variant: 'destructive',
+            });
         } finally {
             setLoading(false);
         }

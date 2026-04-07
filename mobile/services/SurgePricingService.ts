@@ -21,8 +21,8 @@ export const SurgePricingService = {
      * Get current surge multiplier for a location
      */
     getSurgeMultiplier: async (
-        latitude: number,
-        longitude: number
+        lat: number,
+        lng: number
     ): Promise<SurgePricingUpdate> => {
         try {
             // Get all active surge zones
@@ -37,7 +37,7 @@ export const SurgePricingService = {
             // Check if location is in any surge zone
             if (zones && zones.length > 0) {
                 for (const zone of zones) {
-                    if (SurgePricingService.isPointInZone(latitude, longitude, zone.coordinates)) {
+                    if (SurgePricingService.isPointInZone(lat, lng, zone.coordinates)) {
                         return {
                             multiplier: zone.current_multiplier,
                             reason: `${zone.demand_level.charAt(0).toUpperCase() + zone.demand_level.slice(1)} Demand in ${zone.zone_name}`,
@@ -154,8 +154,8 @@ export const SurgePricingService = {
      * Calculate dynamic surge based on demand
      */
     calculateDynamicSurge: async (
-        latitude: number,
-        longitude: number,
+        lat: number,
+        lng: number,
         radius: number = 5000 // 5km radius
     ): Promise<number> => {
         try {

@@ -655,8 +655,8 @@ export default function Search() {
                   // Use centralized fare calculator
                   const estimatedFare = Math.round(calculateFare(vType as any, routeInfo.distance, routeInfo.duration).totalFare);
 
-                  // Seats available (mock for selection)
-                  const seats = vType === 'bike' ? 1 : vType === 'auto' ? 3 : 4;
+                  // Seats available (based on standard vehicle capacity)
+                  const maxSeats = vType === 'bike' ? 1 : vType === 'auto' ? 3 : 4;
 
                   return (
                     <Card
@@ -674,7 +674,7 @@ export default function Search() {
                           </div>
                           <div>
                             <h4 className="font-bold text-lg capitalize">{vType}</h4>
-                            <p className="text-sm text-muted-foreground">{routeInfo.duration} mins • {seats} seats</p>
+                            <p className="text-sm text-muted-foreground">{routeInfo.duration} mins • {maxSeats} seats</p>
                           </div>
                         </div>
                         <div className="text-right">
@@ -702,9 +702,9 @@ export default function Search() {
                                   className="h-6 w-6"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setInstantBookingSeats(Math.min(seats, instantBookingSeats + 1));
+                                    setInstantBookingSeats(Math.min(maxSeats, instantBookingSeats + 1));
                                   }}
-                                  disabled={instantBookingSeats >= seats}
+                                  disabled={instantBookingSeats >= maxSeats}
                                 >
                                   +
                                 </Button>

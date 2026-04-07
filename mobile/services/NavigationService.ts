@@ -99,7 +99,7 @@ export const NavigationService = {
     },
 
     /**
-     * Open external navigation app (Google Maps or Apple Maps)
+     * Open external navigation app
      */
     openExternalNavigation: async (
         destination: { lat: number; lng: number },
@@ -125,9 +125,10 @@ export const NavigationService = {
                 }
             }
 
-            // Fallback to Google Maps web
-            const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${destination.lat},${destination.lng}`;
-            await Linking.openURL(googleMapsUrl);
+            // Fallback to OpenStreetMap web
+            const location = await Location.getCurrentPositionAsync({});
+            const osmUrl = `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${location.coords.latitude}%2C${location.coords.longitude}%3B${destination.lat}%2C${destination.lng}`;
+            await Linking.openURL(osmUrl);
             return true;
         } catch (error) {
             console.error('Error opening navigation:', error);

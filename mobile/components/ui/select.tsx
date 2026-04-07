@@ -2,6 +2,7 @@ import * as React from "react";
 import { Modal, TouchableOpacity, View, Text, ScrollView } from "react-native";
 import { cn } from "../../lib/utils";
 import { Feather } from "@expo/vector-icons";
+import { useTheme } from "@/contexts/ThemeContext";
 
 // Similar to DropdownMenu but focused on selection
 interface SelectContextType {

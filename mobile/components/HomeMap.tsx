@@ -21,7 +21,7 @@ export function HomeMap() {
         queryFn: async () => {
             const { data, error } = await supabase
                 .from('live_locations')
-                .select('*, driver:profiles(*)')
+                .select('*, driver:drivers(*, user:users(*))')
                 .limit(50);
             if (error) throw error;
             return data;
@@ -112,12 +112,12 @@ export function HomeMap() {
                         </Marker>
                     )}
 
-                    {drivers?.map((driver) => (
+                    {drivers?.filter(d => d.lat && d.lng).map((driver) => (
                         <Marker
                             key={driver.id}
                             coordinate={{
-                                latitude: driver.latitude,
-                                longitude: driver.longitude,
+                                latitude: parseFloat(driver.lat),
+                                longitude: parseFloat(driver.lng),
                             }}
                         >
                             <View className="bg-slate-900 dark:bg-white p-2.5 rounded-full border-2 border-white dark:border-slate-900 shadow-lg">

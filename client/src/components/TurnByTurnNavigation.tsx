@@ -21,7 +21,9 @@ import { useTranslation } from 'react-i18next';
 interface NavigationStep {
     instruction: string;
     distance: number; // in meters
-    type: 'straight' | 'left' | 'right' | 'destination';
+    type: 'turn-left' | 'turn-right' | 'turn-slight-left' | 'turn-slight-right' |
+    'turn-sharp-left' | 'turn-sharp-right' | 'straight' | 'roundabout' |
+    'destination' | 'depart';
 }
 
 interface TurnByTurnNavigationProps {
@@ -95,12 +97,22 @@ export function TurnByTurnNavigation({
 
     const getStepIcon = (type: NavigationStep['type']) => {
         switch (type) {
-            case 'left':
+            case 'turn-left':
+            case 'turn-sharp-left':
                 return CornerUpLeft;
-            case 'right':
+            case 'turn-right':
+            case 'turn-sharp-right':
+                return CornerUpRight;
+            case 'turn-slight-left':
+                return CornerUpLeft;
+            case 'turn-slight-right':
                 return CornerUpRight;
             case 'destination':
                 return Flag;
+            case 'depart':
+                return Navigation;
+            case 'roundabout':
+                return Navigation;
             default:
                 return ArrowUp;
         }

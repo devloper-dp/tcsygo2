@@ -78,20 +78,20 @@ export const RideScheduler: React.FC<RideSchedulerProps> = ({
  
         try {
             const booking = await RideService.bookRide({
-                pickup_location: pickupLocation,
-                drop_location: dropLocation,
-                pickup_lat: pickupCoords.lat,
-                pickup_lng: pickupCoords.lng,
-                drop_lat: dropCoords.lat,
-                drop_lng: dropCoords.lng,
+                pickupLocation: pickupLocation,
+                dropLocation: dropLocation,
+                pickupLat: pickupCoords.lat,
+                pickupLng: pickupCoords.lng,
+                dropLat: dropCoords.lat,
+                dropLng: dropCoords.lng,
                 status: 'scheduled',
-                price_per_seat: price,
-                total_amount: price,
-                scheduled_time: scheduledDateTime.toISOString(),
+                fare: price,
+                totalAmount: price,
+                scheduled_time: scheduledDateTime.toISOString(), // and this
                 preferences: {
                     vehicle_type: vehicleType,
                 },
-            });
+            } as any);
  
             // Schedule notification reminder
             await scheduleRideReminder(booking.id, scheduledDateTime);

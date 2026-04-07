@@ -67,11 +67,38 @@ export default function DriverDashboard() {
                 .eq('driver_id', driver.id)
                 .eq('status', 'scheduled');
  
-            // Get earnings (mock calculation for now, would sum payments)
+            // Real calculation for earnings
+            const { data: trips } = await supabase
+                .from('trips')
+                .select('id')
+                .eq('driver_id', driver.id);
+            
+            let totalEarnings = 0;
+            if (trips && trips.length > 0) {
+                const tripIds = trips.map(t => t.id);
+                const { data: bookings } = await supabase
+                    .from('bookings')
+                    .select('id')
+                    .in('trip_id', tripIds);
+                
+                if (bookings && bookings.length > 0) {
+                    const bookingIds = bookings.map(b => b.id);
+                    const { data: payments } = await supabase
+                        .from('payments')
+                        .select('driver_earnings')
+                        .in('booking_id', bookingIds)
+                        .eq('status', 'success');
+                    
+                    if (payments) {
+                        totalEarnings = payments.reduce((sum, p) => sum + parseFloat(p.driver_earnings || '0'), 0);
+                    }
+                }
+            }
+
             return {
                 activeTrips: activeTrips || 0,
-                rating: 4.9,
-                earnings: 1250,
+                rating: parseFloat(driver.rating) || 5.0,
+                earnings: totalEarnings,
             };
         },
         enabled: !!driver

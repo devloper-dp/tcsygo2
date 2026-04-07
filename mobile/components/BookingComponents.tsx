@@ -37,20 +37,31 @@ export function BookingConfirmationModal({
     const [promoCode, setPromoCode] = useState('');
     const [discount, setDiscount] = useState(0);
     const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
+    const { toast } = require('@/components/ui/toast').useToast();
  
     const handleApplyPromo = () => {
         if (promoCode.toUpperCase() === 'FIRST50') {
             const disc = Math.min(totalAmount * 0.5, 100);
             setDiscount(disc);
             setAppliedPromo('FIRST50');
-            Alert.alert('Success', 'Promo code applied! ₹' + disc + ' saved.');
+            toast({
+                title: 'Success',
+                description: 'Promo code applied! ₹' + disc + ' saved.',
+            });
         } else if (promoCode.toUpperCase() === 'RAPIDO20') {
             const disc = Math.min(totalAmount * 0.2, 50);
             setDiscount(disc);
             setAppliedPromo('RAPIDO20');
-            Alert.alert('Success', 'Promo code applied! ₹' + disc + ' saved.');
+            toast({
+                title: 'Success',
+                description: 'Promo code applied! ₹' + disc + ' saved.',
+            });
         } else {
-            Alert.alert('Invalid Code', 'Please enter a valid promo code');
+            toast({
+                title: 'Invalid Code',
+                description: 'Please enter a valid promo code',
+                variant: 'destructive',
+            });
             setDiscount(0);
             setAppliedPromo(null);
         }

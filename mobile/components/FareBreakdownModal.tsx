@@ -7,11 +7,24 @@ import { logger } from '@/services/LoggerService';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useResponsive } from '@/hooks/useResponsive';
  
+import { Booking, Trip } from '@/types/schema';
+
 interface FareBreakdownModalProps {
     visible: boolean;
     onClose: () => void;
-    trip: any; // Using any for flexibility with booking/trip objects
-    booking?: any;
+    trip: Trip; 
+    booking?: Booking & { 
+        surgeMultiplier?: number;
+        discountAmount?: number;
+        fareBreakdown?: {
+            base_fare: number;
+            distance_fare: number;
+            surge_charge: number;
+            taxes: number;
+            platform_fee: number;
+        };
+        payment_method?: string; // Keeping snake_case for raw DB fields if necessary, but using Booking totalAmount
+    };
 }
  
 export function FareBreakdownModal({ visible, onClose, trip, booking }: FareBreakdownModalProps) {
@@ -21,15 +34,15 @@ export function FareBreakdownModal({ visible, onClose, trip, booking }: FareBrea
     if (!visible) return null;
  
     // Calculate generic values if booking not provided (e.g. for driver view)
-    const seats = booking?.seats_booked || 1;
-    const subtotal = (booking?.total_amount || 0) / (booking?.surge_multiplier || 1);
-    const baseFare = booking?.fare_breakdown?.base_fare || (parseFloat(trip.price_per_seat) * seats);
-    const distanceFare = booking?.fare_breakdown?.distance_fare || 0;
-    const surgeCharge = booking?.fare_breakdown?.surge_charge || (booking?.surge_multiplier > 1 ? (baseFare + distanceFare) * (booking.surge_multiplier - 1) : 0);
-    const taxes = booking?.fare_breakdown?.taxes || (baseFare + distanceFare + surgeCharge) * 0.05;
-    const platformFee = booking?.fare_breakdown?.platform_fee || 0;
-    const discount = booking?.discount_amount || 0;
-    const totalAmount = booking ? parseFloat(booking.total_amount) : (baseFare + distanceFare + surgeCharge + taxes + platformFee);
+    const seats = booking?.seatsBooked || 1;
+    const subtotal = (booking?.totalAmount || 0) / (booking?.surgeMultiplier || 1);
+    const baseFare = booking?.fareBreakdown?.base_fare || (parseFloat(trip.pricePerSeat) * seats);
+    const distanceFare = booking?.fareBreakdown?.distance_fare || 0;
+    const surgeCharge = booking?.fareBreakdown?.surge_charge || ((booking?.surgeMultiplier || 1) > 1 ? (baseFare + distanceFare) * ((booking?.surgeMultiplier || 1) - 1) : 0);
+    const taxes = booking?.fareBreakdown?.taxes || (baseFare + distanceFare + surgeCharge) * 0.05;
+    const platformFee = booking?.fareBreakdown?.platform_fee || 0;
+    const discount = booking?.discountAmount || 0;
+    const totalAmount = booking ? booking.totalAmount : (baseFare + distanceFare + surgeCharge + taxes + platformFee);
     const [isSharing, setIsSharing] = useState(false);
  
     const handleShare = async () => {
@@ -72,7 +85,7 @@ export function FareBreakdownModal({ visible, onClose, trip, booking }: FareBrea
                     <ScrollView showsVerticalScrollIndicator={false}>
                         <View style={{ marginBottom: vScale(32) }}>
                             <Text style={{ fontSize: hScale(10), marginBottom: vScale(6) }} className="font-black text-slate-400 dark:text-slate-600 uppercase tracking-[2px]">Receipt ID: #SYGO-{trip.id.slice(0, 8).toUpperCase()}</Text>
-                            <Text style={{ fontSize: hScale(14) }} className="font-bold text-slate-600 dark:text-slate-300">{new Date(trip.departure_time || trip.created_at).toLocaleString(undefined, { dateStyle: 'long', timeStyle: 'short' })}</Text>
+                            <Text style={{ fontSize: hScale(14) }} className="font-bold text-slate-600 dark:text-slate-300">{new Date(trip.departureTime || trip.createdAt).toLocaleString(undefined, { dateStyle: 'long', timeStyle: 'short' })}</Text>
                         </View>
  
                         <View style={{ borderRadius: hScale(24), padding: hScale(24), marginBottom: vScale(32), borderWidth: 1 }} className="bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800/50">
@@ -80,14 +93,14 @@ export function FareBreakdownModal({ visible, onClose, trip, booking }: FareBrea
                                 <View style={{ width: hScale(20), height: hScale(20), borderRadius: hScale(10) }} className="bg-blue-500/10 items-center justify-center">
                                     <View style={{ width: hScale(10), height: hScale(10), borderRadius: hScale(5) }} className="bg-blue-500" />
                                 </View>
-                                <Text style={{ fontSize: hScale(14) }} className="font-bold text-slate-900 dark:text-white flex-1" numberOfLines={1}>{trip.pickup_location}</Text>
+                                <Text style={{ fontSize: hScale(14) }} className="font-bold text-slate-900 dark:text-white flex-1" numberOfLines={1}>{trip.pickupLocation}</Text>
                             </View>
                             <View style={{ width: hScale(2), height: vScale(24), marginLeft: hScale(10), marginVertical: vScale(4) }} className="bg-slate-200 dark:bg-slate-700" />
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(16) }}>
                                 <View style={{ width: hScale(20), height: hScale(20), borderRadius: hScale(10) }} className="bg-rose-500/10 items-center justify-center">
                                     <View style={{ width: hScale(10), height: hScale(10), borderRadius: hScale(5) }} className="bg-rose-500" />
                                 </View>
-                                <Text style={{ fontSize: hScale(14) }} className="font-bold text-slate-900 dark:text-white flex-1" numberOfLines={1}>{trip.drop_location}</Text>
+                                <Text style={{ fontSize: hScale(14) }} className="font-bold text-slate-900 dark:text-white flex-1" numberOfLines={1}>{trip.dropLocation}</Text>
                             </View>
                         </View>
  

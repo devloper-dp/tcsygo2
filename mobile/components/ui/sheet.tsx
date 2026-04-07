@@ -69,7 +69,7 @@ const SheetContent = React.forwardRef<
                         "bg-background p-6 shadow-lg h-[50%] w-full rounded-t-xl", // Make it a half-screen sheet by default
                         className
                     )}
-                    {...props}
+                    {...(({ onBlur, ...p }: any) => p)(props)}
                 >
                     <View ref={ref}>
                         {children}

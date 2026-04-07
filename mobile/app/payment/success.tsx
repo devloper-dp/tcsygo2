@@ -1,17 +1,62 @@
-import { View, ScrollView, StatusBar, TouchableOpacity } from "react-native";
+import { View, ScrollView, StatusBar, TouchableOpacity, ActivityIndicator } from "react-native";
 import { Link, Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Text } from "@/components/ui/text";
 import { Button } from "@/components/ui/button";
-import { Check, CheckCircle, ArrowRight, Home } from "lucide-react-native";
+import { Check, CheckCircle, ArrowRight, Home, Download } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
+import { ReceiptService } from "@/services/ReceiptService";
+import { useToast } from "@/components/ui/toast";
+import { useState } from "react";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
  
 export default function PaymentSuccess() {
     const { bookingId } = useLocalSearchParams();
     const router = useRouter();
     const { theme, isDark } = useTheme();
     const { hScale, vScale, spacing } = useResponsive();
+    const { toast } = useToast();
+    const [isGenerating, setIsGenerating] = useState(false);
+
+    const handleDownloadReceipt = async () => {
+        if (!bookingId || isGenerating) return;
+        setIsGenerating(true);
+        try {
+            const receipt = await ReceiptService.generateReceiptData(bookingId as string);
+            if (receipt) {
+                const pdfUri = await ReceiptService.generatePDF(receipt);
+                if (pdfUri) {
+                    // Rename to a friendly name
+                    const fileName = `TCSYGO_Receipt_${receipt.id}.pdf`;
+                    const newUri = `${(FileSystem as any).documentDirectory}${fileName}`;
+                    await FileSystem.moveAsync({ from: pdfUri, to: newUri });
+                    
+                    await Sharing.shareAsync(newUri, {
+                        mimeType: 'application/pdf',
+                        dialogTitle: 'TCSYGO Receipt',
+                    });
+                    toast({
+                        title: "Success",
+                        description: "Receipt generated successfully",
+                    });
+                } else {
+                    throw new Error("Failed to generate PDF");
+                }
+            } else {
+                throw new Error("Failed to generate receipt data");
+            }
+        } catch (error: any) {
+            toast({
+                title: "Error",
+                description: error.message || "Failed to generate receipt",
+                variant: "destructive",
+            });
+        } finally {
+            setIsGenerating(false);
+        }
+    };
  
     return (
         <View className="flex-1 bg-white dark:bg-slate-950">
@@ -54,6 +99,24 @@ export default function PaymentSuccess() {
                             </View>
                         </Button>
  
+                        <Button
+                            style={{ height: vScale(64), borderRadius: hScale(24), borderWidth: 1 }}
+                            className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 justify-center items-center flex-row"
+                            onPress={handleDownloadReceipt}
+                            disabled={isGenerating}
+                        >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(12) }}>
+                                {isGenerating ? (
+                                    <ActivityIndicator size="small" color={isDark ? "#94a3b8" : "#64748b"} />
+                                ) : (
+                                    <>
+                                        <Download size={hScale(20)} color={isDark ? "#94a3b8" : "#64748b"} strokeWidth={2.5} />
+                                        <Text style={{ fontSize: hScale(14) }} className="text-slate-600 dark:text-slate-400 font-black uppercase tracking-widest">Download Receipt</Text>
+                                    </>
+                                )}
+                            </View>
+                        </Button>
+
                         <Button
                             style={{ height: vScale(64), borderRadius: hScale(24), borderWidth: 1 }}
                             className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 justify-center items-center flex-row"

@@ -57,7 +57,7 @@ export default function SOSAlertsScreen() {
     };
 
     const openMap = (lat: string | number, lng: string | number) => {
-        const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+        const url = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=17/${lat}/${lng}`;
         Linking.openURL(url);
     };
 

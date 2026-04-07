@@ -182,17 +182,15 @@ export default function SearchScreen() {
       }
 
       const trip = await RideService.bookRide({
-        pickup_location: params.pickup as string,
-        drop_location: params.drop as string,
-        pickup_lat: params.pickupLat ? parseFloat(params.pickupLat as string) : 0,
-        pickup_lng: params.pickupLng ? parseFloat(params.pickupLng as string) : 0,
-        drop_lat: params.dropLat ? parseFloat(params.dropLat as string) : 0,
-        drop_lng: params.dropLng ? parseFloat(params.dropLng as string) : 0,
-        price_per_seat: price,
-        // Special fields for instant ride request
-        // Note: You might need to adjust your 'trips' table to support 'passenger_id' as creator or use a separate 'ride_requests' table
-        // For now assuming we insert and mark as 'request'
-        preferences: preferences // Pass preferences to service
+        pickupLocation: params.pickup as string,
+        dropLocation: params.drop as string,
+        pickupLat: params.pickupLat ? parseFloat(params.pickupLat as string) : 0,
+        pickupLng: params.pickupLng ? parseFloat(params.pickupLng as string) : 0,
+        dropLat: params.dropLat ? parseFloat(params.dropLat as string) : 0,
+        dropLng: params.dropLng ? parseFloat(params.dropLng as string) : 0,
+        fare: price,
+        totalAmount: price,
+        preferences: preferences
       });
 
       if (trip) {

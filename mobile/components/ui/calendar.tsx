@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { Calendar as RNCalendar, CalendarProps as RNCalendarProps, DateData } from 'react-native-calendars';
 import { cn } from '@/lib/utils';
 
-export interface CalendarProps extends Partial<RNCalendarProps> {
+export interface CalendarProps extends Omit<Partial<RNCalendarProps>, 'minDate' | 'maxDate'> {
     selected?: Date;
     onSelect?: (date: Date) => void;
     className?: string;

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -33,7 +34,7 @@ export default function ForgotPasswordScreen() {
  
     if (sent) {
         return (
-            <SafeAreaView className="flex-1 bg-white dark:bg-slate-950">
+        <SafeAreaView edges={['top']} className="flex-1 bg-white dark:bg-slate-950">
                 <View style={{ paddingHorizontal: spacing.lg, paddingVertical: vScale(12), borderBottomWidth: 1 }} className="border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950">
                     <TouchableOpacity onPress={() => router.back()} style={{ padding: spacing.xs }}>
                         <Ionicons name="arrow-back" size={hScale(24)} color={isDark ? "#f8fafc" : "#1f2937"} />

@@ -121,14 +121,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  async function fetchUserProfile(userId: string) {
-    if (fetchingProfileFor.current === userId) {
+  async function fetchUserProfile(userId: string, retryCount = 0) {
+    if (fetchingProfileFor.current === userId && retryCount === 0) {
       console.log('Auth: Profile fetch already in progress for userId:', userId);
       return;
     }
 
-    console.log('Auth: Fetching profile for userId:', userId);
+    const maxRetries = 3;
+    const baseDelay = 1000; // 1s
+    const timeoutDuration = 12000; // 12s
+
+    console.log(`Auth: Fetching profile for userId: ${userId} (Attempt ${retryCount + 1})`);
     fetchingProfileFor.current = userId;
+    
     try {
       // Add a timeout to the profile fetch to prevent infinite hangs
       const profilePromise = supabase
@@ -138,15 +143,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single();
 
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Profile fetch timeout')), 8000);
+        setTimeout(() => reject(new Error('Profile fetch timeout')), timeoutDuration);
       });
 
       const { data, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
 
       if (error) {
         console.error('Auth: Error fetching user profile:', error);
-        // We set user to null but ensure loading is cleared
-        setUser(null);
+        throw error; // Let the catch block handle potential retries
       } else if (!data) {
         console.log('Auth: User profile not found in database for userId:', userId);
         setUser(null);
@@ -155,17 +159,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(mapUser(data));
       }
     } catch (err: any) {
-      console.error('Auth: Unexpected error or timeout fetching profile:', err.message || err);
-      // Ensure we don't leave the user in a null state if they have a session, 
-      // but without a profile we can't do much. 
-      // At least we clear the loading state.
+      console.error(`Auth: Error on attempt ${retryCount + 1}:`, err.message || err);
+      
+      if (retryCount < maxRetries) {
+        const delay = baseDelay * Math.pow(2, retryCount);
+        console.log(`Auth: Retrying profile fetch in ${delay}ms...`);
+        
+        setTimeout(() => {
+          if (mountedRef.current) {
+            fetchUserProfile(userId, retryCount + 1);
+          }
+        }, delay);
+        return;
+      }
+      
+      console.error('Auth: All profile fetch attempts failed or timed out.');
       setUser(null);
     } finally {
       if (mountedRef.current) {
         if (fetchingProfileFor.current === userId) {
           fetchingProfileFor.current = null;
         }
-        setLoading(false);
+        // Only set loading to false if we're not retrying or if we've exhausted all retries
+        if (retryCount === maxRetries || user || !session) {
+           setLoading(false);
+        }
       }
     }
   }

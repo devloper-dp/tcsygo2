@@ -26,55 +26,46 @@ export interface NavigationRoute {
 }
 
 /**
- * Get turn-by-turn navigation instructions from OpenRouteService
+ * Get turn-by-turn navigation instructions using OSRM
  */
 export async function getNavigationInstructions(
     start: Coordinates,
     end: Coordinates
 ): Promise<NavigationRoute> {
     try {
-        const apiKey = import.meta.env.VITE_OPENROUTE_API_KEY;
+        // Use OSRM for directions (free, no key required)
+        const coordinates = [
+            `${start.lng},${start.lat}`,
+            `${end.lng},${end.lat}`
+        ].join(';');
 
-        // If no API key, use basic routing without detailed instructions
-        if (!apiKey) {
-            return await getBasicNavigation(start, end);
-        }
-
-        const url = 'https://api.openrouteservice.org/v2/directions/driving-car';
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': apiKey,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                coordinates: [
-                    [start.lng, start.lat],
-                    [end.lng, end.lat],
-                ],
-                instructions: true,
-                language: 'en',
-            }),
-        });
+        const response = await fetch(
+            `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=true`
+        );
 
         if (!response.ok) {
-            throw new Error('Failed to fetch navigation instructions');
+            throw new Error('Failed to fetch OSRM navigation');
         }
 
         const data = await response.json();
+
+        if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
+            throw new Error('No route found');
+        }
+
         const route = data.routes[0];
-        const segments = route.segments[0];
+        const segments = route.legs[0];
 
         const instructions: NavigationInstruction[] = segments.steps.map((step: any) => ({
-            type: mapInstructionType(step.type),
-            instruction: step.instruction,
+            type: mapOSRMToInstructionType(step.maneuver.type, step.maneuver.modifier),
+            instruction: step.maneuver.instruction,
             distance: step.distance,
             duration: step.duration,
             location: {
-                lat: step.way_points[0][1],
-                lng: step.way_points[0][0],
+                lat: step.maneuver.location[1],
+                lng: step.maneuver.location[0],
             },
-            icon: getInstructionIcon(step.type),
+            icon: getOSRMInstructionIcon(step.maneuver.type, step.maneuver.modifier),
         }));
 
         const geometry = route.geometry.coordinates.map((coord: number[]) => ({
@@ -84,8 +75,8 @@ export async function getNavigationInstructions(
 
         return {
             instructions,
-            totalDistance: route.summary.distance,
-            totalDuration: route.summary.duration,
+            totalDistance: route.distance,
+            totalDuration: route.duration,
             geometry,
         };
     } catch (error) {
@@ -135,43 +126,45 @@ async function getBasicNavigation(
 }
 
 /**
- * Map OpenRouteService instruction types to our types
+ * Map OSRM maneuver types and modifiers to our types
  */
-function mapInstructionType(type: number): NavigationInstruction['type'] {
-    const typeMap: Record<number, NavigationInstruction['type']> = {
-        0: 'turn-left',
-        1: 'turn-right',
-        2: 'turn-sharp-left',
-        3: 'turn-sharp-right',
-        4: 'turn-slight-left',
-        5: 'turn-slight-right',
-        6: 'straight',
-        7: 'roundabout',
-        10: 'destination',
-        11: 'depart',
-    };
-
-    return typeMap[type] || 'straight';
+function mapOSRMToInstructionType(type: string, modifier?: string): NavigationInstruction['type'] {
+    if (type === 'arrive') return 'destination';
+    if (type === 'depart') return 'depart';
+    
+    if (modifier) {
+        if (modifier.includes('slight left')) return 'turn-slight-left';
+        if (modifier.includes('slight right')) return 'turn-slight-right';
+        if (modifier.includes('sharp left')) return 'turn-sharp-left';
+        if (modifier.includes('sharp right')) return 'turn-sharp-right';
+        if (modifier.includes('left')) return 'turn-left';
+        if (modifier.includes('right')) return 'turn-right';
+    }
+    
+    if (type.includes('roundabout')) return 'roundabout';
+    
+    return 'straight';
 }
 
 /**
- * Get icon for instruction type
+ * Get icon for OSRM instruction type
  */
-function getInstructionIcon(type: number): string {
-    const iconMap: Record<number, string> = {
-        0: '←',
-        1: '→',
-        2: '↙',
-        3: '↘',
-        4: '↖',
-        5: '↗',
-        6: '↑',
-        7: '⭕',
-        10: '🏁',
-        11: '🚗',
-    };
-
-    return iconMap[type] || '↑';
+function getOSRMInstructionIcon(type: string, modifier?: string): string {
+    if (type === 'arrive') return '🏁';
+    if (type === 'depart') return '🚗';
+    
+    if (modifier) {
+        if (modifier.includes('slight left')) return '↖';
+        if (modifier.includes('slight right')) return '↗';
+        if (modifier.includes('sharp left')) return '↙';
+        if (modifier.includes('sharp right')) return '↘';
+        if (modifier.includes('left')) return '←';
+        if (modifier.includes('right')) return '→';
+    }
+    
+    if (type.includes('roundabout')) return '⭕';
+    
+    return '↑';
 }
 
 /**

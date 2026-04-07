@@ -61,17 +61,19 @@ export const PaymentService = {
      * Create Razorpay payment order
      */
     createOrder: async (
+        bookingId: string,
         amount: number,
-        currency: string = 'INR',
-        receipt?: string
+        promoCodeId?: string | null,
+        currency: string = 'INR'
     ): Promise<PaymentOrder> => {
         try {
             // Call Supabase Edge Function to create Razorpay order
             const { data, error } = await supabase.functions.invoke('create-payment-order', {
                 body: {
-                    amount: Math.round(amount * 100), // Convert to paise
+                    bookingId,
+                    amount, // Send in INR, Edge Function converts to paise
+                    promoCodeId,
                     currency,
-                    receipt: receipt || `receipt_${Date.now()}`,
                 },
             });
 
@@ -256,7 +258,7 @@ export const PaymentService = {
     ): Promise<PaymentResult> => {
         try {
             // Create Razorpay order
-            const order = await PaymentService.createOrder(amount, 'INR', bookingId);
+            const order = await PaymentService.createOrder(bookingId, amount);
 
             // Return order details for Razorpay checkout
             // The actual payment will be handled by Razorpay SDK in the UI

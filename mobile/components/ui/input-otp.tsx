@@ -17,7 +17,7 @@ const InputOTP = React.forwardRef<
             className={cn("flex-row gap-2 justify-center", className)}
             activeOpacity={1}
             onPress={() => inputRef.current?.focus()}
-            {...props}
+            {...(({ onBlur, ...p }: any) => p)(props)}
         >
             {slots.map((_, i) => (
                 <View

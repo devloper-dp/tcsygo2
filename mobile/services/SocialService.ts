@@ -387,8 +387,15 @@ export const SocialService = {
             const { error: bookingError } = await supabase.from('bookings').insert({
                 trip_id: invite.trip_id,
                 passenger_id: userId,
+                driver_id: trip.driver_id,
                 seats_booked: 1,
                 total_amount: trip.price_per_seat,
+                pickup_location: trip.pickup_location,
+                pickup_lat: trip.pickup_lat,
+                pickup_lng: trip.pickup_lng,
+                drop_location: trip.drop_location,
+                drop_lat: trip.drop_lat,
+                drop_lng: trip.drop_lng,
                 status: 'confirmed',
             });
 

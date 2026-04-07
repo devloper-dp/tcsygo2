@@ -10,13 +10,13 @@ export interface ScheduledRide {
     id: string;
     userId: string;
     pickupLocation: {
-        latitude: number;
-        longitude: number;
+        lat: number;
+        lng: number;
         address: string;
     };
     dropLocation: {
-        latitude: number;
-        longitude: number;
+        lat: number;
+        lng: number;
         address: string;
     };
     scheduledTime: string;
@@ -62,8 +62,8 @@ export const ScheduledRideManager = {
      */
     scheduleRide: async (
         userId: string,
-        pickupLocation: { latitude: number; longitude: number; address: string },
-        dropLocation: { latitude: number; longitude: number; address: string },
+        pickupLocation: { lat: number; lng: number; address: string },
+        dropLocation: { lat: number; lng: number; address: string },
         scheduledTime: Date,
         vehicleType: 'bike' | 'auto' | 'car',
         preferences?: any
@@ -100,11 +100,11 @@ export const ScheduledRideManager = {
                 id: scheduledRide.id,
                 user_id: userId,
                 pickup_location: pickupLocation.address,
-                pickup_lat: pickupLocation.latitude,
-                pickup_lng: pickupLocation.longitude,
+                pickup_lat: pickupLocation.lat,
+                pickup_lng: pickupLocation.lng,
                 drop_location: dropLocation.address,
-                drop_lat: dropLocation.latitude,
-                drop_lng: dropLocation.longitude,
+                drop_lat: dropLocation.lat,
+                drop_lng: dropLocation.lng,
                 scheduled_time: scheduledTime.toISOString(),
                 vehicle_type: vehicleType,
                 preferences,
@@ -139,7 +139,7 @@ export const ScheduledRideManager = {
                         body: 'Your scheduled ride is in 1 hour',
                         data: { rideId, type: 'reminder' },
                     },
-                    trigger: { seconds: secondsUntil },
+                    trigger: { type: 'timeInterval', seconds: secondsUntil } as any,
                 });
                 notificationIds.push(id1);
             }
@@ -153,7 +153,7 @@ export const ScheduledRideManager = {
                         body: 'Your ride will start in 15 minutes. Booking driver now...',
                         data: { rideId, type: 'booking' },
                     },
-                    trigger: { seconds: secondsUntil },
+                    trigger: { type: 'timeInterval', seconds: secondsUntil } as any,
                 });
                 notificationIds.push(id2);
             }

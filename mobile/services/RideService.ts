@@ -1,24 +1,17 @@
+import { RideRequest, Booking } from '@/types/schema';
 import { supabase } from '@/lib/supabase';
 import { Alert } from 'react-native';
 import { logger } from './LoggerService';
 
-export interface Ride {
-    id: string;
-    pickup_location: string;
-    drop_location: string;
-    pickup_lat: number;
-    pickup_lng: number;
-    drop_lat: number;
-    drop_lng: number;
-    status: 'pending' | 'accepted' | 'started' | 'completed' | 'cancelled' | 'scheduled' | 'timeout';
-    price_per_seat: number;
-    total_amount: number;
-    driver_id?: string;
-    passenger_id?: string;
-    created_at: string;
-    scheduled_time?: string;
-    preferences?: any;
-    vehicle_type?: 'bike' | 'auto' | 'car';
+export interface Preferences {
+    acPreferred?: boolean;
+    musicAllowed?: boolean;
+    petFriendly?: boolean;
+    luggageCapacity?: number;
+    smokingAllowed?: boolean;
+}
+
+export interface Ride extends RideRequest {
     cancellation_reason?: string;
     refund_amount?: number;
 }
@@ -76,7 +69,9 @@ export const RideService = {
             logger.error('Error fetching recent rides:', error);
             return [];
         }
-        return data || [];
+        
+        const { mapBooking } = await import('@/lib/mapper');
+        return (data || []).map(item => mapBooking(item)) as any;
     },
 
     /**
@@ -199,10 +194,10 @@ export const RideService = {
         fare: number;
         distance: number;
         duration: number;
-        preferences?: any;
+        preferences?: Preferences;
         promoCode?: string;
         discountAmount?: number;
-    }) => {
+    }): Promise<RideRequest> => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('User not authenticated');
 
@@ -234,26 +229,52 @@ export const RideService = {
             .single();
 
         if (error) throw error;
-        return data;
+        return {
+            id: data.id,
+            passengerId: data.passenger_id,
+            pickupLocation: data.pickup_location,
+            pickupLat: data.pickup_lat,
+            pickupLng: data.pickup_lng,
+            dropLocation: data.drop_location,
+            dropLat: data.drop_lat,
+            dropLng: data.drop_lng,
+            status: data.status,
+            fare: data.fare,
+            totalAmount: data.fare,
+            distance: data.distance,
+            duration: data.duration,
+            vehicleType: data.vehicle_type,
+            preferences: data.preferences,
+            createdAt: data.created_at
+        } as RideRequest;
     },
 
     /**
      * Book a ride (Legacy/Direct Booking - Deprecated for On-Demand)
      * Kept for compatibility if used elsewhere, but typically we use createRideRequest now.
      */
-    bookRide: async (bookingDetails: Partial<Ride>) => {
+    bookRide: async (details: Partial<Ride>) => {
         const { data, error } = await supabase
             .from('bookings')
             .insert([{
-                ...bookingDetails,
+                pickup_location: details.pickupLocation,
+                drop_location: details.dropLocation,
+                pickup_lat: details.pickupLat,
+                pickup_lng: details.pickupLng,
+                drop_lat: details.dropLat,
+                drop_lng: details.dropLng,
+                price_per_seat: details.fare || details.totalAmount, // Map fare to price_per_seat if needed
+                total_amount: details.totalAmount,
+                passenger_id: details.passengerId,
                 status: 'pending',
+                preferences: details.preferences || {},
                 created_at: new Date().toISOString()
             }])
             .select()
             .single();
 
         if (error) throw error;
-        return data as Ride;
+        return data;
     },
 
     /**
@@ -326,7 +347,7 @@ export const RideService = {
     },
 
     /**
-     * Find available drivers near pickup location
+     * Find available drivers near pickup location using Supabase RPC
      */
     findNearbyDrivers: async (
         pickupLocation: { lat: number; lng: number },
@@ -334,63 +355,29 @@ export const RideService = {
         radiusKm: number = DRIVER_SEARCH_RADIUS_KM
     ): Promise<DriverMatch[]> => {
         try {
-            // Calculate a bounding box for the radius to efficiently filter drivers
-            const latDelta = radiusKm / 111.32; // 1 degree of latitude is approx 111.32 km
-            const lngDelta = radiusKm / (111.32 * Math.cos(pickupLocation.lat * (Math.PI / 180)));
-
-            const minLat = pickupLocation.lat - latDelta;
-            const maxLat = pickupLocation.lat + latDelta;
-            const minLng = pickupLocation.lng - lngDelta;
-            const maxLng = pickupLocation.lng + lngDelta;
-
-            // Get available drivers with the specified vehicle type within the bounding box
-            const { data: drivers, error } = await supabase
-                .from('drivers')
-                .select('*, users!inner(*)')
-                .eq('verification_status', 'verified')
-                .eq('is_available', true)
-                .eq('vehicle_type', vehicleType)
-                .gte('current_lat', minLat)
-                .lte('current_lat', maxLat)
-                .gte('current_lng', minLng)
-                .lte('current_lng', maxLng);
+            // Using the optimized Postgres function for spatial matching
+            const { data, error } = await supabase.rpc('find_nearby_drivers', {
+                p_lat: pickupLocation.lat,
+                p_lng: pickupLocation.lng,
+                p_radius: radiusKm * 1000,
+                p_vehicle_type: vehicleType
+            });
 
             if (error) throw error;
-            if (!drivers || drivers.length === 0) return [];
+            if (!data || data.length === 0) return [];
 
-            const { MapService } = await import('./MapService');
-            const matches: DriverMatch[] = [];
-
-            for (const driver of drivers) {
-                const driverLocation = {
-                    lat: driver.current_lat,
-                    lng: driver.current_lng,
-                };
-
-                // Use Haversine for a quick initial check, then optionally get real driving distance
-                const distanceResult = MapService.getDistanceHaversine(pickupLocation, driverLocation);
-
-                if (distanceResult.distance <= radiusKm * 1000) {
-                    matches.push({
-                        id: driver.id,
-                        name: driver.users?.full_name || 'Driver',
-                        rating: driver.rating || 0,
-                        totalTrips: driver.total_trips || 0,
-                        vehicleType: driver.vehicle_type,
-                        vehicleNumber: driver.vehicle_number,
-                        distance: distanceResult.distance,
-                        eta: Math.round(distanceResult.duration / 60), // Convert to minutes
-                        currentLat: driver.current_lat,
-                        currentLng: driver.current_lng,
-                        userId: driver.users?.id,
-                    });
-                }
-            }
-
-            // Sort by distance (closest first)
-            matches.sort((a, b) => a.distance - b.distance);
-
-            return matches;
+            return data.map((d: any) => ({
+                id: d.driver_id,
+                name: d.driver_name || 'Driver',
+                rating: Number(d.driver_rating) || 0,
+                totalTrips: 0, // Not returned by RPC currently
+                vehicleType: vehicleType,
+                vehicleNumber: d.vehicle_info?.split(' ')[2], // Approximation
+                distance: Number(d.distance_meters),
+                eta: Math.round(Number(d.distance_meters) / 500), // Approx 30km/h
+                currentLat: Number(d.current_lat),
+                currentLng: Number(d.current_lng),
+            }));
         } catch (error) {
             logger.error('Error finding nearby drivers:', error);
             return [];
@@ -545,7 +532,7 @@ export const RideService = {
      * Accept a ride request (Driver Side)
      * Handles atomic locking, booking creation, and pooling logic
      */
-    acceptRequest: async (request: any, driverId: string): Promise<{ id: string }> => {
+    acceptRequest: async (request: RideRequest, driverId: string): Promise<{ id: string }> => {
         try {
             // 1. ATOMIC LOCK: Try to set status to 'accepted' first
             const { data: updatedRequest, error: updateError } = await supabase
@@ -597,7 +584,7 @@ export const RideService = {
 
                 if (activeTrip) {
                     // 3a. Deviation Check (Advanced Routing)
-                    const { locationTrackingService } = await import('@/lib/location-tracking');
+                    const { locationTrackingService } = await import('@/services/LocationTrackingService');
                     const { calculateDetour } = await import('@/lib/maps');
 
                     // Get current driver location

@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Map, Marker, Polyline } from '../../components/Map';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { locationTrackingService, LocationUpdate } from '@/lib/location-tracking';
+import { locationTrackingService, LocationUpdate } from '@/services/LocationTrackingService';
 import { Text } from '@/components/ui/text';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DriverVerificationModal } from '@/components/DriverVerificationModal';
@@ -22,6 +22,7 @@ export default function TrackTripScreen() {
     const { user } = useAuth();
     const { isDark } = useTheme();
     const { hScale, vScale, spacing } = useResponsive();
+    const { toast } = require('@/components/ui/toast').useToast();
     const [driverLocation, setDriverLocation] = useState<LocationUpdate | null>(null);
     const [eta, setEta] = useState<string>('Calculating...');
     const [showVerification, setShowVerification] = useState(false);
@@ -139,9 +140,16 @@ export default function TrackTripScreen() {
 
                             if (error) throw error;
 
-                            Alert.alert("SOS SENT", "Help is on the way. Your location has been shared.");
+                            toast({
+                                title: "SOS SENT",
+                                description: "Help is on the way. Your location has been shared.",
+                            });
                         } catch (err: any) {
-                            Alert.alert("Error", err.message || "Failed to send SOS.");
+                            toast({
+                                title: "Error",
+                                description: err.message || "Failed to send SOS.",
+                                variant: "destructive",
+                            });
                         }
                     }
                 }
@@ -175,15 +183,21 @@ Track my ride: https://tcsygo.app/track/${trip.id}`;
             });
 
             if (error) throw error;
-            Alert.alert("Check-in Successful", "We've notified your safety contacts that you are safe.");
+            toast({
+                title: "Check-in Successful",
+                description: "We've notified your safety contacts that you are safe.",
+            });
         } catch (error) {
-            Alert.alert("Safety Check", "I am safe! (Verified locally)"); // Fallback if table missing
+            toast({
+                title: "Safety Check",
+                description: "I am safe! (Verified locally)",
+            });
         }
     };
 
     const openInMaps = () => {
         if (!trip) return;
-        const url = `https://www.google.com/maps/dir/?api=1&origin=${trip.pickup_lat},${trip.pickup_lng}&destination=${trip.drop_lat},${trip.drop_lng}&travelmode=driving`;
+        const url = `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${trip.pickup_lat}%2C${trip.pickup_lng}%3B${trip.drop_lat}%2C${trip.drop_lng}`;
         Linking.openURL(url);
     };
 
@@ -351,7 +365,7 @@ Track my ride: https://tcsygo.app/track/${trip.id}`;
                         <Text style={{ fontSize: hScale(10) }} className="font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Split</Text>
                     </TouchableOpacity>
  
-                    <TouchableOpacity style={{ alignItems: 'center', gap: vScale(8), flex: 1 }} onPress={() => Alert.alert('Support', 'Contact us at: help@tcsygo.com')}>
+                    <TouchableOpacity style={{ alignItems: 'center', gap: vScale(8), flex: 1 }} onPress={() => toast({ title: 'Support', description: 'Contact us at: help@tcsygo.com' })}>
                         <View style={{ width: hScale(48), height: hScale(48), borderRadius: hScale(20), borderWidth: 1 }} className="bg-slate-100 dark:bg-slate-800 justify-center items-center border-slate-200 dark:border-slate-700">
                             <Ionicons name="help-circle" size={hScale(20)} color={isDark ? "#94a3b8" : "#4b5563"} />
                         </View>
@@ -366,7 +380,10 @@ Track my ride: https://tcsygo.app/track/${trip.id}`;
                         onPress={() => {
                             if (tripId && trip.driver.user_id) {
                                 // locationTrackingService.startSimulation(tripId as string, trip.driver.user_id);
-                                Alert.alert('Simulation', 'Simulation feature unavailable');
+                                toast({
+                                    title: 'Simulation',
+                                    description: 'Simulation feature unavailable',
+                                });
                             }
                         }}
                     >
@@ -382,7 +399,10 @@ Track my ride: https://tcsygo.app/track/${trip.id}`;
                 onVerify={() => {
                     setHasVerified(true);
                     setShowVerification(false);
-                    Alert.alert("Verified", "Have a safe trip!");
+                    toast({
+                        title: "Verified",
+                        description: "Have a safe trip!",
+                    });
                 }}
             />
 

@@ -26,7 +26,7 @@ const BookingDetailsScreen = () => {
                 .from('bookings')
                 .select(`
                     *,
-                    trip:trips(*, driver:users(*))
+                    trip:trips(*, driver:drivers(*, user:users(*)))
                 `)
                 .eq('id', id)
                 .single();
@@ -174,16 +174,16 @@ const BookingDetailsScreen = () => {
                     <Text style={{ fontSize: hScale(10), marginBottom: vScale(24) }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Driver Details</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.lg }}>
                         <View style={{ width: hScale(64), height: hScale(64), borderRadius: hScale(32), borderWidth: 2 }} className="bg-slate-100 dark:bg-slate-800 overflow-hidden border-slate-50 dark:border-slate-700 shadow-sm">
-                            {trip.driver?.avatar_url ? (
-                                <Image source={{ uri: trip.driver.avatar_url }} style={{ width: '100%', height: '100%' }} />
+                            {trip.driver?.user?.avatar_url ? (
+                                <Image source={{ uri: trip.driver.user.avatar_url }} style={{ width: '100%', height: '100%' }} />
                             ) : (
                                 <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }} className="bg-slate-200 dark:bg-slate-800">
-                                    <Text style={{ fontSize: hScale(24) }} className="font-black text-slate-400 dark:text-slate-600 uppercase tracking-tighter">{trip.driver?.full_name?.charAt(0) || 'D'}</Text>
+                                    <Text style={{ fontSize: hScale(24) }} className="font-black text-slate-400 dark:text-slate-600 uppercase tracking-tighter">{trip.driver?.user?.full_name?.charAt(0) || 'D'}</Text>
                                 </View>
                             )}
                         </View>
                         <View className="flex-1">
-                            <Text style={{ fontSize: hScale(18), lineHeight: vScale(24) }} className="font-black text-slate-900 dark:text-white tracking-tight">{trip.driver?.full_name || 'Driver'}</Text>
+                            <Text style={{ fontSize: hScale(18), lineHeight: vScale(24) }} className="font-black text-slate-900 dark:text-white tracking-tight">{trip.driver?.user?.full_name || 'Driver'}</Text>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: vScale(4) }}>
                                 <View style={{ width: hScale(8), height: hScale(8), borderRadius: hScale(4) }} className="bg-green-500 ring-4 ring-green-100 dark:ring-green-900/20" />
                                 <Text style={{ fontSize: hScale(10) }} className="font-black text-slate-500 dark:text-slate-500 uppercase tracking-widest">Verified Driver</Text>

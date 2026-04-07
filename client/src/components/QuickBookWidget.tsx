@@ -11,7 +11,7 @@ import { FareEstimator } from '@/components/FareEstimator';
 import { PromoCodeInput } from '@/components/PromoCodeInput';
 import { SurgePricingIndicator } from '@/components/SurgePricingIndicator';
 import { useAuth } from '@/contexts/AuthContext';
-import { Zap, MapPin, Car, Bike, Users, Building2, Clock } from 'lucide-react';
+import { Zap, MapPin, Car, Bike, Users, Building2, Clock, Info } from 'lucide-react';
 import { Coordinates } from '@/lib/maps';
 import { getRoute } from '@/lib/maps';
 import {
@@ -24,6 +24,7 @@ import {
 import { PromoCode } from '@/lib/promo-service';
 import { RidePreferences, RidePreference } from '@/components/RidePreferences';
 import { useToast } from '@/hooks/use-toast';
+import { FareBreakdownModal } from '@/components/FareBreakdownModal';
 
 interface QuickBookWidgetProps {
     className?: string;
@@ -56,6 +57,7 @@ export function QuickBookWidget({
     const [loading, setLoading] = useState(false);
     const [bookingType, setBookingType] = useState<'instant' | 'scheduled'>(defaultBookingType || 'instant');
     const [scheduledDateTime, setScheduledDateTime] = useState<Date | null>(defaultDate || null);
+    const [showFareBreakdown, setShowFareBreakdown] = useState(false);
 
     const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(null);
     const [distanceKm, setDistanceKm] = useState(0);
@@ -465,6 +467,16 @@ export function QuickBookWidget({
                                 >
                                     {loading ? 'Calculating...' : (fareEstimate ? `Book for ${fareEstimate.totalFare}` : 'Find Rides')}
                                 </Button>
+
+                                {fareEstimate && (
+                                    <button 
+                                        onClick={() => setShowFareBreakdown(true)}
+                                        className="mt-2 text-xs text-muted-foreground hover:text-primary flex items-center justify-center gap-1 w-full"
+                                    >
+                                        <Info className="w-3 h-3" />
+                                        View Fare Breakdown
+                                    </button>
+                                )}
                             </TabsContent>
 
                             <TabsContent value="scheduled" className="space-y-2 mt-2 overflow-y-auto flex-1 min-h-0 pr-1">
@@ -633,6 +645,12 @@ export function QuickBookWidget({
                     </div>
                 </DialogContent>
             </Dialog>
+
+            <FareBreakdownModal
+                isOpen={showFareBreakdown}
+                onClose={() => setShowFareBreakdown(false)}
+                fare={fareEstimate}
+            />
         </>
     );
 }

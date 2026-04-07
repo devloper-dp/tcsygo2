@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, SafeAreaView, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -54,7 +55,7 @@ export default function OnboardingScreen() {
     const CurrentSlide = slides[currentSlideIndex];
 
     return (
-        <SafeAreaView className="flex-1 bg-white dark:bg-slate-950">
+        <SafeAreaView edges={['top']} className="flex-1 bg-white dark:bg-slate-950">
             <View style={{ padding: spacing.base, alignItems: 'flex-end' }}>
                 <TouchableOpacity onPress={handleSkip}>
                     <Text style={{ fontSize: fontSize.base }} className="text-slate-500 dark:text-slate-400 font-black uppercase tracking-widest">Skip</Text>

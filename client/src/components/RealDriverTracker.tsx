@@ -121,8 +121,8 @@ export function RealDriverTracker({
 
                     // Use a unique key for "notified" ref to avoid re-notifying for same passenger
                     const notifKey = `arrived_pickup_${booking.id}`;
-                    if (dist < 0.1 && !(notifiedArrivedRef.current as any)[notifKey]) {
-                        (notifiedArrivedRef.current as any)[notifKey] = true;
+                    if (dist < 0.1 && !notifiedArrivedRef.current[notifKey]) {
+                        notifiedArrivedRef.current[notifKey] = true;
 
                         await supabase.from('notifications').insert({
                             user_id: booking.passenger_id,
@@ -146,8 +146,8 @@ export function RealDriverTracker({
                     const dist = calculateDistanceKm(currentLat, currentLng, Number(booking.drop_lat), Number(booking.drop_lng));
 
                     const notifKey = `arrived_drop_${booking.id}`;
-                    if (dist < 0.1 && !(notifiedCompletedRef.current as any)[notifKey]) {
-                        (notifiedCompletedRef.current as any)[notifKey] = true;
+                    if (dist < 0.1 && !notifiedCompletedRef.current[notifKey]) {
+                        notifiedCompletedRef.current[notifKey] = true;
 
                         // We don't auto-complete the booking here (driver must confirm "Drop Off" in manual manifest for safety/payment trigger)
                         // But we can notify
@@ -170,14 +170,14 @@ export function RealDriverTracker({
 
             // 3. Driver Arrival (Legacy/Single Passenger compatibility) - keeping existing props check as fallback
             const distToPickup = calculateDistanceKm(currentLat, currentLng, pickupLocation.lat, pickupLocation.lng);
-            if (distToPickup < 0.1 && !(notifiedArrivedRef.current as any)['main']) {
-                (notifiedArrivedRef.current as any)['main'] = true;
+            if (distToPickup < 0.1 && !notifiedArrivedRef.current['main']) {
+                notifiedArrivedRef.current['main'] = true;
                 if (onArrival) onArrival();
             }
 
             const distToDrop = calculateDistanceKm(currentLat, currentLng, dropLocation.lat, dropLocation.lng);
-            if (distToDrop < 0.1 && !(notifiedCompletedRef.current as any)['main']) {
-                (notifiedCompletedRef.current as any)['main'] = true;
+            if (distToDrop < 0.1 && !notifiedCompletedRef.current['main']) {
+                notifiedCompletedRef.current['main'] = true;
                 if (onComplete) onComplete();
             }
 

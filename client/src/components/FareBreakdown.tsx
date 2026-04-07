@@ -2,12 +2,13 @@ import { Card } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { IndianRupee, Info } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { formatCurrency } from '@/lib/fareCalculator';
 
 interface FareBreakdownProps {
     baseFare: number;
-    distanceCharges: number;
-    timeCharges: number;
-    surgeCharges?: number;
+    distanceCharge: number;
+    timeCharge: number;
+    surgePricing?: number;
     platformFee: number;
     gst: number;
     discount?: number;
@@ -17,16 +18,16 @@ interface FareBreakdownProps {
 
 export function FareBreakdown({
     baseFare,
-    distanceCharges,
-    timeCharges,
-    surgeCharges = 0,
+    distanceCharge,
+    timeCharge,
+    surgePricing = 0,
     platformFee,
     gst,
     discount = 0,
     totalFare,
     className = '',
 }: FareBreakdownProps) {
-    const subtotal = baseFare + distanceCharges + timeCharges + surgeCharges;
+    const subtotal = baseFare + distanceCharge + timeCharge + surgePricing;
 
     return (
         <Card className={`p-4 ${className}`}>
@@ -53,7 +54,6 @@ export function FareBreakdown({
                     </div>
                     <span>₹{baseFare.toFixed(2)}</span>
                 </div>
-
                 {/* Distance Charges */}
                 <div className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2">
@@ -69,9 +69,9 @@ export function FareBreakdown({
                             </Tooltip>
                         </TooltipProvider>
                     </div>
-                    <span>₹{distanceCharges.toFixed(2)}</span>
+                    <span>{formatCurrency(distanceCharge)}</span>
                 </div>
-
+ 
                 {/* Time Charges */}
                 <div className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2">
@@ -87,14 +87,14 @@ export function FareBreakdown({
                             </Tooltip>
                         </TooltipProvider>
                     </div>
-                    <span>₹{timeCharges.toFixed(2)}</span>
+                    <span>{formatCurrency(timeCharge)}</span>
                 </div>
-
-                {/* Surge Charges */}
-                {surgeCharges > 0 && (
+ 
+                {/* Surge Pricing */}
+                {surgePricing > 0 && (
                     <div className="flex items-center justify-between text-sm">
                         <div className="flex items-center gap-2">
-                            <span className="text-warning">Surge Charges</span>
+                            <span className="text-warning">Surge Pricing</span>
                             <TooltipProvider>
                                 <Tooltip>
                                     <TooltipTrigger>
@@ -106,7 +106,7 @@ export function FareBreakdown({
                                 </Tooltip>
                             </TooltipProvider>
                         </div>
-                        <span className="text-warning">₹{surgeCharges.toFixed(2)}</span>
+                        <span className="text-warning">{formatCurrency(surgePricing)}</span>
                     </div>
                 )}
 

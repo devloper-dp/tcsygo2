@@ -16,6 +16,7 @@ import { Text } from '@/components/ui/text';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useResponsive } from '@/hooks/useResponsive';
+import { useToast } from '@/components/ui/toast';
  
 const PaymentScreen = () => {
     const router = useRouter();
@@ -23,6 +24,7 @@ const PaymentScreen = () => {
     const { user } = useAuth();
     const { theme, isDark, colors } = useTheme();
     const { hScale, vScale, spacing } = useResponsive();
+    const { toast } = useToast();
  
     const [isProcessing, setIsProcessing] = useState(false);
     const [selectedMethod, setSelectedMethod] = useState('upi');
@@ -32,20 +34,44 @@ const PaymentScreen = () => {
     const [showWebView, setShowWebView] = useState(false);
     const [webViewOrder, setWebViewOrder] = useState<any>(null);
  
-    const { data: booking, isLoading } = useQuery({
+    const { data: booking, isLoading, isError, error: queryError, refetch } = useQuery({
         queryKey: ['booking', bookingId],
+        enabled: !!bookingId,
+        retry: 2,
         queryFn: async () => {
-            const { data, error } = await supabase
-                .from('bookings')
-                .select(`
-                    *,
-                    trip:trips(*, driver:users(*)),
-                    promo_code:promo_codes(*)
-                `)
-                .eq('id', bookingId)
-                .single();
-            if (error) throw error;
-            return data;
+            try {
+                // Fetch booking without promo_code relationship (it doesn't exist in DB)
+                const { data, error } = await supabase
+                    .from('bookings')
+                    .select(`
+                        *,
+                        trip:trips(*, driver:drivers(*, user:users(*)))
+                    `)
+                    .eq('id', bookingId)
+                    .single();
+                
+                if (error) throw error;
+
+                // Secondary fetch for promo code usage since relationship is missing
+                const { data: promoUsage } = await supabase
+                    .from('promo_code_uses')
+                    .select('*, promo_code:promo_codes(*)')
+                    .eq('booking_id', bookingId)
+                    .single();
+
+                if (promoUsage && promoUsage.promo_code) {
+                    setAppliedPromo({
+                        code: promoUsage.promo_code.code,
+                        discount: parseFloat(promoUsage.discount_amount),
+                        id: promoUsage.promo_code.id
+                    });
+                }
+
+                return data;
+            } catch (err) {
+                console.error('Booking query error:', err);
+                throw err;
+            }
         },
     });
  
@@ -65,14 +91,17 @@ const PaymentScreen = () => {
             const { error } = await supabase
                 .from('bookings')
                 .update({
-                    total_amount: amount.toString(),
-                    promo_code_id: promoCodeId
+                    total_amount: amount.toString()
                 })
                 .eq('id', bookingId);
             if (error) throw error;
         },
         onError: (error: any) => {
-            Alert.alert('Error', 'Failed to update booking amount');
+            toast({
+                title: 'Error',
+                description: 'Failed to update booking amount',
+                variant: 'destructive',
+            });
         }
     });
  
@@ -93,12 +122,19 @@ const PaymentScreen = () => {
         },
         onSuccess: () => {
             setPaymentOrder(null);
-            Alert.alert('Success', 'Payment verified successfully!');
+            toast({
+                title: 'Success',
+                description: 'Payment verified successfully!',
+            });
             router.replace(`/booking/${bookingId}` as any);
         },
         onError: (error: any) => {
             setPaymentOrder(null);
-            Alert.alert('Payment Verification Failed', error.message);
+            toast({
+                title: 'Payment Verification Failed',
+                description: error.message,
+                variant: 'destructive',
+            });
         }
     });
  
@@ -114,7 +150,7 @@ const PaymentScreen = () => {
             );
  
             if (!result.success) {
-                if (result.error) Alert.alert('Payment Failed', result.error);
+                if (result.error) toast({ title: 'Payment Failed', description: result.error, variant: 'destructive' });
                 return;
             }
  
@@ -134,9 +170,9 @@ const PaymentScreen = () => {
                     router.replace({
                         pathname: '/payment/success',
                         params: { bookingId: bookingId as string, amount: finalTotal.toString() }
-                    });
+                    } as any);
                 } else if (checkoutResult.error !== 'Payment cancelled or failed') {
-                    Alert.alert('Payment Failed', checkoutResult.error);
+                    toast({ title: 'Payment Failed', description: checkoutResult.error, variant: 'destructive' });
                 }
             } else if (result.success) {
                 router.replace({
@@ -147,18 +183,55 @@ const PaymentScreen = () => {
  
         } catch (error: any) {
             console.error('Payment Error:', error);
-            Alert.alert('Payment Error', error.message || 'Something went wrong');
+            toast({
+                title: 'Payment Error',
+                description: error.message || 'Something went wrong',
+                variant: 'destructive',
+            });
         } finally {
             setIsProcessing(false);
         }
     };
  
-    if (isLoading || !booking) {
+    if (isLoading) {
         return (
             <SafeAreaView className="flex-1 justify-center items-center bg-white dark:bg-slate-950">
                 <View style={{ gap: vScale(16), alignItems: 'center' }}>
                     <ActivityIndicator size="large" color={isDark ? "#ffffff" : "#1e293b"} />
                     <Text style={{ fontSize: hScale(10) }} className="text-slate-500 dark:text-slate-500 font-black uppercase tracking-widest">Loading checkout...</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    if (isError || !booking) {
+        return (
+            <SafeAreaView className="flex-1 justify-center items-center bg-white dark:bg-slate-950 px-8">
+                <View style={{ gap: vScale(24), alignItems: 'center' }}>
+                   <View style={{ width: hScale(64), height: hScale(64), borderRadius: hScale(32) }} className="bg-rose-50 dark:bg-rose-900/20 items-center justify-center">
+                        <TicketX size={hScale(32)} color="#ef4444" />
+                    </View>
+                    <View style={{ gap: vScale(8), alignItems: 'center' }}>
+                        <Text style={{ fontSize: hScale(20) }} className="text-slate-900 dark:text-white font-black text-center">Failed to load booking</Text>
+                        <Text style={{ fontSize: hScale(14) }} className="text-slate-500 dark:text-slate-400 text-center">
+                            {queryError instanceof Error ? queryError.message : "We couldn't retrieve your booking details. This might be due to a network issue or the booking may no longer exist."}
+                        </Text>
+                    </View>
+                    <View style={{ width: '100%', gap: vScale(12) }}>
+                        <Button
+                            onPress={() => refetch()}
+                            className="bg-slate-900 dark:bg-white h-14 rounded-2xl"
+                        >
+                            <Text className="text-white dark:text-slate-900 font-bold">Try Again</Text>
+                        </Button>
+                        <TouchableOpacity
+                            onPress={() => router.back()}
+                            style={{ height: vScale(56), borderRadius: hScale(20), borderWidth: 1 }}
+                            className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 items-center justify-center"
+                        >
+                             <Text style={{ fontSize: hScale(14) }} className="text-slate-600 dark:text-slate-400 font-bold">Go Back</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
             </SafeAreaView>
         );
@@ -202,17 +275,22 @@ const PaymentScreen = () => {
  
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(16) }}>
                             <View style={{ width: hScale(20), height: hScale(20), borderRadius: hScale(10), borderWidth: 2, zIndex: 10 }} className="bg-slate-900 dark:bg-white border-white dark:border-slate-900" />
-                            <Text style={{ fontSize: hScale(16), lineHeight: vScale(20) }} className="font-bold text-slate-800 dark:text-slate-200 flex-1 tracking-tight">{trip.pickup_location}</Text>
+                            <Text style={{ fontSize: hScale(16), lineHeight: vScale(20) }} className="font-bold text-slate-800 dark:text-slate-200 flex-1 tracking-tight">{trip.pickup_location || booking.pickup_location}</Text>
                         </View>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: hScale(16) }}>
                             <View style={{ width: hScale(20), height: hScale(20), borderRadius: hScale(10), borderWidth: 2, zIndex: 10 }} className="bg-red-500 border-white dark:border-slate-900" />
-                            <Text style={{ fontSize: hScale(16), lineHeight: vScale(20) }} className="font-bold text-slate-800 dark:text-slate-200 flex-1 tracking-tight">{trip.drop_location}</Text>
+                            <Text style={{ fontSize: hScale(16), lineHeight: vScale(20) }} className="font-bold text-slate-800 dark:text-slate-200 flex-1 tracking-tight">{trip.drop_location || booking.drop_location}</Text>
                         </View>
                     </View>
  
                     <View style={{ padding: hScale(12), borderRadius: hScale(12), borderWidth: 1 }} className="bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800/50 self-start">
                         <Text style={{ fontSize: hScale(10) }} className="font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-                            {new Date(trip.departure_time).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            {(() => {
+                                const dateVal = trip.departure_time || trip.start_time || booking.created_at;
+                                if (!dateVal) return 'Date Unavailable';
+                                const date = new Date(dateVal);
+                                return isNaN(date.getTime()) ? 'Invalid Date' : date.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                            })()}
                         </Text>
                     </View>
                 </View>

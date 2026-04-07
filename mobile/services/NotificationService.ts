@@ -67,11 +67,21 @@ export type NotificationType =
     | 'ride_sharing_invite'
     | 'general';
 
+export interface NotificationPayload {
+    bookingId?: string;
+    tripId?: string;
+    eta?: number;
+    destination?: string;
+    amount?: number;
+    type?: string;
+    [key: string]: any;
+}
+
 export interface NotificationData {
     type: NotificationType;
     title: string;
     message: string;
-    data?: any;
+    data?: NotificationPayload;
 }
 
 export interface PushNotificationToken {
@@ -188,12 +198,13 @@ export const NotificationService = {
     sendLocalNotification: async (
         title: string,
         body: string,
-        data?: any,
+        data?: NotificationPayload,
         channelId: string = 'default'
     ): Promise<string> => {
         if (!areNotificationsAvailable()) {
-            logger.info(`[Expo Go] Would send notification: ${title} - ${body}`);
-            return 'expo-go-mock-id';
+            const mockId = Math.random().toString(36).substring(2, 11);
+            logger.info(`[Expo Go] Would send notification: ${title} - ${body} (ID: ${mockId})`);
+            return mockId;
         }
 
         try {
@@ -222,11 +233,12 @@ export const NotificationService = {
         title: string,
         body: string,
         triggerDate: Date,
-        data?: any
+        data?: NotificationPayload
     ): Promise<string> => {
         if (!areNotificationsAvailable()) {
-            logger.info(`[Expo Go] Would schedule notification for ${triggerDate}: ${title}`);
-            return 'expo-go-mock-scheduled-id';
+            const mockId = Math.random().toString(36).substring(2, 11);
+            logger.info(`[Expo Go] Would schedule notification for ${triggerDate}: ${title} (ID: ${mockId})`);
+            return mockId;
         }
 
         try {
